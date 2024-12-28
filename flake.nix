@@ -100,8 +100,7 @@
         throw (envErrorMessage varName);
 
       # -- Cargo.toml --
-      getVersion = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml")).package.version;
-
+      cargo = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
     };
   };
 }
