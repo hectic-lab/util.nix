@@ -82,6 +82,35 @@
         # Execute the system's nvim with your custom arguments
         exec "$SYSTEM_NVIM" --cmd 'lua vim.o.exrc = true' "$@"
       '';
+      colorize = pkgs.writeShellScriptBin "colorize" ''
+        awk '
+          BEGIN {
+            # Define color codes
+            RED = "\x1b[31m";
+            BLUE = "\x1b[34m";
+            GREEN = "\x1b[32m";
+            YELLOW = "\x1b[33m";
+            MAGENTA = "\x1b[35m";
+            CYAN = "\x1b[36m";
+            RESET = "\x1b[0m";
+          }
+          {
+            # Apply color based on keywords
+            gsub(/ERROR:/, RED "&" RESET, $0);
+            gsub(/DEBUG:/, BLUE "&" RESET, $0);
+            gsub(/INFO:/, GREEN "&" RESET, $0);
+            gsub(/LOG:/, GREEN "&" RESET, $0);
+            gsub(/EXCEPTION:/, MAGENTA "&" RESET, $0);
+            gsub(/WARNING:/, YELLOW "&" RESET, $0);
+            gsub(/NOTICE:/, CYAN "&" RESET, $0);
+            gsub(/HINT:/, CYAN "&" RESET, $0);
+            gsub(/FATAL:/, MAGENTA "&" RESET, $0);
+            gsub(/DETAIL:/, CYAN "&" RESET, $0);
+            gsub(/STATEMENT:/, CYAN "&" RESET, $0);
+            print;
+          }
+        '
+      '';
     };
   }) // {
     lib = {
