@@ -27,17 +27,7 @@
 
     envErrorMessage = varName: "Error: The ${varName} environment variable is not set.";
 
-    parseEnv = file: let
-      lines = builtins.filter (line: builtins.match "^var=.*" line != null) (builtins.readFile file);
-      attributes = builtins.listToAttrs (builtins.map (line: let
-        parts = builtins.split "=" line;
-        key = builtins.substring 0 (builtins.stringLength parts[0] - 3) parts[0]; # Remove "var" prefix
-        value = parts[1];
-      in {
-        name = key;
-        value = value;
-      }) lines);
-    in attributes;
+    parseEnv = import ./parse-env.nix;
 
     dotEnv = builtins.getEnv "DOTENV";
     minorEnvironment = 
@@ -82,6 +72,20 @@
         # Execute the system's nvim with your custom arguments
         exec "$SYSTEM_NVIM" --cmd 'lua vim.o.exrc = true' "$@"
       '';
+      printobstacle = 
+      let
+        name = "printobstacle";
+      in 
+      pkgs.writeShellScriptBin "${name}"  ''
+        printf "%s%s%s\n" "''${RED}" "$*" "''${RESET}" 
+      '';
+      printprogress = 
+      let
+        name = "printprogress";
+      in
+      pkgs.writeShellScriptBin "${name}"  ''
+        printf "%s%s%s\n" "''${YELLOW}" "$*" "''${RESET}" 
+      '';
       colorize = pkgs.writeShellScriptBin "colorize" ''
         awk '
           BEGIN {
@@ -115,7 +119,7 @@
   }) // {
     lib = {
       # -- For all systems --
-      inherit forAllSystemsWithPkgs forSpecSystemsWithPkgs;
+      inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs;
 
       # -- Env processing --
       getEnv = varName: let 
