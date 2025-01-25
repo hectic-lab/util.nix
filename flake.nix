@@ -143,7 +143,7 @@
       cargo = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
 
       ssh.keys = {
-          hetzner = {
+          hetzner-test = {
 	      yukkop = ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ8scy1tv6zfXX6xyaukhO/fsZwif5rC89DvXNc6XxOf'';
 	  };
       };
