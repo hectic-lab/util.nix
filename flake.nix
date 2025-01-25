@@ -116,6 +116,13 @@
         '
       '';
     };
+
+    nixosModules.${system} = {
+      "hetzner.hardware" = {
+            boot.initrd.kernelModules = [ "nvme" ];
+            fileSystems."/" = { device = "/dev/sda1"; fsType = "ext4"; };
+       };
+    };
   }) // {
     lib = {
       # -- For all systems --
