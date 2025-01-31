@@ -1,7 +1,9 @@
 use std::io::{self, BufRead};
 use serde_json::Value;
+use colored_json::ToColoredJson;
 
-/// Finds the substring from the first '{' to its matching '}', handling nested braces.
+/// Finds the first '{' and tries to match nested braces until the
+/// corresponding '}'. Returns (start, end) byte offsets if found.
 fn find_json_block(line: &str) -> Option<(usize, usize)> {
     let start = line.find('{')?;
     let mut brace_count = 0;
@@ -27,7 +29,8 @@ fn main() -> io::Result<()> {
         if let Some((start, end)) = find_json_block(&line) {
             let candidate = &line[start..end];
             if let Ok(json) = serde_json::from_str::<Value>(candidate) {
-                let pretty = serde_json::to_string_pretty(&json).unwrap();
+                // Prettify and reconstruct the line
+                let pretty = serde_json::to_string_pretty(&json).unwrap().to_colored_json_auto().unwrap();
                 let prefix = &line[..start];
                 let suffix = &line[end..];
                 println!("{}{}{}", prefix, pretty, suffix);
