@@ -2,9 +2,15 @@
   description = "yukkop's nix utilities";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+      };
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, rust-overlay }:
   let
     lib = nixpkgs.lib;
     recursiveUpdate = lib.recursiveUpdate;
@@ -42,7 +48,7 @@
       else
         {};
   in
-  forAllSystemsWithPkgs [] ({ system, pkgs }:
+  forAllSystemsWithPkgs [ (import rust-overlay) ] ({ system, pkgs }:
   {
     packages.${system} = {
       nvim-alias = pkgs.callPackage ./package/nvim-alias.nix {};
@@ -51,6 +57,48 @@
       colorize = pkgs.callPackage ./package/colorize.nix {};
       gh_translabeles = pkgs.callPackage ./package/github/gh_translabeles.nix {};
     };
+
+    devShells.${system} = 
+    let
+      shells = self.devShells.${system};
+    in
+    {
+      default = pkgs.mkShell {
+        buildInputs = (with self.packages.${system}; [
+          nvim-alias
+        ]) ++ (with pkgs; [
+	  jq
+	  yq-go
+	  curl
+	]);
+
+        # environment
+        PAGER=''nvim -R -c 'set buftype=nofile' -c 'nnoremap q :q!<CR>' -c 'set nowrap' \
+	       -c 'set runtimepath^=${pkgs.vimPlugins.vim-plugin-AnsiEsc}' -c 'runtime! plugin/*.vim' -c 'AnsiEsc' -'';
+	#                 ^^^^^^^^^^^^^^^^^^^^
+	#                 Prevents Neovim from treating the buffer as a file
+	#                                         ^^^^^^^^^^^^^^^^^^^^
+	#                                         Makes 'q' quit Neovim immediately
+	#                                                                  ^^^^^^^^^^^
+	#                                                                  Disables text wrapping
+	#         ^^^^^^^^
+	#         Enables ANSI color interpretation
+      };
+      rust =
+      let
+        rustToolchain = if builtins.pathExists ./rust-toolchain.toml then
+          pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
+        else
+	  pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default;
+      in
+      shells.default // {
+         nativeBuildInputs = [ 
+	   rustToolchain
+	   pkgs.pkg-config
+	];
+      };
+    };
+
 
     nixosModules.${system} = {
       "hetzner.hardware" = {
