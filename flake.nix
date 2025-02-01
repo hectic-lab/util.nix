@@ -52,12 +52,14 @@
   {
     packages.${system} = {
       nvim-alias = pkgs.callPackage ./package/nvim-alias.nix {};
+      nvim-pager = pkgs.callPackage ./package/nvim-pager.nix {};
       printobstacle = pkgs.callPackage ./package/printobstacle.nix {};
       printprogress = pkgs.callPackage ./package/printprogress.nix {};
       colorize = pkgs.callPackage ./package/colorize.nix {};
       gh_translabeles = pkgs.callPackage ./package/github/gh_translabeles.nix {};
-      prettify-log = pkgs.callPackage ./package/prettify-log/default.nix { inherit (self.lib) cargoToml; nativeBuildInputs = 
-        [ 
+      prettify-log = pkgs.callPackage ./package/prettify-log/default.nix { 
+        inherit (self.lib) cargoToml;
+	nativeBuildInputs = [ 
 	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
 	   pkgs.pkg-config
 	];
@@ -80,17 +82,7 @@
 	]);
 
         # environment
-        PAGER=''nvim -R --clean -c 'set buftype=nofile' -c 'nnoremap q :q!<CR>' -c 'set nowrap' \
-	       -c 'set runtimepath^=${pkgs.vimPlugins.vim-plugin-AnsiEsc}' \
-	       -c 'runtime! plugin/*.vim' -c 'AnsiEsc' -'';
-	#                          ^^^^^^^^^^^^^^^^^^^^
-	#                          Prevents Neovim from treating the buffer as a file
-	#                                                  ^^^^^^^^^^^^^^^^^^^^
-	#                                                  Makes 'q' quit Neovim immediately
-	#                                                                           ^^^^^^^^^^^
-	#                                                                Disables text wrapping
-	#         ^^^^^^^^
-	#         Enables ANSI color interpretation
+        PAGER="${self.packages.${system}.nvim-pager}/bin/pager";
       };
       rust =
       let
