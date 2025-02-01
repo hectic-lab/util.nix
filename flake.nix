@@ -56,6 +56,12 @@
       printprogress = pkgs.callPackage ./package/printprogress.nix {};
       colorize = pkgs.callPackage ./package/colorize.nix {};
       gh_translabeles = pkgs.callPackage ./package/github/gh_translabeles.nix {};
+      prettify-log = pkgs.callPackage ./package/prettify-log/default.nix { inherit (self.lib) cargoToml; nativeBuildInputs = 
+        [ 
+	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
+	   pkgs.pkg-config
+	];
+      };
     };
 
     devShells.${system} = 
@@ -66,6 +72,7 @@
       default = pkgs.mkShell {
         buildInputs = (with self.packages.${system}; [
           nvim-alias
+	  prettify-log
         ]) ++ (with pkgs; [
 	  jq
 	  yq-go
@@ -73,14 +80,15 @@
 	]);
 
         # environment
-        PAGER=''nvim -R -c 'set buftype=nofile' -c 'nnoremap q :q!<CR>' -c 'set nowrap' \
-	       -c 'set runtimepath^=${pkgs.vimPlugins.vim-plugin-AnsiEsc}' -c 'runtime! plugin/*.vim' -c 'AnsiEsc' -'';
-	#                 ^^^^^^^^^^^^^^^^^^^^
-	#                 Prevents Neovim from treating the buffer as a file
-	#                                         ^^^^^^^^^^^^^^^^^^^^
-	#                                         Makes 'q' quit Neovim immediately
-	#                                                                  ^^^^^^^^^^^
-	#                                                                  Disables text wrapping
+        PAGER=''nvim -R --clean -c 'set buftype=nofile' -c 'nnoremap q :q!<CR>' -c 'set nowrap' \
+	       -c 'set runtimepath^=${pkgs.vimPlugins.vim-plugin-AnsiEsc}' \
+	       -c 'runtime! plugin/*.vim' -c 'AnsiEsc' -'';
+	#                          ^^^^^^^^^^^^^^^^^^^^
+	#                          Prevents Neovim from treating the buffer as a file
+	#                                                  ^^^^^^^^^^^^^^^^^^^^
+	#                                                  Makes 'q' quit Neovim immediately
+	#                                                                           ^^^^^^^^^^^
+	#                                                                Disables text wrapping
 	#         ^^^^^^^^
 	#         Enables ANSI color interpretation
       };
@@ -130,7 +138,7 @@
         throw (envErrorMessage varName);
 
       # -- Cargo.toml --
-      cargo = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
+      cargoToml = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
 
       ssh.keys = {
           hetzner-test = {
