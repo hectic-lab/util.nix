@@ -102,10 +102,14 @@
 
 
     nixosModules.${system} = {
-      "preset.default" = { pkgs, ... }: {
+      "preset.default" = { pkgs, modulesPath, ... }: {
           users.defaultUserShell = pkgs.zsh;
 
           virtualisation.vmVariant.virtualisation = {
+            imports = [
+                (modulesPath + "/profiles/qemu-guest.nix")
+	    ];
+
             qemu.options = [
               "-nographic" 
               "-display" "curses"
