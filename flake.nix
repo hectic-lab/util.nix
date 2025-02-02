@@ -106,6 +106,9 @@
           programs.zsh.enable = true;
           users.defaultUserShell = pkgs.zsh;
 
+          # Enable flakes and new 'nix' command
+	  nix.settings.experimental-features = "nix-command flakes";
+
           virtualisation.vmVariant.virtualisation = {
             imports = [
                 (modulesPath + "/profiles/qemu-guest.nix")
