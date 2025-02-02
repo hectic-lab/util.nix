@@ -103,6 +103,7 @@
 
     nixosModules.${system} = {
       "preset.default" = { pkgs, modulesPath, ... }: {
+          programs.zsh.enable = true;
           users.defaultUserShell = pkgs.zsh;
 
           virtualisation.vmVariant.virtualisation = {
