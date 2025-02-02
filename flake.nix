@@ -151,6 +151,9 @@
               PAGER="${self.packages.${system}.nvim-pager}/bin/pager";
 	    };
 	  };
+
+	  
+          system.stateVersion = "24.11";
       };
       "hardware.hetzner" = { ... }: {
           boot.loader.grub.device = "/dev/sda";
