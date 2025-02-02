@@ -102,7 +102,53 @@
 
 
     nixosModules.${system} = {
-      "hetzner.hardware" = {
+      "preset.default" = { pkgs, ... }: {
+          users.defaultUserShell = pkgs.zsh;
+
+          virtualisation.vmVariant.virtualisation = {
+            qemu.options = [
+              "-nographic" 
+              "-display" "curses"
+              "-append" "console=ttyS0"
+              "-serial" "mon:stdio"
+              "-vga" "qxl"
+            ];
+            forwardPorts = [
+              { from = "host"; host.port = 40500; guest.port = 22; }
+            ];
+
+            services.getty.autologinUser = "root";
+          };
+
+          services.openssh = {
+            enable = true;
+            settings = {
+              PasswordAuthentication = false;
+            };
+          };
+
+          networking.firewall = {
+            enable = true;
+            allowedTCPPorts = [ ];
+          };
+
+	  environment = {
+	    defaultPackages = [];
+            systemPackages = (with pkgs; [ 
+              curl
+              neovim
+	      yq-go
+	      jq
+            ]) ++ (with self.packages.${system}; [
+	      prettify-log
+	      nvim-pager
+            ]);
+	    variables = {
+              PAGER="${self.packages.${system}.nvim-pager}/bin/pager";
+	    };
+	  };
+      };
+      "hetzner.hardware" = { ... }: {
           boot.loader.grub.device = "/dev/sda";
           boot.initrd.availableKernelModules = [
             "ata_piix"
