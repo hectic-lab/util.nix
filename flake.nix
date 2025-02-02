@@ -144,6 +144,7 @@
               neovim
 	      yq-go
 	      jq
+	      htop-vim
             ]) ++ (with self.packages.${system}; [
 	      prettify-log
 	      nvim-pager
