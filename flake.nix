@@ -152,7 +152,7 @@
 	    };
 	  };
       };
-      "hetzner.hardware" = { ... }: {
+      "hardware.hetzner" = { ... }: {
           boot.loader.grub.device = "/dev/sda";
           boot.initrd.availableKernelModules = [
             "ata_piix"
