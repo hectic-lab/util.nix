@@ -56,7 +56,7 @@
       printobstacle = pkgs.callPackage ./package/printobstacle.nix {};
       printprogress = pkgs.callPackage ./package/printprogress.nix {};
       colorize = pkgs.callPackage ./package/colorize.nix {};
-      gh_translabeles = pkgs.callPackage ./package/github/gh_translabeles.nix {};
+      github.gh-tl = pkgs.callPackage ./package/github/gh-tl.nix {};
       prettify-log = pkgs.callPackage ./package/prettify-log/default.nix { 
         inherit (self.lib) cargoToml;
 	nativeBuildInputs = [ 
@@ -75,6 +75,7 @@
         buildInputs = (with self.packages.${system}; [
           nvim-alias
 	  prettify-log
+	  nvim-pager
         ]) ++ (with pkgs; [
 	  jq
 	  yq-go
