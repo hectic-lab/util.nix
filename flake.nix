@@ -74,7 +74,7 @@
       default = pkgs.mkShell {
         buildInputs = (with self.packages.${system}; [
           nvim-alias
-	  prettify-log
+	  #prettify-log
 	  nvim-pager
         ]) ++ (with pkgs; [
 	  jq
@@ -93,10 +93,13 @@
 	  pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default;
       in
       shells.default // {
-         nativeBuildInputs = [ 
+        nativeBuildInputs = [ 
 	   rustToolchain
 	   pkgs.pkg-config
 	];
+      };
+      haskell = shells.default // {
+        buildInputs = [ pkgs.stack ];
       };
     };
 
