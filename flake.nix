@@ -58,6 +58,7 @@
       colorize = pkgs.callPackage ./package/colorize.nix {};
       github.gh-tl = pkgs.callPackage ./package/github/gh-tl.nix {};
       supabase-with-env-collection = pkgs.callPackage ./package/supabase-with-env-collection.nix {};
+      migration-name = pkgs.callPackage ./package/migration-name.nix {};
       prettify-log = pkgs.callPackage ./package/prettify-log/default.nix {
         inherit (self.lib) cargoToml;
 	nativeBuildInputs = [
