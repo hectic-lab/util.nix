@@ -9,7 +9,7 @@ CREATE TABLE legacy."promocode" (
     "remaining_activation" bigint NOT NULL,
     "term" text,
     "pool" text DEFAULT 'residential'
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."promocode" OWNER TO postgres;
 
@@ -20,7 +20,7 @@ CREATE TABLE legacy."user" (
     "used_promo_list" text,
     "ip_list" text,
     "pool" text
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."user" OWNER TO postgres;
 
@@ -28,7 +28,7 @@ CREATE TABLE legacy."price" (
     "gb_cost" bigint,
     "pool" text NOT NULL DEFAULT 'residential',
     "gb_cost_usd" double precision NOT NULL DEFAULT 0
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."price" OWNER TO postgres;
 
@@ -47,7 +47,7 @@ CREATE TABLE legacy."all_user" (
     "tgcode" text,
     "tgcode_expires" text,
     "ref_balance_usd" double precision NOT NULL DEFAULT 0
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."all_user" OWNER TO postgres;
 
@@ -60,7 +60,7 @@ CREATE TABLE legacy."admin_ref" (
     "name" text,
     "number" bigint DEFAULT 0,
     "user" text
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."admin_ref" OWNER TO postgres;
 
@@ -72,7 +72,7 @@ CREATE TABLE legacy."disc_promocode" (
     "term" text,
     "user_for" text,
     "is_global" bigint DEFAULT 0
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."disc_promocode" OWNER TO postgres;
 
@@ -82,14 +82,14 @@ CREATE TABLE legacy."request" (
     "user_id" text,
     "username" text,
     "in_id" SERIAL PRIMARY KEY
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."request" OWNER TO postgres;
 
 CREATE TABLE legacy."system" (
     "key" text,
     "value" text
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."system" OWNER TO postgres;
 
@@ -97,7 +97,7 @@ CREATE TABLE legacy."banner" (
     "name" text,
     "photo_id" text,
     "link" text
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."banner" OWNER TO postgres;
 
@@ -105,7 +105,7 @@ CREATE TABLE legacy."subuser" (
     "sub_id" bigint,
     "owner_sub_id" bigint,
     "label" text
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."subuser" OWNER TO postgres;
 
@@ -113,14 +113,14 @@ CREATE TABLE legacy."reseller" (
     "user_id" text,
     "token" text,
     "sub_id" bigint
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."reseller" OWNER TO postgres;
 
 CREATE TABLE legacy."available_pay" (
     "name" text,
     "is_available" text
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."available_pay" OWNER TO postgres;
 
@@ -134,7 +134,7 @@ CREATE TABLE legacy."payment" (
     "discount" text,
     "service" text NOT NULL,
     "date" text NOT NULL
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."payment" OWNER TO postgres;
 
@@ -144,14 +144,14 @@ CREATE TABLE legacy."temp_payment" (
     "merchant_id" text,
     "order_id" text,
     "amount" bigint
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."temp_payment" OWNER TO postgres;
 
 CREATE TABLE legacy."role" (
     "id" SERIAL PRIMARY KEY,
     "name" text NOT NULL
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."role" OWNER TO postgres;
 
@@ -160,7 +160,7 @@ CREATE TABLE legacy."promo_activations" (
     "promo_name" text NOT NULL,
     "usage_count" bigint NOT NULL DEFAULT 0,
     PRIMARY KEY ("user_id", "promo_name")
-);
+) INHERITS (updated_at);
 
 ALTER TABLE legacy."promo_activations" OWNER TO postgres;
 

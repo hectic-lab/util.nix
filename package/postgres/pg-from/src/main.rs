@@ -7,9 +7,9 @@ use std::io::Write;
 /// Вывод справки по использованию утилиты.
 fn print_help(program: &str) {
     println!(
-        "Usage: {} <sqlite_file> <output_sql_file> <postgres_schema>\n\n\
-         Options:\n  -h, --help     Show this help message\n\n\
-         Example:\n  {} mydb.sqlite legacy_dump.sql legacy",
+        "Usage: {} <sqlite_file> <output_sql_file> <postgres_schema> [--inherit=<inherit_clause>]\n\n\
+         Options:\n  -h, --help              Show this help message\n  --inherit=<clause>      Specify parent table(s) to inherit (e.g. \"created_at, updated_at\")\n\n\
+         Example:\n  {} mydb.sqlite legacy_dump.sql legacy --inherit=\"created_at, updated_at\"",
         program, program
     );
 }
@@ -27,7 +27,7 @@ struct ColumnInfo {
 
 /// Преобразует строку типа из SQLite в тип PostgreSQL.
 /// Здесь применяется простая логика: если тип содержит "INT" – выдаётся bigint,
-/// если содержит "CHAR"/"TEXT"/"CLOB" – text, если "REAL" или "FLOA"/"DOUB" – double precision, и т.д.
+/// если содержит "CHAR", "TEXT" или "CLOB" – text, если "REAL", "FLOA" или "DOUB" – double precision, и т.д.
 fn convert_sqlite_type_to_postgres(sqlite_type: &str) -> String {
     let upper = sqlite_type.to_uppercase();
     if upper.contains("INT") {
@@ -39,13 +39,19 @@ fn convert_sqlite_type_to_postgres(sqlite_type: &str) -> String {
     } else if upper.contains("REAL") || upper.contains("FLOA") || upper.contains("DOUB") {
         "double precision".to_string()
     } else {
-        // значение по умолчанию
         "text".to_string()
     }
 }
 
 /// Генерирует DDL для создания таблицы в PostgreSQL на основе информации из PRAGMA table_info.
-fn generate_create_table_sql(table: &str, conn: &Connection, schema: &str) -> Result<String, Box<dyn Error>> {
+/// Если задан параметр наследования (inherit_clause), то после списка столбцов добавляется
+/// конструкция INHERITS (<inherit_clause>).
+fn generate_create_table_sql(
+    table: &str,
+    conn: &Connection,
+    schema: &str,
+    inherit_clause: Option<&str>,
+) -> Result<String, Box<dyn Error>> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{}\")", table))?;
     let columns: Vec<ColumnInfo> = stmt
         .query_map([], |row| {
@@ -60,7 +66,7 @@ fn generate_create_table_sql(table: &str, conn: &Connection, schema: &str) -> Re
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Собираем список столбцов, а также определяем список первичных ключей.
+    // Собираем список столбцов и определяем первичные ключи.
     let mut column_defs = Vec::new();
     let pk_columns: Vec<&ColumnInfo> = columns.iter().filter(|col| col.pk > 0).collect();
 
@@ -84,11 +90,9 @@ fn generate_create_table_sql(table: &str, conn: &Connection, schema: &str) -> Re
                 col_def.push_str(" NOT NULL");
             }
             if let Some(default) = &col.dflt_value {
-                // Простейшая обработка значения по умолчанию; при необходимости можно доработать.
                 col_def.push_str(" DEFAULT ");
                 col_def.push_str(default);
             }
-            // Если имеется ровно один pk и этот столбец является им, можно добавить PRIMARY KEY inline.
             if pk_columns.len() == 1 && pk_columns[0].name == col.name {
                 col_def.push_str(" PRIMARY KEY");
             }
@@ -96,7 +100,7 @@ fn generate_create_table_sql(table: &str, conn: &Connection, schema: &str) -> Re
         column_defs.push(col_def);
     }
 
-    // Если составной ключ (несколько столбцов с pk), добавляем ограничение отдельно.
+    // Если составной ключ, добавляем ограничение отдельно.
     if pk_columns.len() > 1 {
         let pk_names: Vec<String> = pk_columns
             .iter()
@@ -106,34 +110,36 @@ fn generate_create_table_sql(table: &str, conn: &Connection, schema: &str) -> Re
         column_defs.push(pk_def);
     }
 
-    let table_sql = format!(
-        "CREATE TABLE {}.\"{}\" (\n    {}\n);",
+    // Собираем итоговую инструкцию.
+    let mut table_sql = format!(
+        "CREATE TABLE {}.\"{}\" (\n    {}\n)",
         schema,
         table,
         column_defs.join(",\n    ")
     );
+    if let Some(inh) = inherit_clause {
+        table_sql.push_str(&format!(" INHERITS ({})", inh));
+    }
+    table_sql.push(';');
     Ok(table_sql)
 }
 
 /// Генерирует DDL для индексов таблицы.
-/// Используется PRAGMA index_list и PRAGMA index_info для извлечения информации об индексах.
+/// Используются PRAGMA index_list и PRAGMA index_info для извлечения информации об индексах.
 /// Автоиндексы (имена начинаются с "sqlite_autoindex") пропускаются.
 fn generate_indexes_sql(table: &str, conn: &Connection, schema: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let mut indexes = Vec::new();
     let mut stmt = conn.prepare(&format!("PRAGMA index_list(\"{}\")", table))?;
     let index_list = stmt.query_map([], |row| {
-        // row.get(1): имя индекса, row.get(2): флаг уникальности
         let name: String = row.get(1)?;
         let unique: i32 = row.get(2)?;
         Ok((name, unique))
     })?;
     for index_res in index_list {
         let (index_name, unique) = index_res?;
-        // Пропускаем автоиндексы
         if index_name.starts_with("sqlite_autoindex") {
             continue;
         }
-        // Получаем столбцы индекса
         let mut stmt2 = conn.prepare(&format!("PRAGMA index_info(\"{}\")", index_name))?;
         let cols_iter = stmt2.query_map([], |row| {
             let col_name: String = row.get(2)?;
@@ -168,13 +174,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(0);
     }
     if args.len() < 4 {
-        eprintln!("Error: Insufficient arguments.\n");
+        eprintln!("Error: Недостаточно аргументов.\n");
         print_help(&args[0]);
         std::process::exit(1);
     }
     let sqlite_file = &args[1];
     let output_file = &args[2];
     let schema = &args[3];
+
+    // Если передана опция наследования, извлекаем её значение.
+    let mut inherit_clause: Option<String> = None;
+    for arg in &args[4..] {
+        if arg.starts_with("--inherit=") {
+            inherit_clause = Some(arg["--inherit=".len()..].to_string());
+        }
+    }
 
     // Открываем SQLite БД.
     let conn = Connection::open(sqlite_file)?;
@@ -194,19 +208,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let table_names = stmt.query_map([], |row| row.get(0))?;
     for table_name_result in table_names {
         let table_name: String = table_name_result?;
-        // Генерируем DDL для таблицы
-        let table_sql = generate_create_table_sql(&table_name, &conn, schema)?;
+        // Генерируем DDL для таблицы, передавая также опциональный inherit_clause.
+        let table_sql = generate_create_table_sql(&table_name, &conn, schema, inherit_clause.as_deref())?;
         writeln!(out, "{}\n", table_sql)?;
         writeln!(out, "ALTER TABLE {}.\"{}\" OWNER TO postgres;\n", schema, table_name)?;
 
-        // Генерируем DDL для индексов
+        // Генерируем DDL для индексов.
         let indexes = generate_indexes_sql(&table_name, &conn, schema)?;
         for idx in indexes {
             writeln!(out, "{}\n", idx)?;
         }
     }
 
-    // Если имеется таблица sqlite_sequence, можно обработать автоинкрементные значения.
+    // Обработка таблицы sqlite_sequence (для автоинкрементных значений).
     let sqlite_sequence_exists: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence')",
         [],
