@@ -17,7 +17,7 @@ fn print_help(program: &str) {
 
 #[derive(Debug)]
 struct ColumnInfo {
-    cid: i32,
+    _cid: i32,
     name: String,
     data_type: String,
     notnull: bool,
@@ -50,7 +50,7 @@ fn generate_create_table_sql(
     let columns: Vec<ColumnInfo> = stmt
         .query_map([], |row| {
             Ok(ColumnInfo {
-                cid: row.get(0)?,
+                _cid: row.get(0)?,
                 name: row.get(1)?,
                 data_type: row.get(2)?,
                 notnull: row.get::<_, i32>(3)? != 0,
@@ -168,12 +168,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_file = &args[2];
     let schema = &args[3];
 
-    let mut inherit_clause: Option<String> = None;
+    let mut inherit_clauses: Vec<String> = Vec::new();
     for arg in &args[4..] {
         if arg.starts_with("--inherit=") {
-            inherit_clause = Some(arg["--inherit=".len()..].to_string());
+            inherit_clauses.push(arg["--inherit=".len()..].to_string());
         }
     }
+    let inherit_clause = if inherit_clauses.is_empty() {
+        None
+    } else {
+        Some(inherit_clauses.join(", "))
+    };
 
     let temp_file = NamedTempFile::new()?;
     fs::copy(sqlite_file, temp_file.path())?;
