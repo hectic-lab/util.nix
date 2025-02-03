@@ -1,7 +1,7 @@
 {
   description = "yukkop's nix utilities";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -94,15 +94,16 @@
         else
 	  pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default;
       in
-      shells.default // {
+      shells.default //
+      (pkgs.mkShell {
         nativeBuildInputs = [ 
 	   rustToolchain
 	   pkgs.pkg-config
 	];
-      };
-      haskell = shells.default // {
+      });
+      haskell = shells.default // (pkgs.mkShell {
         buildInputs = [ pkgs.stack ];
-      };
+      });
     };
 
 
