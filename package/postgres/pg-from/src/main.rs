@@ -1,4 +1,5 @@
 use rusqlite::{Connection, Result};
+use rusqlite::types::ValueRef;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -8,9 +9,9 @@ use tempfile::NamedTempFile;
 
 fn print_help(program: &str) {
     println!(
-        "Usage: {} <sqlite_file> <output_sql_file> <postgres_schema> [--inherit=<inherit_clause>]\n\n\
-         Options:\n  -h, --help              Show this help message\n  --inherit=<clause>      Specify parent table(s) to inherit (e.g. \"created_at, updated_at\")\n\n\
-         Example:\n  {} mydb.sqlite legacy_dump.sql legacy --inherit=\"created_at, updated_at\"",
+        "Usage: {} <sqlite_file> <output_sql_file> <postgres_schema> [--inherit=<inherit_clause> ...]\n\n\
+         Options:\n  -h, --help              Show this help message\n  --inherit=<clause>      Specify a parent table to inherit (can be provided multiple times)\n\n\
+         Example:\n  {} mydb.sqlite legacy_dump.sql legacy --inherit=\"created_at\" --inherit=\"updated_at\"",
         program, program
     );
 }
@@ -63,7 +64,6 @@ fn generate_create_table_sql(
     let mut column_defs = Vec::new();
     let pk_columns: Vec<&ColumnInfo> = columns.iter().filter(|col| col.pk > 0).collect();
 
-    // Если ровно один PK и его тип начинается с "INTEGER", генерируем SERIAL.
     let single_autoinc = if pk_columns.len() == 1 {
         let col = pk_columns[0];
         col.data_type.to_uppercase().starts_with("INTEGER")
@@ -153,6 +153,50 @@ fn generate_indexes_sql(table: &str, conn: &Connection, schema: &str) -> Result<
     Ok(indexes)
 }
 
+fn escape_copy_text(s: &str) -> String {
+    s.replace("\\", "\\\\")
+}
+
+fn format_copy_field(value: ValueRef) -> String {
+    match value {
+        ValueRef::Null => "\\N".to_string(),
+        ValueRef::Integer(i) => i.to_string(),
+        ValueRef::Real(r) => r.to_string(),
+        ValueRef::Text(t) => {
+            let s = std::str::from_utf8(t).unwrap_or("");
+            escape_copy_text(s)
+        },
+        ValueRef::Blob(b) => {
+            let hex: String = b.iter().map(|byte| format!("{:02X}", byte)).collect();
+            format!("\\x{}", hex)
+        },
+    }
+}
+
+fn dump_table_data(table: &str, conn: &Connection, schema: &str, out: &mut File) -> Result<(), Box<dyn Error>> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{}\")", table))?;
+    let column_names: Result<Vec<String>, _> =
+        stmt.query_map([], |row| row.get(1))?.collect();
+    let column_names = column_names?;
+    
+    writeln!(out, "\n-- Data for table {}", table)?;
+    writeln!(out, "COPY {}.\"{}\" ({}) FROM stdin;", schema, table, column_names.join(", "))?;
+    
+    let mut stmt = conn.prepare(&format!("SELECT * FROM \"{}\"", table))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let col_count = column_names.len();
+        let mut fields = Vec::new();
+        for i in 0..col_count {
+            let value = row.get_ref(i)?;
+            fields.push(format_copy_field(value));
+        }
+        writeln!(out, "{}", fields.join("\t"))?;
+    }
+    writeln!(out, "\\.")?;
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
@@ -190,17 +234,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     writeln!(out, "CREATE SCHEMA IF NOT EXISTS {};\n", schema)?;
     writeln!(out, "SET client_encoding = 'UTF8';\n")?;
 
-    let mut stmt = conn.prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-    )?;
-    let table_names = stmt.query_map([], |row| row.get(0))?;
-    for table_name_result in table_names {
-        let table_name: String = table_name_result?;
-        let table_sql = generate_create_table_sql(&table_name, &conn, schema, inherit_clause.as_deref())?;
-        writeln!(out, "{}\n", table_sql)?;
-        writeln!(out, "ALTER TABLE {}.\"{}\" OWNER TO postgres;\n", schema, table_name)?;
+    let mut table_names = Vec::new();
+    {
+        let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")?;
+        let table_iter = stmt.query_map([], |row| row.get(0))?;
+        for table_result in table_iter {
+            let table: String = table_result?;
+            table_names.push(table);
+        }
+    }
 
-        let indexes = generate_indexes_sql(&table_name, &conn, schema)?;
+    for table in &table_names {
+        let table_sql = generate_create_table_sql(table, &conn, schema, inherit_clause.as_deref())?;
+        writeln!(out, "{}\n", table_sql)?;
+        writeln!(out, "ALTER TABLE {}.\"{}\" OWNER TO postgres;\n", schema, table)?;
+
+        let indexes = generate_indexes_sql(table, &conn, schema)?;
         for idx in indexes {
             writeln!(out, "{}\n", idx)?;
         }
@@ -228,6 +277,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 seq + 1
             )?;
         }
+    }
+
+    for table in &table_names {
+        dump_table_data(table, &conn, schema, &mut out)?;
     }
 
     Ok(())
