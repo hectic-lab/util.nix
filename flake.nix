@@ -66,6 +66,13 @@
 	   pkgs.pkg-config
 	];
       };
+      pg.pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix {
+        inherit (self.lib) cargoToml;
+	nativeBuildInputs = [
+	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
+	   pkgs.pkg-config
+	];
+      };
     };
 
     devShells.${system} = 
