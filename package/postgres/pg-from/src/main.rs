@@ -1,5 +1,6 @@
 use rusqlite::{Connection, Result};
 use rusqlite::types::ValueRef;
+use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -7,6 +8,7 @@ use std::fs::File;
 use std::io::Write;
 use tempfile::NamedTempFile;
 
+/// Print help/usage information.
 fn print_help(program: &str) {
     println!(
         "Usage: {} <sqlite_file> <output_sql_file> <postgres_schema> [--inherit=<inherit_clause> ...]\n\n\
@@ -16,9 +18,11 @@ fn print_help(program: &str) {
     );
 }
 
+/// Structure representing one column from PRAGMA table_info.
 #[derive(Debug)]
 struct ColumnInfo {
-    _cid: i32,
+    #[allow(dead_code)]
+    cid: i32,
     name: String,
     data_type: String,
     notnull: bool,
@@ -26,6 +30,7 @@ struct ColumnInfo {
     pk: i32,
 }
 
+/// Converts an SQLite type to a PostgreSQL type (very simple logic).
 fn convert_sqlite_type_to_postgres(sqlite_type: &str) -> String {
     let upper = sqlite_type.to_uppercase();
     if upper.contains("INT") {
@@ -41,6 +46,8 @@ fn convert_sqlite_type_to_postgres(sqlite_type: &str) -> String {
     }
 }
 
+/// Generates the CREATE TABLE statement for a given table, based on PRAGMA table_info.
+/// If an inheritance clause is provided, appends INHERITS (<clause>).
 fn generate_create_table_sql(
     table: &str,
     conn: &Connection,
@@ -51,7 +58,7 @@ fn generate_create_table_sql(
     let columns: Vec<ColumnInfo> = stmt
         .query_map([], |row| {
             Ok(ColumnInfo {
-                _cid: row.get(0)?,
+                cid: row.get(0)?,
                 name: row.get(1)?,
                 data_type: row.get(2)?,
                 notnull: row.get::<_, i32>(3)? != 0,
@@ -64,6 +71,7 @@ fn generate_create_table_sql(
     let mut column_defs = Vec::new();
     let pk_columns: Vec<&ColumnInfo> = columns.iter().filter(|col| col.pk > 0).collect();
 
+    // If exactly one PK and its type starts with "INTEGER", generate SERIAL.
     let single_autoinc = if pk_columns.len() == 1 {
         let col = pk_columns[0];
         col.data_type.to_uppercase().starts_with("INTEGER")
@@ -92,6 +100,7 @@ fn generate_create_table_sql(
         column_defs.push(col_def);
     }
 
+    // If composite primary key exists, add it as a separate constraint.
     if pk_columns.len() > 1 {
         let pk_names: Vec<String> = pk_columns
             .iter()
@@ -114,6 +123,7 @@ fn generate_create_table_sql(
     Ok(table_sql)
 }
 
+/// Generates DDL for indexes of a given table.
 fn generate_indexes_sql(table: &str, conn: &Connection, schema: &str) -> Result<Vec<String>, Box<dyn Error>> {
     let mut indexes = Vec::new();
     let mut stmt = conn.prepare(&format!("PRAGMA index_list(\"{}\")", table))?;
@@ -153,10 +163,87 @@ fn generate_indexes_sql(table: &str, conn: &Connection, schema: &str) -> Result<
     Ok(indexes)
 }
 
+/// Represents one foreign key entry from PRAGMA foreign_key_list.
+struct ForeignKeyInfo {
+    id: i32,
+    seq: i32,
+    table: String,
+    from: String,
+    to: String,
+    on_update: String,
+    on_delete: String,
+    #[allow(dead_code)]
+    r#match: String,
+}
+
+/// Generates foreign key constraints for the given table. It groups rows by foreign key ID
+/// (to support multi‑column foreign keys) and produces ALTER TABLE … ADD CONSTRAINT statements.
+fn generate_foreign_keys_sql(
+    table: &str,
+    conn: &Connection,
+    schema: &str,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let mut stmt = conn.prepare(&format!("PRAGMA foreign_key_list(\"{}\")", table))?;
+    let fk_rows: Vec<ForeignKeyInfo> = stmt
+        .query_map([], |row| {
+            Ok(ForeignKeyInfo {
+                id: row.get(0)?,
+                seq: row.get(1)?,
+                table: row.get(2)?,
+                from: row.get(3)?,
+                to: row.get(4)?,
+                on_update: row.get(5)?,
+                on_delete: row.get(6)?,
+                r#match: row.get(7)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Group rows by foreign key ID.
+    let mut fk_map: HashMap<i32, Vec<ForeignKeyInfo>> = HashMap::new();
+    for fk in fk_rows {
+        fk_map.entry(fk.id).or_default().push(fk);
+    }
+    let mut constraints = Vec::new();
+    for (fk_id, mut fks) in fk_map {
+        // Sort by sequence number.
+        fks.sort_by_key(|fk| fk.seq);
+        // All entries in this group refer to the same target table.
+        let ref_table = &fks[0].table;
+        let on_update = &fks[0].on_update;
+        let on_delete = &fks[0].on_delete;
+        let from_columns: Vec<String> = fks.iter().map(|fk| format!("\"{}\"", fk.from)).collect();
+        let to_columns: Vec<String> = fks.iter().map(|fk| format!("\"{}\"", fk.to)).collect();
+        // Generate a constraint name, e.g. fk_table_1.
+        let constraint_name = format!("fk_{}_{}", table, fk_id);
+        let mut constraint = format!(
+            "ALTER TABLE {}.\"{}\" ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}.\"{}\" ({})",
+            schema,
+            table,
+            constraint_name,
+            from_columns.join(", "),
+            schema,
+            ref_table,
+            to_columns.join(", ")
+        );
+        if !on_update.is_empty() && on_update.to_uppercase() != "NO ACTION" {
+            constraint.push_str(&format!(" ON UPDATE {}", on_update));
+        }
+        if !on_delete.is_empty() && on_delete.to_uppercase() != "NO ACTION" {
+            constraint.push_str(&format!(" ON DELETE {}", on_delete));
+        }
+        constraint.push(';');
+        constraints.push(constraint);
+    }
+    Ok(constraints)
+}
+
+/// Escapes a text value for the PostgreSQL COPY format (e.g. escapes backslashes).
 fn escape_copy_text(s: &str) -> String {
     s.replace("\\", "\\\\")
 }
 
+/// Formats a single column value for the PostgreSQL COPY command. NULL values become "\N".
 fn format_copy_field(value: ValueRef) -> String {
     match value {
         ValueRef::Null => "\\N".to_string(),
@@ -167,44 +254,52 @@ fn format_copy_field(value: ValueRef) -> String {
             escape_copy_text(s)
         },
         ValueRef::Blob(b) => {
+            // Convert blob to a hex string prefixed with \x.
             let hex: String = b.iter().map(|byte| format!("{:02X}", byte)).collect();
             format!("\\x{}", hex)
         },
     }
 }
 
+/// Dumps data for a table in PostgreSQL COPY format.
 fn dump_table_data(table: &str, conn: &Connection, schema: &str, out: &mut File) -> Result<(), Box<dyn Error>> {
+    // Get column names using PRAGMA table_info.
     let mut stmt = conn.prepare(&format!("PRAGMA table_info(\"{}\")", table))?;
-    let column_names: Result<Vec<String>, _> =
-        stmt.query_map([], |row| row.get(1))?.collect();
+    let column_names: Result<Vec<String>, _> = stmt.query_map([], |row| row.get(1))?.collect();
     let column_names = column_names?;
     
+    // Write COPY header.
     writeln!(out, "\n-- Data for table {}", table)?;
     writeln!(out, "COPY {}.\"{}\" ({}) FROM stdin;", schema, table, column_names.join(", "))?;
     
+    // Query all rows from the table.
     let mut stmt = conn.prepare(&format!("SELECT * FROM \"{}\"", table))?;
     let mut rows = stmt.query([])?;
+    // Use the known number of columns.
+    let col_count = column_names.len();
     while let Some(row) = rows.next()? {
-        let col_count = column_names.len();
         let mut fields = Vec::new();
         for i in 0..col_count {
             let value = row.get_ref(i)?;
             fields.push(format_copy_field(value));
         }
+        // Write tab-separated fields.
         writeln!(out, "{}", fields.join("\t"))?;
     }
+    // End COPY command.
     writeln!(out, "\\.")?;
     Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Process command-line arguments.
     let args: Vec<String> = env::args().collect();
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         print_help(&args[0]);
         std::process::exit(0);
     }
     if args.len() < 4 {
-        eprintln!("Error: Недостаточно аргументов.\n");
+        eprintln!("Error: Not enough arguments.\n");
         print_help(&args[0]);
         std::process::exit(1);
     }
@@ -212,6 +307,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let output_file = &args[2];
     let schema = &args[3];
 
+    // Gather multiple --inherit options.
     let mut inherit_clauses: Vec<String> = Vec::new();
     for arg in &args[4..] {
         if arg.starts_with("--inherit=") {
@@ -224,16 +320,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some(inherit_clauses.join(", "))
     };
 
+    // Copy the original SQLite file into a temporary file.
     let temp_file = NamedTempFile::new()?;
     fs::copy(sqlite_file, temp_file.path())?;
     let conn = Connection::open(temp_file.path())?;
 
+    // Open (or create) the output file.
     let mut out = File::create(output_file)?;
 
+    // Write header.
     writeln!(out, "-- PostgreSQL database dump generated from SQLite")?;
     writeln!(out, "CREATE SCHEMA IF NOT EXISTS {};\n", schema)?;
     writeln!(out, "SET client_encoding = 'UTF8';\n")?;
 
+    // Get table names (excluding internal SQLite tables).
     let mut table_names = Vec::new();
     {
         let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")?;
@@ -244,6 +344,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Generate DDL for each table, its indexes, and foreign key constraints.
     for table in &table_names {
         let table_sql = generate_create_table_sql(table, &conn, schema, inherit_clause.as_deref())?;
         writeln!(out, "{}\n", table_sql)?;
@@ -253,8 +354,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         for idx in indexes {
             writeln!(out, "{}\n", idx)?;
         }
+        let fkeys = generate_foreign_keys_sql(table, &conn, schema)?;
+        for fk in fkeys {
+            writeln!(out, "{}\n", fk)?;
+        }
     }
 
+    // Process sqlite_sequence (for autoincrement values).
     let sqlite_sequence_exists: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='sqlite_sequence')",
         [],
@@ -279,6 +385,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Dump data for each table.
     for table in &table_names {
         dump_table_data(table, &conn, schema, &mut out)?;
     }
