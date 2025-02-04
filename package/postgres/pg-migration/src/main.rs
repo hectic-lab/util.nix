@@ -81,40 +81,60 @@ fn check_psql_installed() {
 }
 
 fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, _force: bool) {
-    let mut entries: Vec<_> = fs::read_dir(migration_dir)
+    // Get the list of new migrations from disk
+    let mut fs_entries: Vec<_> = fs::read_dir(migration_dir)
         .expect("Reading migration directory failed")
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("sql"))
         .collect();
-    entries.sort_by_key(|e| e.path());
+    fs_entries.sort_by_key(|e| e.path());
+    let fs_migrations: Vec<String> = fs_entries
+        .iter()
+        .map(|e| e.path().file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
 
-    // (Migration tree validation omitted)
+    // Get the list of already applied migrations from DB
+    let rows = client
+        .query("SELECT name FROM hectic.migration ORDER BY name ASC", &[])
+        .expect("Query failed");
+    let db_migrations: Vec<String> = rows.iter().map(|row| row.get(0)).collect();
 
-    for entry in entries {
-        let file_path = entry.path();
-        let file_name = file_path.file_name().unwrap().to_string_lossy();
+    // Check if the DB migrations form a proper prefix of disk migrations
+    // (meaning all DB-applied migration filenames should appear in the same order at the start).
+    for (i, db_mig) in db_migrations.iter().enumerate() {
+        if i >= fs_migrations.len() || fs_migrations[i] != *db_mig {
+            // The DB has migrations that are not found in the same position on disk -> unrelated tree
+            if !force {
+                eprintln!("Unrelated migration tree detected. Use --force to proceed.");
+                return;
+            } else {
+                eprintln!("Unrelated migration tree forced. Proceeding...");
+                break;
+            }
+        }
+    }
 
-        if client
-            .query_opt("SELECT 1 FROM hectic.migration WHERE name = $1", &[&file_name])
-            .expect("Query failed")
-            .is_some()
-        {
+    for fs_mig in fs_migrations {
+        // Skip if already applied
+        if db_migrations.contains(&fs_mig) {
             continue;
         }
 
-        let status = ProcessCommand::new("psql")
+        let status = std::process::Command::new("psql")
             .arg("-d")
             .arg(db_url)
             .arg("-f")
-            .arg(file_path.to_str().unwrap())
+            .arg(Path::new(migration_dir).join(&fs_mig).to_str().unwrap())
             .status()
             .expect("psql execution failed");
+
         if !status.success() {
-            eprintln!("Migration failed: {}", file_name);
+            eprintln!("Migration failed: {}", fs_mig);
             break;
         }
+
         client
-            .execute("INSERT INTO hectic.migration (name) VALUES ($1)", &[&file_name])
+            .execute("INSERT INTO hectic.migration (name) VALUES ($1)", &[&fs_mig])
             .expect("Recording migration failed");
     }
 }
@@ -141,4 +161,3 @@ fn generate_migration_name() -> String {
     let noun = nouns[rng.random_range(0..nouns.len())];
     format!("{}_{}", adj, noun)
 }
-
