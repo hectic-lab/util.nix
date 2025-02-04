@@ -2,10 +2,16 @@ use clap::{Arg, Command, ArgAction};
 use postgres::{Client, NoTls};
 use chrono::Utc;
 use pg_migration_lib::init_db;
-use std::{fs, path::Path, process::Command as ProcessCommand};
+use std::{fs, path::Path, process::{self, Command as ProcessCommand}};
 use rand::Rng;
 
 fn main() {
+    if let Err(code) = run_app() {
+        process::exit(code);
+    }
+}
+
+fn run_app() -> Result<(), i32> {
     check_psql_installed();
 
     let matches = Command::new("Rust PG Migration Tool")
@@ -53,19 +59,22 @@ fn main() {
     match matches.subcommand() {
         Some(("migrate", sub_m)) => {
             let force = sub_m.get_flag("force");
-            apply_migrations(&mut client, migration_dir, db_url, force);
+            match apply_migrations(&mut client, migration_dir, db_url, force) {
+                Ok(_) => Ok(()),
+                Err(err_code) => Err(err_code),
+            }
         }
         Some(("create", sub_m)) => {
             let name = sub_m
                 .get_one::<String>("name")
                 .cloned()
                 .unwrap_or_else(generate_migration_name);
-            create_migration_file(migration_dir, &name);
+            Ok(create_migration_file(migration_dir, &name))
         }
         Some(("fetch", _)) => {
-            fetch_migrations(&mut client, migration_dir);
+            Ok(fetch_migrations(&mut client, migration_dir))
         }
-        _ => {}
+        _ => {Ok(())}
     }
 }
 
@@ -80,7 +89,7 @@ fn check_psql_installed() {
     }
 }
 
-fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, _force: bool) {
+fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, force: bool) -> Result<(), i32> {
     // Get the list of new migrations from disk
     let mut fs_entries: Vec<_> = fs::read_dir(migration_dir)
         .expect("Reading migration directory failed")
@@ -106,7 +115,7 @@ fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, _for
             // The DB has migrations that are not found in the same position on disk -> unrelated tree
             if !force {
                 eprintln!("Unrelated migration tree detected. Use --force to proceed.");
-                return;
+                return Err(2);
             } else {
                 eprintln!("Unrelated migration tree forced. Proceeding...");
                 break;
@@ -130,13 +139,15 @@ fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, _for
 
         if !status.success() {
             eprintln!("Migration failed: {}", fs_mig);
-            break;
+            return Err(3);
         }
 
         client
             .execute("INSERT INTO hectic.migration (name) VALUES ($1)", &[&fs_mig])
             .expect("Recording migration failed");
     }
+
+    Ok(())
 }
 
 fn create_migration_file(migration_dir: &str, name: &str) {
