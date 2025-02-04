@@ -6,3 +6,7 @@ edition = "2021"
 [dependencies]
 rusqlite = { version = "0.32.0", features = ["bundled"] }
 tempfile = "3.16.0"
+
+[[test]]
+name = "test_generate_sql"
+path = "test/generate_sql.rs"
