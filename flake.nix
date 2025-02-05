@@ -50,7 +50,14 @@
   in
   forAllSystemsWithPkgs [ (import rust-overlay) ] ({ system, pkgs }:
   {
-    packages.${system} = {
+    packages.${system} = 
+    let
+	rust.nativeBuildInputs = [
+	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
+	   pkgs.pkg-config
+	];
+    in
+    {
       nvim-alias = pkgs.callPackage ./package/nvim-alias.nix {};
       nvim-pager = pkgs.callPackage ./package/nvim-pager.nix {};
       printobstacle = pkgs.callPackage ./package/printobstacle.nix {};
@@ -61,17 +68,17 @@
       migration-name = pkgs.callPackage ./package/migration-name.nix {};
       prettify-log = pkgs.callPackage ./package/prettify-log/default.nix {
         inherit (self.lib) cargoToml;
-	nativeBuildInputs = [
-	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
-	   pkgs.pkg-config
-	];
+        inherit (rust) nativeBuildInputs;
       };
-      pg.pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix {
-        inherit (self.lib) cargoToml;
-	nativeBuildInputs = [
-	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
-	   pkgs.pkg-config
-	];
+      pg = {
+        pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix {
+          inherit (self.lib) cargoToml;
+          inherit (rust) nativeBuildInputs;
+        };
+        pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix {
+          inherit (self.lib) cargoToml;
+          inherit (rust) nativeBuildInputs;
+        };
       };
     };
 
@@ -86,6 +93,7 @@
 	  #prettify-log
 	  nvim-pager
         ]) ++ (with pkgs; [
+	  git
 	  jq
 	  yq-go
 	  curl
@@ -189,6 +197,10 @@
     lib = {
       # -- For all systems --
       inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs;
+
+      makeEnvironment = envVars:
+        builtins.listToAttrs
+          (map (name: { inherit name; value = self.lib.getEnv name; }) envVars);
 
       # -- Env processing --
       getEnv = varName: let 
