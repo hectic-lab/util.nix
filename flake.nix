@@ -151,6 +151,8 @@
               (modulesPath + "/profiles/qemu-guest.nix")
 	  ];
 
+          services.getty.autologinUser = "root";
+
           programs.zsh.enable = true;
           users.defaultUserShell = pkgs.zsh;
 
@@ -168,8 +170,6 @@
             forwardPorts = [
               { from = "host"; host.port = 40500; guest.port = 22; }
             ];
-
-            services.getty.autologinUser = "root";
           };
 
           services.openssh = {
