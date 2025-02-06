@@ -47,15 +47,47 @@
         parseEnv ./.env
       else
         {};
+
   in
   forAllSystemsWithPkgs [ (import rust-overlay) ] ({ system, pkgs }:
   {
+    overlays.${system} =
+    final: prev: (
+    self.packages.${system} // {
+      postgresql_17.pkgs.http = 
+        let
+          buildPostgresqlExtension = pkgs.callPackage (import (builtins.path {
+            name = "extension-builder";
+            path = "${final.outPath}/pkgs/servers/sql/postgresql/buildPostgresqlExtension.nix";
+          })) { inherit (prev) postgresql_17; };
+          version = "1.6.1";
+        in 
+        buildPostgresqlExtension { 
+          pname = "http";
+          inherit version;
+          
+          src = prev.fetchFromGitHub {
+            owner = "pramsey";
+            repo = "pgsql-http";
+            rev = "v${version}";
+            hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
+          };
+
+          nativeBuildInputs = with prev; [ pkg-config curl ];
+        };
+      });
     packages.${system} = 
     let
-	rust.nativeBuildInputs = [
+	rust = {
+	 nativeBuildInputs = [
 	   pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
 	   pkgs.pkg-config
-	];
+	 ];
+	 commonArgs = {
+           inherit (self.lib) cargoToml;
+           inherit (rust) nativeBuildInputs;
+         };
+      };
     in
     {
       nvim-alias = pkgs.callPackage ./package/nvim-alias.nix {};
@@ -66,19 +98,10 @@
       github.gh-tl = pkgs.callPackage ./package/github/gh-tl.nix {};
       supabase-with-env-collection = pkgs.callPackage ./package/supabase-with-env-collection.nix {};
       migration-name = pkgs.callPackage ./package/migration-name.nix {};
-      prettify-log = pkgs.callPackage ./package/prettify-log/default.nix {
-        inherit (self.lib) cargoToml;
-        inherit (rust) nativeBuildInputs;
-      };
+      prettify-log = pkgs.callPackage ./package/prettify-log/default.nix rust.commonArgs;
       pg = {
-        pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix {
-          inherit (self.lib) cargoToml;
-          inherit (rust) nativeBuildInputs;
-        };
-        pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix {
-          inherit (self.lib) cargoToml;
-          inherit (rust) nativeBuildInputs;
-        };
+        pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
+        pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
       };
     };
 
@@ -124,6 +147,10 @@
 
     nixosModules.${system} = {
       "preset.default" = { pkgs, modulesPath, ... }: {
+          imports = [
+              (modulesPath + "/profiles/qemu-guest.nix")
+	  ];
+
           programs.zsh.enable = true;
           users.defaultUserShell = pkgs.zsh;
 
@@ -131,10 +158,6 @@
 	  nix.settings.experimental-features = "nix-command flakes";
 
           virtualisation.vmVariant.virtualisation = {
-            imports = [
-                (modulesPath + "/profiles/qemu-guest.nix")
-	    ];
-
             qemu.options = [
               "-nographic" 
               "-display" "curses"
