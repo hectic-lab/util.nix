@@ -51,37 +51,6 @@
   in
   forAllSystemsWithPkgs [ (import rust-overlay) ] ({ system, pkgs }:
   {
-    overlays.default =
-    final: prev: (
-    let
-      version = "1.6.1";
-      buildHttpExt = versionSuffix: let
-          buildPostgresqlExtension =
-            pkgs.callPackage (import (builtins.path {
-              name = "extension-builder";
-              path = ./buildPostgresqlExtension.nix;
-            })) {
-              postgresql = prev."postgresql_${versionSuffix}";
-            };
-        in buildPostgresqlExtension {
-          pname = "http";
-	  inherit version;
-          src = prev.fetchFromGitHub {
-            owner = "pramsey";
-            repo = "pgsql-http";
-            rev  = "v${version}";
-            hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
-          };
-          nativeBuildInputs = with prev; [ pkg-config curl ];
-        };
-    in
-    {
-      hectic = self.packages.${system};
-      postgresql_17 = prev.postgresql_17 // { pkgs = prev.postgresql_17.pkgs // { http = buildHttpExt "17"; }; };
-      postgresql_16 = prev.postgresql_16 // { pkgs = prev.postgresql_16.pkgs // { http = buildHttpExt "16"; }; };
-      postgresql_15 = prev.postgresql_15 // { pkgs = prev.postgresql_15.pkgs // { http = buildHttpExt "15"; }; };
-      postgresql_14 = prev.postgresql_14 // { pkgs = prev.postgresql_14.pkgs // { http = buildHttpExt "14"; }; };
-    });
     packages.${system} = 
     let
 	rust = {
@@ -223,6 +192,37 @@
       };
     };
   }) // {
+    overlays.default =
+    final: prev: (
+    let
+      version = "1.6.1";
+      buildHttpExt = versionSuffix: let
+          buildPostgresqlExtension =
+            prev.callPackage (import (builtins.path {
+              name = "extension-builder";
+              path = ./buildPostgresqlExtension.nix;
+            })) {
+              postgresql = prev."postgresql_${versionSuffix}";
+            };
+        in buildPostgresqlExtension {
+          pname = "http";
+	  inherit version;
+          src = prev.fetchFromGitHub {
+            owner = "pramsey";
+            repo = "pgsql-http";
+            rev  = "v${version}";
+            hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
+          };
+          nativeBuildInputs = with prev; [ pkg-config curl ];
+        };
+    in
+    {
+      hectic = self.packages.${prev.system};
+      postgresql_17 = prev.postgresql_17 // { pkgs = prev.postgresql_17.pkgs // { http = buildHttpExt "17"; }; };
+      postgresql_16 = prev.postgresql_16 // { pkgs = prev.postgresql_16.pkgs // { http = buildHttpExt "16"; }; };
+      postgresql_15 = prev.postgresql_15 // { pkgs = prev.postgresql_15.pkgs // { http = buildHttpExt "15"; }; };
+      postgresql_14 = prev.postgresql_14 // { pkgs = prev.postgresql_14.pkgs // { http = buildHttpExt "14"; }; };
+    });
     lib = {
       # -- For all systems --
       inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs;
