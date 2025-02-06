@@ -2,7 +2,8 @@ use std::io::{self, BufRead};
 use std::env;
 use serde_json::Value;
 use colored_json::{ColorMode, ToColoredJson};
-use regex::Regex;
+use regex::{Regex, Captures};
+use once_cell::sync::Lazy;
 
 /// Finds the first '{' and tries to match nested braces until the corresponding '}'.
 fn find_json_block(line: &str) -> Option<(usize, usize)> {
@@ -23,6 +24,10 @@ fn find_json_block(line: &str) -> Option<(usize, usize)> {
     None
 }
 
+static RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(^|[^A-Za-z])(?P<kw>ERROR|DEBUG|INFO|LOG|EXCEPTION|WARNING|NOTICE|HINT|FATAL|DETAIL|STATEMENT)(:)").unwrap()
+});
+
 /// Applies color to known log keywords (e.g. ERROR, DEBUG) without coloring the colon.
 /// Captures the preceding boundary, the keyword, and the colon, then colors only the keyword.
 fn colorize_keywords(line: &str) -> String {
@@ -34,26 +39,24 @@ fn colorize_keywords(line: &str) -> String {
     let cyan = "\x1b[36m";
     let reset = "\x1b[0m";
 
-    let patterns = vec![
-        (Regex::new(r"(?i)(^|[^A-Za-z])(ERROR)(:)").unwrap(), format!("$1{red}$2{reset}$3", red=red, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(DEBUG)(:)").unwrap(), format!("$1{blue}$2{reset}$3", blue=blue, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(INFO)(:)").unwrap(), format!("$1{green}$2{reset}$3", green=green, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(LOG)(:)").unwrap(), format!("$1{green}$2{reset}$3", green=green, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(EXCEPTION)(:)").unwrap(), format!("$1{magenta}$2{reset}$3", magenta=magenta, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(WARNING)(:)").unwrap(), format!("$1{yellow}$2{reset}$3", yellow=yellow, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(NOTICE)(:)").unwrap(), format!("$1{cyan}$2{reset}$3", cyan=cyan, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(HINT)(:)").unwrap(), format!("$1{cyan}$2{reset}$3", cyan=cyan, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(FATAL)(:)").unwrap(), format!("$1{magenta}$2{reset}$3", magenta=magenta, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(DETAIL)(:)").unwrap(), format!("$1{cyan}$2{reset}$3", cyan=cyan, reset=reset)),
-        (Regex::new(r"(?i)(^|[^A-Za-z])(STATEMENT)(:)").unwrap(), format!("$1{cyan}$2{reset}$3", cyan=cyan, reset=reset)),
-    ];
-
-    let mut out = String::from(line);
-    for (re, replacement) in patterns {
-        // Replace all occurrences
-        out = re.replace_all(&out, replacement.as_str()).to_string();
-    }
-    out
+    RE.replace_all(line, |caps: &Captures| {
+        let prefix = caps.get(1).unwrap().as_str();
+        let keyword = caps.name("kw").unwrap().as_str();
+        let suffix = caps.get(3).unwrap().as_str();
+        let key = match keyword.to_lowercase().as_str() {
+            "error"     => format!("{}{}{}{}", prefix, red, keyword, reset),
+            "debug"     => format!("{}{}{}{}", prefix, blue, keyword, reset),
+            "info" | "log"
+                        => format!("{}{}{}{}", prefix, green, keyword, reset),
+            "exception" | "fatal"
+                        => format!("{}{}{}{}", prefix, magenta, keyword, reset),
+            "warning"   => format!("{}{}{}{}", prefix, yellow, keyword, reset),
+            "notice" | "hint" | "detail" | "statement"
+                        => format!("{}{}{}{}", prefix, cyan, keyword, reset),
+            _           => caps[0].to_string(),
+        }; 
+        key + suffix
+    }).to_string()
 }
 
 fn conditionally_colorize_keywords<'a>(line: &'a str, force_color: bool) -> String {

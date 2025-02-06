@@ -137,10 +137,10 @@
           virtualisation.vmVariant.virtualisation = {
             qemu.options = [
               "-nographic" 
-              "-display" "curses"
-              "-append" "console=ttyS0"
-              "-serial" "mon:stdio"
-              "-vga" "qxl"
+              "-display curses"
+              "-append console=ttyS0"
+              "-serial mon:stdio"
+              "-vga qxl"
             ];
             forwardPorts = [
               { from = "host"; host.port = 40500; guest.port = 22; }

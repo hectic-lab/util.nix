@@ -225,6 +225,7 @@ dependencies = [
  "atty",
  "colored_json",
  "float-cmp",
+ "once_cell",
  "predicates",
  "regex",
  "serde",
