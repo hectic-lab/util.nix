@@ -51,31 +51,37 @@
   in
   forAllSystemsWithPkgs [ (import rust-overlay) ] ({ system, pkgs }:
   {
-    overlays.${system} =
+    overlays.default =
     final: prev: (
-    self.packages.${system} // {
-      postgresql_17.pkgs.http = 
-        let
-          buildPostgresqlExtension = pkgs.callPackage (import (builtins.path {
-            name = "extension-builder";
-            path = "${final.outPath}/pkgs/servers/sql/postgresql/buildPostgresqlExtension.nix";
-          })) { inherit (prev) postgresql_17; };
-          version = "1.6.1";
-        in 
-        buildPostgresqlExtension { 
+    let
+      version = "1.6.1";
+      buildHttpExt = versionSuffix: let
+          buildPostgresqlExtension =
+            pkgs.callPackage (import (builtins.path {
+              name = "extension-builder";
+              path = ./buildPostgresqlExtension.nix;
+            })) {
+              postgresql = prev."postgresql_${versionSuffix}";
+            };
+        in buildPostgresqlExtension {
           pname = "http";
-          inherit version;
-          
+	  inherit version;
           src = prev.fetchFromGitHub {
             owner = "pramsey";
             repo = "pgsql-http";
-            rev = "v${version}";
+            rev  = "v${version}";
             hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
           };
-
           nativeBuildInputs = with prev; [ pkg-config curl ];
         };
-      });
+    in
+    {
+      hectic = self.packages.${system};
+      postgresql_17.pkgs.http = buildHttpExt "17";
+      postgresql_16.pkgs.http = buildHttpExt "16";
+      postgresql_15.pkgs.http = buildHttpExt "15";
+      postgresql_14.pkgs.http = buildHttpExt "14";
+    });
     packages.${system} = 
     let
 	rust = {
