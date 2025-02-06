@@ -172,7 +172,7 @@
 	      nvim-pager
             ]);
 	    variables = {
-              PAGER="${self.packages.${system}.nvim-pager}/bin/pager";
+              PAGER=with self.packages.${system}; "${nvim-pager}/bin/pager";
 	    };
 	  };
 
