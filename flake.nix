@@ -77,10 +77,10 @@
     in
     {
       hectic = self.packages.${system};
-      postgresql_17.pkgs.http = buildHttpExt "17";
-      postgresql_16.pkgs.http = buildHttpExt "16";
-      postgresql_15.pkgs.http = buildHttpExt "15";
-      postgresql_14.pkgs.http = buildHttpExt "14";
+      postgresql_17 = prev.postgresql_17 // {pkgs.http = buildHttpExt "17";};
+      postgresql_16 = prev.postgresql_16 // {pkgs.http = buildHttpExt "16";};
+      postgresql_15 = prev.postgresql_15 // {pkgs.http = buildHttpExt "15";};
+      postgresql_14 = prev.postgresql_14 // {pkgs.http = buildHttpExt "14";};
     });
     packages.${system} = 
     let
