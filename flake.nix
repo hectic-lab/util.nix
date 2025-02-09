@@ -66,6 +66,7 @@
     in
     {
       nvim-alias = pkgs.callPackage ./package/nvim-alias.nix {};
+      bolt-unpack = pkgs.callPackage ./package/bolt-unpack.nix {};
       nvim-pager = pkgs.callPackage ./package/nvim-pager.nix {};
       printobstacle = pkgs.callPackage ./package/printobstacle.nix {};
       printprogress = pkgs.callPackage ./package/printprogress.nix {};
