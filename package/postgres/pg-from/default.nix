@@ -1,15 +1,19 @@
-{ cargoToml, nativeBuildInputs, pkgs, ... }:
-let
+{
+  cargoToml,
+  nativeBuildInputs,
+  pkgs,
+  ...
+}: let
   src = ./.;
   cargo = cargoToml src;
 in
-pkgs.rustPlatform.buildRustPackage {
-  pname = cargo.package.name;
-  version = cargo.package.version;
+  pkgs.rustPlatform.buildRustPackage {
+    pname = cargo.package.name;
+    version = cargo.package.version;
 
-  inherit nativeBuildInputs src;
+    inherit nativeBuildInputs src;
 
-  cargoLock.lockFile = ./Cargo.lock;
-  
-  doCheck = true;
-}
+    cargoLock.lockFile = ./Cargo.lock;
+
+    doCheck = true;
+  }

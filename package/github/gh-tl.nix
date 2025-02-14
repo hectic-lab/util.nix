@@ -1,5 +1,5 @@
 # FIXME: very unstable (on every request opens pager) but works somehow
-{ pkgs, ... }:
+{pkgs, ...}:
 pkgs.writeShellScriptBin "gh-tl" ''
   set -euo pipefail
 
@@ -54,7 +54,7 @@ pkgs.writeShellScriptBin "gh-tl" ''
 
   # Fetch all labels from the source repository with pagination
   echo "Fetching labels from $SOURCE_REPO..."
-  
+
   LABELS_JSON=$(gh api -H "Accept: application/vnd.github.v3+json" \
     /repos/"$SOURCE_REPO"/labels --paginate | jq -s 'add')
 
