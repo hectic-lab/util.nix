@@ -75,14 +75,12 @@
         printobstacle = pkgs.callPackage ./package/printobstacle.nix {};
         printprogress = pkgs.callPackage ./package/printprogress.nix {};
         colorize = pkgs.callPackage ./package/colorize.nix {};
-        github.gh-tl = pkgs.callPackage ./package/github/gh-tl.nix {};
+        github-gh-tl = pkgs.callPackage ./package/github/gh-tl.nix {};
         supabase-with-env-collection = pkgs.callPackage ./package/supabase-with-env-collection.nix {};
         migration-name = pkgs.callPackage ./package/migration-name.nix {};
         prettify-log = pkgs.callPackage ./package/prettify-log/default.nix rust.commonArgs;
-        pg = {
-          pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
-          pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
-        };
+        pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
+        pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
       };
 
       devShells.${system} = let
@@ -124,8 +122,9 @@
             buildInputs = [pkgs.stack];
           });
       };
-
-      nixosModules.${system} = {
+    })
+    // {
+      nixosModules = {
         "preset.default" = {
           pkgs,
           modulesPath,
@@ -182,12 +181,12 @@
                 jq
                 htop-vim
               ])
-              ++ (with self.packages.${system}; [
+              ++ (with self.packages.${pkgs.system}; [
                 prettify-log
                 nvim-pager
               ]);
             variables = {
-              PAGER = with self.packages.${system}; "${nvim-pager}/bin/pager";
+              PAGER = with self.packages.${pkgs.system}; "${nvim-pager}/bin/pager";
             };
           };
 
@@ -208,8 +207,6 @@
           };
         };
       };
-    })
-    // {
       overlays.default = final: prev: (
         let
           version = "1.6.1";
