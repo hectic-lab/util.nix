@@ -1,12 +1,11 @@
-{ pkgs, ... }:
-
+{pkgs, ...}:
 pkgs.writeShellScriptBin "unpack" ''
   #!/usr/bin/env sh
   set -e
 
   # Determine the Git repository root or default to current directory
   GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
-  
+
   SILENT=false
   AUTO_YES=false
   ZIPFILE=
@@ -16,7 +15,7 @@ pkgs.writeShellScriptBin "unpack" ''
 
   # Check if the user is inside the 'web' directory or any of its subdirectories
   RELATIVE_PATH="$(realpath --relative-to="$GIT_ROOT" "$ORIGINAL_DIR")"
-  
+
   IN_WEB=false
   if [ "$RELATIVE_PATH" = "web" ] || echo "$RELATIVE_PATH" | grep -qE '^web(/|$)'; then
     IN_WEB=true
