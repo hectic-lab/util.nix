@@ -44,6 +44,13 @@ fn run_app() -> Result<(), i32> {
                     .env("PG_URL")
                     .required(true)
                     .num_args(1),
+            )
+            .arg(
+                Arg::new("set")
+                    .short('v')
+                    .long("set")
+                    .num_args(1..)
+                    .help("Pass variable assignments to psql in the format key=value"),
             ),
         )
         .subcommand(
@@ -83,10 +90,14 @@ fn run_app() -> Result<(), i32> {
         }
         Some(("migrate", sub_m)) => {
             let db_url = matches.get_one::<String>("db_url").unwrap();
+            let set_vars: Vec<String> = sub_m
+                .get_many::<String>("set")
+                .map(|vals| vals.cloned().collect())
+                .unwrap_or_else(Vec::new);
             let mut client = Client::connect(db_url, NoTls).expect("DB connection failed");
             init_db(&mut client, &inherits);
             let force = sub_m.get_flag("force");
-            apply_migrations(&mut client, migration_dir, db_url, force)
+            apply_migrations(&mut client, migration_dir, db_url, force, &set_vars)
         }
         Some(("fetch", _)) => {
             let db_url = matches.get_one::<String>("db_url").unwrap();
@@ -110,7 +121,7 @@ fn check_psql_installed() {
     }
 }
 
-fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, force: bool) -> Result<(), i32> {
+fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, force: bool, set_vars: &[String]) -> Result<(), i32> {
     // Get the list of new migrations from disk
     let mut fs_entries: Vec<_> = fs::read_dir(migration_dir)
         .expect("Reading migration directory failed")
@@ -144,28 +155,32 @@ fn apply_migrations(client: &mut Client, migration_dir: &str, db_url: &str, forc
         }
     }
 
-    for fs_mig in fs_migrations {
-        // Skip if already applied
+     for fs_mig in fs_migrations {
         if db_migrations.contains(&fs_mig) {
             continue;
         }
 
-        let status = std::process::Command::new("psql")
-            .arg("-d")
-            .arg(db_url)
-            .arg("-f")
-            .arg(Path::new(migration_dir).join(&fs_mig).to_str().unwrap())
-            .status()
-            .expect("psql execution failed");
+        let mut cmd = std::process::Command::new("psql");
+        cmd.arg("-d")
+            .arg(db_url);
+
+        // Add provided set variables as -v key=value
+        for var in set_vars {
+            cmd.arg("-v").arg(var);
+        }
+
+        cmd.arg("-f")
+            .arg(Path::new(migration_dir).join(&fs_mig).to_str().unwrap());
+
+        let status = cmd.status().expect("psql execution failed");
 
         if !status.success() {
             eprintln!("Migration failed: {}", fs_mig);
             return Err(3);
         }
 
-        client
-            .execute("INSERT INTO hectic.migration (name) VALUES ($1)", &[&fs_mig])
-            .expect("Recording migration failed");
+        client.execute("INSERT INTO hectic.migration (name) VALUES ($1)", &[&fs_mig])
+              .expect("Recording migration failed");
     }
 
     Ok(())
