@@ -2,6 +2,7 @@
   cargoToml,
   nativeBuildInputs,
   pkgs,
+  postgresql_15,
   ...
 }: let
   src = ./.;
@@ -14,6 +15,8 @@ in
     inherit nativeBuildInputs src;
 
     cargoLock.lockFile = ./Cargo.lock;
+
+    buildInputs = [ postgresql_15 ];
 
     doCheck = true;
   }
