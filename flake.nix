@@ -2,6 +2,7 @@
   description = "yukkop's nix utilities";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -14,8 +15,10 @@
     self,
     nixpkgs,
     rust-overlay,
+    nixpkgs-unstable,
   }: let
     lib = nixpkgs.lib;
+
     recursiveUpdate = lib.recursiveUpdate;
 
     supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin"];
@@ -56,7 +59,10 @@
     forAllSystemsWithPkgs [(import rust-overlay)] ({
       system,
       pkgs,
-    }: {
+    }:
+    let
+    in
+    {
       packages.${system} = let
         rust = {
           nativeBuildInputs = [
@@ -210,16 +216,49 @@
       overlays.default = final: prev: (
         let
           version = "1.6.1";
-          buildHttpExt = versionSuffix: let
-            buildPostgresqlExtension =
-              prev.callPackage (import (builtins.path {
-                name = "extension-builder";
-                path = ./buildPostgresqlExtension.nix;
-              })) {
-                postgresql = prev."postgresql_${versionSuffix}";
-              };
+          pkgs-unstable = import nixpkgs-unstable { inherit (prev) system; };
+
+          buildPgrxExtension =
+            prev.callPackage (import (builtins.path {
+              name = "extension-builder";
+              path = ./buildPgrxExtension.nix;
+            })) { 
+              cargo-pgrx = pkgs-unstable.cargo-pgrx_0_12_6;
+              inherit (pkgs-unstable.darwin.apple_sdk.frameworks) Security;
+            };
+
+          buildPostgresqlExtension =
+            prev.callPackage (import (builtins.path {
+              name = "extension-builder";
+              path = ./buildPostgresqlExtension.nix;
+            }));
+
+          buildSmtpExt = versionSuffix: let
+            postgresql = prev."postgresql_${versionSuffix}";
+            src = prev.fetchFromGitHub {
+              owner = "brianpursley";
+              repo = "pg_smtp_client";
+              rev = "6ff3b71e3705e0d4081a51c21ca0379e869ba5fb";
+              hash = "sha256-wC/2rAsSDO83UITaFhtaf3do3aaOAko4gnKUOzwURc8=";
+            };
+            cargo = self.lib.cargoToml src;
           in
+            buildPgrxExtension {
+              pname = cargo.package.name;
+              version = cargo.package.version;
+          
+              inherit src postgresql;
+          
+              buildInputs = with prev; [ openssl ];
+
+              cargoHash = "sha256-AbLT7vcFV89zwZIaTC1ELat9l4UeNP8Bn9QMMOms1Co=";
+          
+              doCheck = false;
+          };
+          buildHttpExt = versionSuffix:
             buildPostgresqlExtension {
+              postgresql = prev."postgresql_${versionSuffix}";
+            } {
               pname = "http";
               inherit version;
               src = prev.fetchFromGitHub {
@@ -232,10 +271,22 @@
             };
         in {
           hectic = self.packages.${prev.system};
-          postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {http = buildHttpExt "17";};};
-          postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {http = buildHttpExt "16";};};
-          postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {http = buildHttpExt "15";};};
-          postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {http = buildHttpExt "14";};};
+          postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
+	    http = buildHttpExt "17";
+	    pg_smtp_client = buildSmtpExt "17";
+	  };};
+          postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
+	    http = buildHttpExt "16";
+	    pg_smtp_client = buildSmtpExt "16";
+	  };};
+          postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
+	    http = buildHttpExt "15";
+	    pg_smtp_client = buildSmtpExt "15";
+	  };};
+          postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
+	    http = buildHttpExt "14";
+	    pg_smtp_client = buildSmtpExt "14";
+	  };};
         }
       );
       lib = {
