@@ -17,14 +17,6 @@ fn run_app() -> Result<(), i32> {
     let matches = Command::new("Rust PG Migration Tool")
         .version("0.1")
         .arg(
-            Arg::new("db_url")
-                .short('u')
-                .long("db-url")
-                .env("PG_URL")
-                .num_args(1)
-                .required(true),
-        )
-        .arg(
             Arg::new("migration_dir")
                 .short('d')
                 .long("migration-dir")
@@ -32,12 +24,26 @@ fn run_app() -> Result<(), i32> {
                 .num_args(1)
                 .default_value("migration"),
         )
+        .arg(
+            Arg::new("inherits")
+                .long("inherits")
+                .num_args(1..)
+                .help("List one or more tables the migration table must inherit from"),
+        )
         .subcommand(
             Command::new("migrate").arg(
                 Arg::new("force")
                     .short('f')
                     .long("force")
                     .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("db_url")
+                    .short('u')
+                    .long("db-url")
+                    .env("PG_URL")
+                    .required(true)
+                    .num_args(1),
             ),
         )
         .subcommand(
@@ -48,33 +54,48 @@ fn run_app() -> Result<(), i32> {
                     .num_args(1),
             ),
         )
-        .subcommand(Command::new("fetch"))
+        .subcommand(
+            Command::new("fetch").arg(
+                Arg::new("db_url")
+                    .short('u')
+                    .long("db-url")
+                    .env("PG_URL")
+                    .required(true)
+                    .num_args(1),
+            ),
+        )
         .get_matches();
-
-    let db_url = matches.get_one::<String>("db_url").unwrap();
+    
     let migration_dir = matches.get_one::<String>("migration_dir").unwrap();
-    let mut client = Client::connect(db_url, NoTls).expect("DB connection failed");
-    init_db(&mut client);
+    let inherits: Vec<String> = matches
+      .get_many::<String>("inherits")
+      .map(|vals| vals.cloned().collect())
+      .unwrap_or_else(Vec::new);
 
     match matches.subcommand() {
-        Some(("migrate", sub_m)) => {
-            let force = sub_m.get_flag("force");
-            match apply_migrations(&mut client, migration_dir, db_url, force) {
-                Ok(_) => Ok(()),
-                Err(err_code) => Err(err_code),
-            }
-        }
         Some(("create", sub_m)) => {
             let name = sub_m
                 .get_one::<String>("name")
                 .cloned()
                 .unwrap_or_else(generate_migration_name);
-            Ok(create_migration_file(migration_dir, &name))
+            create_migration_file(migration_dir, &name);
+            Ok(())
+        }
+        Some(("migrate", sub_m)) => {
+            let db_url = matches.get_one::<String>("db_url").unwrap();
+            let mut client = Client::connect(db_url, NoTls).expect("DB connection failed");
+            init_db(&mut client, &inherits);
+            let force = sub_m.get_flag("force");
+            apply_migrations(&mut client, migration_dir, db_url, force)
         }
         Some(("fetch", _)) => {
-            Ok(fetch_migrations(&mut client, migration_dir))
+            let db_url = matches.get_one::<String>("db_url").unwrap();
+            let mut client = Client::connect(db_url, NoTls).expect("DB connection failed");
+            init_db(&mut client, &inherits);
+            fetch_migrations(&mut client, migration_dir);
+            Ok(())
         }
-        _ => {Ok(())}
+        _ => Ok(()),
     }
 }
 
