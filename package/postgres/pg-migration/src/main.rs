@@ -89,7 +89,7 @@ fn run_app() -> Result<(), i32> {
             Ok(())
         }
         Some(("migrate", sub_m)) => {
-            let db_url = matches.get_one::<String>("db_url").unwrap();
+            let db_url = sub_m.get_one::<String>("db_url").unwrap();
             let set_vars: Vec<String> = sub_m
                 .get_many::<String>("set")
                 .map(|vals| vals.cloned().collect())
@@ -99,8 +99,8 @@ fn run_app() -> Result<(), i32> {
             let force = sub_m.get_flag("force");
             apply_migrations(&mut client, migration_dir, db_url, force, &set_vars)
         }
-        Some(("fetch", _)) => {
-            let db_url = matches.get_one::<String>("db_url").unwrap();
+        Some(("fetch", sub_m)) => {
+            let db_url = sub_m.get_one::<String>("db_url").unwrap();
             let mut client = Client::connect(db_url, NoTls).expect("DB connection failed");
             init_db(&mut client, &inherits);
             fetch_migrations(&mut client, migration_dir);
