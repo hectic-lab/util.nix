@@ -86,6 +86,7 @@
         migration-name = pkgs.callPackage ./package/migration-name.nix {};
         prettify-log = pkgs.callPackage ./package/prettify-log/default.nix rust.commonArgs;
         pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
+        pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
       };
 
