@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "logger.c"
 #include "macros.h"
 #include <sys/stat.h>
 #include <errno.h>    
-#include <time.h>      
+#include <time.h>   
 
 // TODO: check on the specific psql version 
 int check_psql_installed(void) {
@@ -56,7 +57,7 @@ void create_migration_inner(const char* migration_path, const char* type) {
       exit(1);
   }
 
-  char filename[1024];
+  char filename[1024 + 19];
   snprintf(filename, sizeof(filename), "%s/00-entry-point.sql", path);
 
   FILE *fp = fopen(filename, "w");
@@ -64,7 +65,7 @@ void create_migration_inner(const char* migration_path, const char* type) {
       eprintf("Error creating %s", filename);
       exit(1);
   }
-  fprintf(fp, "-- Write your migration SQL here\n");
+  fprintf(fp, "-- Write your %s migration SQL here\n", type);
   fclose(fp);
   printf("Created migration: %s\n", filename);
 
@@ -114,6 +115,7 @@ int main(int argc, char *argv[]) {
   char *migration_dir;
   char *db_url;
   char *migration_name;
+  char force = 0;
 
   /* Process global options until a known subcommand is encountered */
   int i = 1;
@@ -156,6 +158,38 @@ int main(int argc, char *argv[]) {
     }
     create_migration(migration_dir, migration_name);
     return 0;
+  } else if (strcmp(subcommand, "migrate") == 0) {
+    for (i = subcommand_index+1; i < argc; i++) {
+      if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--gb-url") == 0) {
+        if (i + 1 < argc) {
+          db_url = argv[i+1];
+	  i++;
+	} else {
+          eprintf("%s requires an argument", argv[i]);
+	}
+      } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--force")) {
+	force = 1;
+      } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--set")) {
+        if (i+1 < argc) {
+          set_vars = relloc(set_vars);
+	} else {
+          eprintf("%s requires an argument", argv[i]);
+	}
+
+      }
+    }
+  } else if (strcmp(subcommand, "fetch") == 0) {
+    for (i = subcommand_index+1; i < argc; i++) {
+      if (strcmp(argv[i], "-u") == 0 || strcmp(argv[i], "--gb-url") == 0) {
+        if (i + 1 < argc) {
+          db_url = argv[i+1];
+	  i++;
+	} else {
+          eprintf("%s requires an argument", argv[i]);
+	}
+
+      }
+    }
   }
 
   if (!db_url) {
@@ -163,6 +197,4 @@ int main(int argc, char *argv[]) {
     help_message(argv[0]);
     exit(1);
   }
-
-
 }
