@@ -11,16 +11,24 @@ typedef enum {
   COLOR_MODE_DISABLE
 } ColorMode;
 
-// Function to set the color mode
-void set_output_color_mode(ColorMode mode);
+// Static color mode variable
+static ColorMode color_mode = COLOR_MODE_AUTO;
+
+// Function to set color mode
+void set_output_color_mode(ColorMode mode) {
+    color_mode = mode;
+}
 
 // Macros for detecting terminal and color usage
 #define IS_TERMINAL() (isatty(fileno(stderr)))
 #define USE_COLOR() ((color_mode == COLOR_MODE_FORCE) || (color_mode == COLOR_MODE_AUTO && IS_TERMINAL()))
 
+#define COLOR_RED (USE_COLOR() ? "\033[1;31m" : "")
+#define COLOR_RESET (USE_COLOR() ? "\033[0m" : "")
+
 // Define color macros based on output type
-#define ERROR_PREFIX (IS_TERMINAL() ? "\033[1;31mError: " : "Error: ")
-#define ERROR_SUFFIX (IS_TERMINAL() ? "\033[0m\n" : "\n")
+#define ERROR_PREFIX PP_CAT_I(COLOR_RED, "Error: ")
+#define ERROR_SUFFIX PP_CAT_I(COLOR_RESET, "\n")
 
 // Helper macros for argument counting
 // NOTE(yukkop): this ugly macroses for avoid all posible warnings
@@ -41,5 +49,7 @@ void set_output_color_mode(ColorMode mode);
 
 #define eprintf(...) \
     PP_CAT(eprintf_, PP_NARG(__VA_ARGS__))(__VA_ARGS__)
+
+#define todo fprintf(stderr, "%sNot implimented yet%s", COLOR_RED, COLOR_RESET);exit(1)
 
 #endif // EPRINTF_H
