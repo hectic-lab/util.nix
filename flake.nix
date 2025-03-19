@@ -280,6 +280,39 @@
 	    http = buildHttpExt "16";
 	    pg_smtp_client = buildSmtpExt "16";
 	  };};
+	  writers = let
+            writeC =
+              name: argsOrScript:
+              if lib.isAttrs argsOrScript && !lib.isDerivation argsOrScript then
+                prev.writers.makeBinWriter (
+                  argsOrScript // {
+                    compileScript = ''
+                      # Force gcc to treat the input file as C code
+                      ${prev.gcc}/bin/gcc -fsyntax-only -xc $contentPath
+                      if [ $? -ne 0 ]; then
+                        echo "Syntax check failed"
+                        exit 1
+                      fi
+                      ${prev.gcc}/bin/gcc -xc -o $out $contentPath
+                    '';
+                  }
+                ) name
+              else
+                prev.writers.makeBinWriter {
+                  compileScript = ''
+                    # Force gcc to treat the input file as C code
+                    ${prev.gcc}/bin/gcc -fsyntax-only -xc $contentPath
+                    if [ $? -ne 0 ]; then
+                      echo "Syntax check failed"
+                      exit 1
+                    fi
+                    ${prev.gcc}/bin/gcc -xc -o $out $contentPath
+                  '';
+                } name argsOrScript;
+	  in prev.writers // {
+            writeCBin = name: writeC "/bin/${name}";
+	    writeC = writeC;
+	  };
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
 	    http = buildHttpExt "15";
 	    pg_smtp_client = buildSmtpExt "15";
