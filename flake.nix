@@ -309,9 +309,20 @@
                     ${prev.gcc}/bin/gcc -xc -o $out $contentPath
                   '';
                 } name argsOrScript;
+	    writeMinC =
+              name: includes: body:
+                writeC name ''
+                  ${builtins.concatStringsSep "\n" (map (h: "#include " + h) includes)}
+
+                  int main(int argc, char *argv[]) {
+                      ${body}
+                  }
+                '';
 	  in prev.writers // {
             writeCBin = name: writeC "/bin/${name}";
 	    writeC = writeC;
+	    writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
+	    writeMinC = writeMinC;
 	  };
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
 	    http = buildHttpExt "15";
