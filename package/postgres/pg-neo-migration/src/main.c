@@ -2,10 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "logger.c"
-#include "macros.h"
+#include "macro.h"
 #include <sys/stat.h>
 #include <errno.h>    
 #include <time.h>   
+#include <stdbool.h>
 
 // TODO: check on the specific psql version 
 int check_psql_installed(void) {
@@ -58,7 +59,7 @@ void create_migration_inner(const char* migration_path, const char* type) {
   }
 
   char filename[1024 + 19];
-  snprintf(filename, sizeof(filename), "%s/00-entry-point.sql", path);
+  snprintf(filename, sizeof(filename), "%s/0000-entry-point.sql", path);
 
   FILE *fp = fopen(filename, "w");
   if (!fp) {
@@ -101,8 +102,9 @@ void help_message(char name[]) {
 int main(int argc, char *argv[]) {
   srand(time(NULL));
   init_logger();
-
   raise_log("init");
+
+  todo;
 
   if (check_psql_installed()) { exit(1); }
 
@@ -115,7 +117,9 @@ int main(int argc, char *argv[]) {
   char *migration_dir;
   char *db_url;
   char *migration_name;
-  char force = 0;
+  bool force = true;
+  char **set_vars = NULL;
+  int set_vars_count = 0;
 
   /* Process global options until a known subcommand is encountered */
   int i = 1;
@@ -171,11 +175,18 @@ int main(int argc, char *argv[]) {
 	force = 1;
       } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--set")) {
         if (i+1 < argc) {
-          set_vars = relloc(set_vars);
+	  set_vars = realloc(set_vars, (set_vars_count+1) * sizeof(char*));
+          set_vars[set_vars_count++] = argv[i+1];
+          i++;
 	} else {
           eprintf("%s requires an argument", argv[i]);
 	}
+      }
 
+      if (!db_url) {
+        eprintf("Database URL is required for %s subcommand.\n", subcommand);
+        help_message(argv[0]);
+        exit(1);
       }
     }
   } else if (strcmp(subcommand, "fetch") == 0) {
@@ -187,14 +198,13 @@ int main(int argc, char *argv[]) {
 	} else {
           eprintf("%s requires an argument", argv[i]);
 	}
-
+        
+	if (!db_url) {
+          eprintf("Database URL is required for %s subcommand.\n", subcommand);
+          help_message(argv[0]);
+          exit(1);
+        }
       }
     }
-  }
-
-  if (!db_url) {
-    eprintf("Database URL is required for migrate subcommand.\n");
-    help_message(argv[0]);
-    exit(1);
   }
 }
