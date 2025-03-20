@@ -59,10 +59,7 @@
     forAllSystemsWithPkgs [(import rust-overlay)] ({
       system,
       pkgs,
-    }:
-    let
-    in
-    {
+    }: {
       packages.${system} = let
         rust = {
           nativeBuildInputs = [
@@ -88,6 +85,7 @@
         pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
         pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
+        libhectic = pkgs.callPackage ./package/c/libhectic/default.nix {};
       };
 
       devShells.${system} = let
@@ -128,6 +126,89 @@
           // (pkgs.mkShell {
             buildInputs = [pkgs.stack];
           });
+      };
+      nixosConfigurations."${system}_manual_test" = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          self.nixosModules."preset.default"
+          self.nixosModules."hardware.hetzner"
+          ({modulesPath, pkgs, ...}: {
+            imports = [
+              (modulesPath + "/profiles/qemu-guest.nix")
+            ];
+
+            users.users.root.openssh.authorizedKeys.keys = [ ];
+            environment.systemPackages = with pkgs; [
+              (pkgs.writers.writeMinCBin "minc-hello-world" ["<stdio.h>"] /*c*/ ''
+	        printf("hello world\n");
+	      '')
+              (pkgs.writers.writeMinCBin "minc-env" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
+	        char *env_name;
+	        if (argc > 1) {
+                  env_name = argv[1];
+		} else {
+                  env_name = "HOME";
+		}
+
+                char *value = getenv(env_name);
+                if (value) {
+                    printf("%s: %s\n", env_name, value);
+                } else {
+                    printf("Environment variable %s not found.\n", env_name);
+                }
+	      '')
+              (pkgs.writers.writeMinCBin "minc-env-check" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
+	        char *env_name;
+	        if (argc > 1) {
+                  env_name = argv[1];
+		} else {
+                  env_name = "HOME";
+		}
+
+                char *value = getenv(env_name);
+                if (value) {
+		    char buffer[128]; 
+		    sprintf(buffer, "echo $%s\n", env_name);
+                    system(buffer);
+                } else {
+                    printf("Environment variable %s not found.\n", env_name);
+                }
+	      '')
+            ];
+            programs.zsh.shellAliases = {
+              jc = ''journalctl'';
+              sc = ''journalctl'';
+              nv = ''nvim'';
+              sd = "shutdown now";
+            };
+
+            virtualisation = {
+              vmVariant = {
+                systemd.services.fix-root-perms = {
+                  description = "Fix root directory permissions";
+                  after = [ "local-fs.target" ];
+                  wantedBy = [ "multi-user.target" ];
+                  serviceConfig = {
+                    Type = "oneshot";
+                    ExecStart = "${pkgs.coreutils}/bin/chmod 755 /";
+                  };
+                };
+                virtualisation = {
+                  diskSize = 1024*6;
+                  diskImage = null;
+                  forwardPorts = [ ];
+                };
+              };
+            };
+            networking.firewall = {
+              enable = true;
+              allowedTCPPorts = [
+                80
+              ];
+            };
+          })
+        ];
+        pkgs = import nixpkgs {inherit system; overlays = [ self.overlays.default ];};
       };
     })
     // {
