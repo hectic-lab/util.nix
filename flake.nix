@@ -338,13 +338,13 @@
         # -- For all systems --
         inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs;
 
-        makeEnvironment = envVars:
+        readEnvironment = { envVarsToRead, prefix ? "" }:
           builtins.listToAttrs
           (map (name: {
               inherit name;
-              value = self.lib.getEnv name;
+              value = self.lib.getEnv "${prefix}${name}";
             })
-            envVars);
+            envVarsToRead);
 
         # -- Env processing --
         getEnv = varName: let
