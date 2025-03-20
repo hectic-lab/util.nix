@@ -86,6 +86,9 @@
         pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
         libhectic = pkgs.callPackage ./package/c/libhectic/default.nix {};
+        hmpl = pkgs.callPackage ./package/c/hmpl/default.nix { 
+	  libhectic = self.packages.${system}.libhectic;
+	};
       };
 
       devShells.${system} = let
