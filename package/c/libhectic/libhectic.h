@@ -81,6 +81,8 @@ typedef enum {
   LOG_LEVEL_EXCEPTION
 } LogLevel;
 
+void logger_level_reset();
+
 void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
