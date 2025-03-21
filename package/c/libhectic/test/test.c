@@ -20,7 +20,7 @@
     stderr = orig_stderr;                                                           \
     fclose(temp);                                                                   \
     char expected_buffer[256];                                                      \
-    sprintf(expected_buffer, "%s %d " LEVEL_STR ": message\n", time_str, __LINE__); \
+    sprintf(expected_buffer, "%s " LEVEL_STR " " __FILE__ ":%d message\n", time_str, __LINE__); \
     printf("DEBUG: [%s] [%s]\n", result_buffer, expected_buffer);                   \
     assert(strcmp(result_buffer, expected_buffer) == 0);                            \
 } while(0)

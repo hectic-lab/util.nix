@@ -52,7 +52,7 @@ void init_logger(void) {
     current_log_level = log_level_from_string(getenv("LOG_LEVEL"));
 }
 
-char* log_message(LogLevel level, int line, const char *format, ...) {
+char* log_message(LogLevel level, char *file, int line, const char *format, ...) {
     if (level < current_log_level) {
         return NULL;
     }
@@ -63,7 +63,7 @@ char* log_message(LogLevel level, int line, const char *format, ...) {
     static char timeStr[20];
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tm_info);
 
-    fprintf(stderr, "%s %d %s: ", timeStr, line, log_level_to_string(level));
+    fprintf(stderr, "%s %s %s:%d ", timeStr, log_level_to_string(level), file, line);
 
     va_list args;
     va_start(args, format);
@@ -89,31 +89,10 @@ Arena arena_init(size_t size) {
   return arena;
 }
 
-void *arena_alloc_or_null(Arena *arena, size_t size) {
-  if (arena->begin == 0) {
-    *arena = arena_init(ARENA_DEFAULT_SIZE);
-  }
-  size_t current = (size_t)arena->current - (size_t)arena->begin;
-  // TODO(yukkop): maybe -1
-  if (arena->capacity <= current && current < size) {
-    return NULL;
-  }
-  return arena; 
-}
-
 void arena_reset(Arena *arena) {
   arena->current = arena->begin;
 }
 
 void arena_free(Arena *arena) {
   free(arena->begin);
-}
-
-void *arena_alloc(Arena *arena, size_t size) {
-  void *mem = arena_alloc_or_null(arena, size);
-  if (!mem) {
-    raise_exception("Arena out of memory");
-    exit(1);
-  }
-  return mem;
 }

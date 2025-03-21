@@ -8,7 +8,10 @@ stdenv.mkDerivation {
 
   buildPhase = ''
     mkdir -p target
-    ${gcc}/bin/cc -Wall -Wextra -g -pedantic -fsanitize=address -c libhectic.c -o target/libhectic.o
+    ${gcc}/bin/cc -Wall -Wextra -g \
+      -std=c99 \
+      -pedantic -fsanitize=address \
+      -c libhectic.c -o target/libhectic.o
     ${gcc}/bin/ar rcs target/libhectic.a target/libhectic.o
   '';
 

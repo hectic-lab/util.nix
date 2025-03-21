@@ -18,6 +18,7 @@ void test_arena_alloc() {
   assert(ptr1 != NULL);
   void *ptr2 = arena_alloc(&arena, 16);
   assert(ptr2 != NULL);
+  raise_debug("%d - %d = %d", (size_t)ptr2, (size_t)ptr1, (char *)ptr2 - (char *)ptr1);
   assert((char *)ptr2 - (char *)ptr1 == 16);
   arena_free(&arena);
 }
@@ -25,6 +26,7 @@ void test_arena_alloc() {
 void test_arena_alloc_or_null_out_of_memory() {
   Arena arena = arena_init(32);
   void *ptr = arena_alloc_or_null(&arena, 64);
+  raise_debug("%d %d %d %d", arena.begin, arena.current, arena.capacity, (size_t)ptr);
   assert(ptr == NULL);
   arena_free(&arena);
 }
@@ -46,6 +48,9 @@ void test_arena_null_init() {
 }
 
 int main() {
+  set_output_color_mode(COLOR_MODE_DISABLE);
+  logger_level(LOG_LEVEL_DEBUG);                                                            \
+
   test_arena_init();
   test_arena_alloc();
   test_arena_alloc_or_null_out_of_memory();

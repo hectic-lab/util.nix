@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, libhectic }:
+{ stdenv, gcc, lib, libhectic, cjson }:
 
 stdenv.mkDerivation {
   pname = "hmpl";
@@ -6,13 +6,13 @@ stdenv.mkDerivation {
   src = ./.;
   doCheck = true;
 
-  buildInputs = [ libhectic ];
+  buildInputs = [ libhectic cjson ];
 
   buildPhase = ''
     mkdir -p target
     ${gcc}/bin/cc -Wall -Wextra -g \
       -pedantic -fsanitize=address hmpl.c \
-      -l:libhectic.a -o target/hmpl
+      -l:libhectic.a -l:cjson -o target/hmpl
   '';
 
   checkPhase = '' '';
