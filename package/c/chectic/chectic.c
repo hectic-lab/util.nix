@@ -74,25 +74,3 @@ char* log_message(LogLevel level, char *file, int line, const char *format, ...)
 
     return timeStr;
 }
-
-// -----------
-// -- arena --
-// -----------
-
-Arena arena_init(size_t size) {
-  Arena arena;
-  arena.begin = malloc(size);
-  memset(arena.begin, 0, size);
-  arena.current = arena.begin;
-  arena.capacity = size;
-
-  return arena;
-}
-
-void arena_reset(Arena *arena) {
-  arena->current = arena->begin;
-}
-
-void arena_free(Arena *arena) {
-  free(arena->begin);
-}

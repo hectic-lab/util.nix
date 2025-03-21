@@ -105,35 +105,61 @@ typedef struct {
         *(arena) = arena_init(ARENA_DEFAULT_SIZE);                                 \
     }                                                                              \
     size_t current__ = (size_t)(arena)->current - (size_t)(arena)->begin;          \
-    if ((arena)->capacity <= current__ || (arena)->capacity - current__ < (size)) {\
-        raise_debug("Arena from %d with capacity %d allocated on %d cannot be allocated on %d", \
-                    (arena)->begin, (arena)->capacity,                             \
-	            (arena)->current - (arena)->begin, (size));                    \
+    if ((arena)->capacity <= current__ || (arena)->capacity - current__ < (size)) {  \
+        raise_debug("Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",    \
+                  (arena)->begin, (arena)->capacity, current__, (size));           \
     } else {                                                                       \
-        raise_debug("Arena from %d with capacity %d allocated on %d will allocate on %d", \
-                    (arena)->begin, (arena)->capacity,                             \
-                    (arena)->begin, (arena)->capacity, (size));                    \
+        raise_debug("Arena %p (capacity %zu) used %zu will allocate %zu bytes",       \
+                  (arena)->begin, (arena)->capacity, current__, (size));           \
         mem__ = (arena)->current;                                                  \
         (arena)->current = (char*)(arena)->current + (size);                       \
     }                                                                              \
+    raise_debug("Allocated at %p", mem__);                                           \
     mem__;                                                                         \
 })
 
-Arena arena_init(size_t size);
-
-void arena_reset(Arena *arena);
-
-void arena_free(Arena *arena);
-
-#define arena_alloc(arena, size) __extension__ ({        \
-    void *mem__ = arena_alloc_or_null((arena), (size));  \
-    if (!mem__) {                                        \
-        raise_exception("Arena out of memory");          \
-        exit(1);                                         \
-    }                                                    \
-    mem__;                                               \
+#define arena_init(size) __extension__ ({     \
+    Arena arena__;                            \
+    arena__.begin = malloc(size);             \
+    memset(arena__.begin, 0, size);           \
+    arena__.current = arena__.begin;          \
+    arena__.capacity = size;                  \
+    raise_debug("Initialized arena at %p with capacity %zu", arena__.begin, size);   \
+    arena__;                                  \
 })
 
+#define arena_reset(arena) __extension__ ({   \
+    (arena)->current = (arena)->begin;        \
+    raise_debug("Arena %p reset", (arena)->begin);  \
+})
+
+#define arena_free(arena) __extension__ ({    \
+    raise_debug("Freeing arena at %p", (arena)->begin); \
+    free((arena)->begin);                     \
+})
+
+#define arena_alloc(arena, size) __extension__ ({           \
+    void *mem__ = arena_alloc_or_null((arena), (size));     \
+    if (!mem__) {                                           \
+        raise_debug("Arena out of memory when trying to allocate %zu bytes", (size)); \
+        raise_exception("Arena out of memory");             \
+        exit(1);                                            \
+    }                                                       \
+    mem__;                                                  \
+})
+
+#define arena_strdup(arena, s) __extension__ ({         \
+    const char *s__ = (s);                              \
+    char *result__;                                     \
+    if (s__) {                                          \
+        size_t len__ = strlen(s__) + 1;                 \
+        result__ = (char *)arena_alloc(arena, len__);   \
+        memcpy(result__, s__, len__);                   \
+    } else {                                            \
+        result__ = NULL;                                \
+    }                                                   \
+    result__;                                           \
+})
 
 // TODO: mmap
 // TODO: dynamic array style
