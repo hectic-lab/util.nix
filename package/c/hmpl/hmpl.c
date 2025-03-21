@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 //#include "libhmpl.h"
 #include "libhectic.h"
 
@@ -80,8 +81,25 @@ void render_template(char *text, char *context) {
   render_template_placeholders(text, context, "");
 }
 
-int main(void) {
-  render_template(text, context);
+int main(int argc, char *argv[]) {
+    char *text = NULL;
+    char *context = strdup(argc > 1 ? argv[1] : "{}");
 
-  return 0;
+    if (argc > 2) {
+        text = strdup(argv[2]);
+    } else if (!isatty(fileno(stdin))) {
+        size_t size = 0;
+        ssize_t len = getdelim(&text, &size, '\0', stdin);
+        if (len < 0) {
+            perror("read stdin");
+            free(context);
+            return 1;
+        }
+    }
+
+    render_template(text, context);
+
+    free(text);
+    free(context);
+    return 0;
 }
