@@ -1,7 +1,7 @@
 { stdenv, gcc, lib }:
 
 stdenv.mkDerivation {
-  pname = "libhectic";
+  pname = "chectic";
   version = "1.0";
   src = ./.;
   doCheck = true;
@@ -11,23 +11,23 @@ stdenv.mkDerivation {
     ${gcc}/bin/cc -Wall -Wextra -g \
       -std=c99 \
       -pedantic -fsanitize=address \
-      -c libhectic.c -o target/libhectic.o
-    ${gcc}/bin/ar rcs target/libhectic.a target/libhectic.o
+      -c chectic.c -o target/chectic.o
+    ${gcc}/bin/ar rcs target/libchectic.a target/chectic.o
   '';
 
   checkPhase = ''
     mkdir -p target/test
     for test_file in test/*.c; do
       exe="target/test/$(basename ''${test_file%.c})"
-      ${gcc}/bin/cc -Wall -Wextra -g -pedantic -fsanitize=address -I. "$test_file" -Ltarget -l:libhectic.a -o "$exe"
+      ${gcc}/bin/cc -Wall -Wextra -g -pedantic -fsanitize=address -I. "$test_file" -Ltarget -lchectic -o "$exe"
       "$exe"
     done
   '';
 
   installPhase = ''
     mkdir -p $out/lib $out/include
-    cp target/libhectic.a $out/lib/
-    cp libhectic.h $out/include/
+    cp target/libchectic.a $out/lib/
+    cp chectic.h $out/include/
   '';
 
   meta = {

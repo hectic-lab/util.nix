@@ -85,9 +85,9 @@
         pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
         pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
-        libhectic = pkgs.callPackage ./package/c/libhectic/default.nix {};
+        chectic = pkgs.callPackage ./package/c/chectic/default.nix {};
         hmpl = pkgs.callPackage ./package/c/hmpl/default.nix { 
-	  libhectic = self.packages.${system}.libhectic;
+	  chectic = self.packages.${system}.chectic;
 	};
       };
 
