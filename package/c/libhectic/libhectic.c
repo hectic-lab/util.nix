@@ -74,3 +74,46 @@ char* log_message(LogLevel level, int line, const char *format, ...) {
 
     return timeStr;
 }
+
+// -----------
+// -- arena --
+// -----------
+
+Arena arena_init(size_t size) {
+  Arena arena;
+  arena.begin = malloc(size);
+  memset(arena.begin, 0, size);
+  arena.current = arena.begin;
+  arena.capacity = size;
+
+  return arena;
+}
+
+void *arena_alloc_or_null(Arena *arena, size_t size) {
+  if (arena->begin == 0) {
+    *arena = arena_init(ARENA_DEFAULT_SIZE);
+  }
+  size_t current = (size_t)arena->current - (size_t)arena->begin;
+  // TODO(yukkop): maybe -1
+  if (arena->capacity <= current && current < size) {
+    return NULL;
+  }
+  return arena; 
+}
+
+void arena_reset(Arena *arena) {
+  arena->current = arena->begin;
+}
+
+void arena_free(Arena *arena) {
+  free(arena->begin);
+}
+
+void *arena_alloc(Arena *arena, size_t size) {
+  void *mem = arena_alloc_or_null(arena, size);
+  if (!mem) {
+    raise_exception("Arena out of memory");
+    exit(1);
+  }
+  return mem;
+}

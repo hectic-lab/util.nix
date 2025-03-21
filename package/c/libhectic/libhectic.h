@@ -138,3 +138,36 @@ char* log_message(LogLevel level, int line, const char *format, ...);
     PP_CAT(raise_exception_, PP_NARG(__VA_ARGS__))(__VA_ARGS__)
 
 #endif // EPRINTF_H
+
+// -----------
+// -- arena --
+// -----------
+
+#define ARENA_DEFAULT_SIZE 1024
+
+typedef struct {
+  void *begin;
+  void *current;
+  size_t capacity; 
+} Arena;
+
+Arena arena_init(size_t size);
+
+void *arena_alloc_or_null(Arena *arena, size_t size);
+
+void arena_reset(Arena *arena);
+
+void arena_free(Arena *arena);
+
+void *arena_alloc(Arena *arena, size_t size);
+
+// TODO: mmap
+// TODO: dynamic array style
+// void *arena_realloc(Arena *arena, size_t size) {
+//   void *mem = arena_alloc_or_null(arena, size);
+//   if (!mem) {
+//     raise_exception("Arena out of memory");
+//     exit(1);
+//   }
+//   return mem;
+// }
