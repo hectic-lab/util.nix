@@ -47,14 +47,24 @@ void test_arena_null_init() {
   arena_free(&arena);
 }
 
+void test_arena_strdup() {
+  Arena arena = arena_init(64);
+  const char *orig = "Hello, Arena!";
+  char *copy = arena_strdup(&arena, orig);
+  assert(copy != NULL);
+  assert(strcmp(copy, orig) == 0);
+  arena_free(&arena);
+}
+
 int main() {
   set_output_color_mode(COLOR_MODE_DISABLE);
-  logger_level(LOG_LEVEL_DEBUG);                                                            \
+  logger_level(LOG_LEVEL_DEBUG);
 
   test_arena_init();
   test_arena_alloc();
   test_arena_alloc_or_null_out_of_memory();
   test_arena_reset();
   test_arena_null_init();
+  test_arena_strdup();
   printf("All tests passed.\n");
 }
