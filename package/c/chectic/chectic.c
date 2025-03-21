@@ -1,4 +1,4 @@
-#include "libhectic.h"
+#include "chectic.h"
 
 void set_output_color_mode(ColorMode mode) {
     color_mode = mode;
