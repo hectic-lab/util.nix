@@ -27,7 +27,6 @@
 
 int main(void) {
     set_output_color_mode(COLOR_MODE_DISABLE);
-    raise_log("zalupa");
 
     TEST_RAISE_GENERIC(raise_debug, LOG_LEVEL_DEBUG, "DEBUG");
     TEST_RAISE_GENERIC(raise_log,   LOG_LEVEL_LOG,   "LOG");

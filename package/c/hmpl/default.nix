@@ -1,7 +1,7 @@
 { stdenv, gcc, lib, libhectic }:
 
 stdenv.mkDerivation {
-  pname = "libhectic";
+  pname = "hmpl";
   version = "1.0";
   src = ./.;
   doCheck = true;
@@ -11,14 +11,15 @@ stdenv.mkDerivation {
   buildPhase = ''
     mkdir -p target
     ${gcc}/bin/cc -Wall -Wextra -g \
-      -pedantic -fsanitize=address -c hmpl.c \
-      -l:libhectic.a -o target/libhectic.o
+      -pedantic -fsanitize=address hmpl.c \
+      -l:libhectic.a -o target/hmpl
   '';
 
   checkPhase = '' '';
 
   installPhase = ''
-    mkdir -p $out/lib $out/include
+    mkdir -p $out/bin
+    cp target/hmpl $out/bin/hmpl
   '';
 
   meta = {
