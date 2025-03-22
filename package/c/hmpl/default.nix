@@ -28,6 +28,7 @@ stdenv.mkDerivation {
 
   checkPhase = ''
     mkdir -p target/test
+    export LOG_LEVEL=DEBUG 
     for test_file in test/*.c; do
       exe="target/test/$(basename ''${test_file%.c})"
       ${gcc}/bin/cc -Wall -Wextra -g -pedantic \
