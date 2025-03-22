@@ -267,19 +267,24 @@ Json *json_parse(Arena *arena, const char **s) {
     return json_parse_value__(s, arena);
 }
 
-/* Minimal JSON printer.
-   For simplicity, a fixed-size buffer is used.
-   In production you’d dynamically size or use the arena. */
-char *json_print(Arena *arena, Json *item) {
+char *json_to_string(Arena *arena, Json *item) {
+  return json_to_string_with_opts(arena, item, 0);
+}
+
+/* Minimal JSON printer with raw output option.
+   When raw is non-zero and the item is a JSON_STRING, it is printed without quotes.
+*/
+char *json_to_string_with_opts(Arena *arena, Json *item, int raw) {
     char *out = arena_alloc(arena, 1024);
-    if (!out) return NULL;
+    if (!out)
+        return NULL;
     char *ptr = out;
     if (item->type == JSON_OBJECT) {
         ptr += sprintf(ptr, "{");
         Json *child = item->child;
         while (child) {
             ptr += sprintf(ptr, "\"%s\":", child->key ? child->key : "");
-            char *child_str = json_print(arena, child);
+            char *child_str = json_to_string_with_opts(arena, child, raw);
             ptr += sprintf(ptr, "%s", child_str);
             if (child->next)
                 ptr += sprintf(ptr, ",");
@@ -290,7 +295,7 @@ char *json_print(Arena *arena, Json *item) {
         ptr += sprintf(ptr, "[");
         Json *child = item->child;
         while (child) {
-            char *child_str = json_print(arena, child);
+            char *child_str = json_to_string_with_opts(arena, child, raw);
             ptr += sprintf(ptr, "%s", child_str);
             if (child->next)
                 ptr += sprintf(ptr, ",");
@@ -298,13 +303,16 @@ char *json_print(Arena *arena, Json *item) {
         }
         sprintf(ptr, "]");
     } else if (item->type == JSON_STRING) {
-        sprintf(out, "\"%s\"", item->string);
+        if (raw)
+            sprintf(ptr, "%s", item->string);
+        else
+            sprintf(ptr, "\"%s\"", item->string);
     } else if (item->type == JSON_NUMBER) {
-        sprintf(out, "%g", item->number);
+        sprintf(ptr, "%g", item->number);
     } else if (item->type == JSON_BOOL) {
-        sprintf(out, item->boolean ? "true" : "false");
+        sprintf(ptr, item->boolean ? "true" : "false");
     } else if (item->type == JSON_NULL) {
-        sprintf(out, "null");
+        sprintf(ptr, "null");
     }
     return out;
 }
