@@ -35,5 +35,6 @@ int main(void) {
     TEST_RAISE_GENERIC(raise_warn,  LOG_LEVEL_WARN, "WARN");
     TEST_RAISE_GENERIC(raise_exception,  LOG_LEVEL_EXCEPTION, "EXCEPTION");
 
+    printf("%s all tests passed.\n", __FILE__);
     return 0;
 }
