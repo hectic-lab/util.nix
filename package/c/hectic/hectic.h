@@ -1,5 +1,5 @@
-#ifndef EPRINTF_CHECTIC
-#define EPRINTF_CHECTIC
+#ifndef EPRINTF_HECTIC
+#define EPRINTF_HECTIC
 
 #include <stdio.h>
 #include <unistd.h>

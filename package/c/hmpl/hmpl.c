@@ -27,8 +27,8 @@ char *eval(Arena *arena, const Json * const context, const char * const key) {
 }
 
 /* Modified: text is passed by reference so we can update it and free old allocations */
-void render_template_placeholders(Arena *arena, char **text_ptr, Json *context, const char * const prefix) {
-  raise_debug("render_template_placeholders");
+void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix) {
+  raise_debug("hmpl_render_interpolation_tags");
   char start_pattern[256];
   snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix);
   int start_pattern_length = strlen(start_pattern);
@@ -67,19 +67,19 @@ void render_template_placeholders(Arena *arena, char **text_ptr, Json *context, 
   }
 }
 
-void render_template_with_arena(Arena *arena, char **text, const Json * const context) {
+void hmpl_render_with_arena(Arena *arena, char **text, const Json * const context) {
   if (context->type != JSON_OBJECT) {
     raise_exception("Malformed context: context is not json");
     exit(1);
   }
 
-  render_template_placeholders(arena, text, context, "");
+  hmpl_render_interpolation_tags(arena, text, context, "");
 }
 
-void render_template(char **text, const Json * const context) {
+void hmpl_render(char **text, const Json * const context) {
   Arena arena = arena_init(1024 * 1024);
 
-  render_template_with_arena(&arena, text, context);
+  hmpl_render_with_arena(&arena, text, context);
 
   arena_free(&arena);
 }

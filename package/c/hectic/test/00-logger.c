@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "chectic.h"
+#include "hectic.h"
 
 #define TEST_RAISE_GENERIC(LOG_MACRO, LEVEL, LEVEL_STR) do {                        \
     FILE *orig_stderr = stderr;                                                     \
