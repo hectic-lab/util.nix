@@ -134,6 +134,7 @@ void test_render_interpolation_tags_with_prefix(Arena *arena) {
 }
 
 int main(void) {
+    init_logger();
     Arena arena = arena_init(1024 * 1024);
 
     test_eval_single_level_key(&arena);

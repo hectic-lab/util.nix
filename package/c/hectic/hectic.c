@@ -268,13 +268,13 @@ Json *json_parse(Arena *arena, const char **s) {
 }
 
 char *json_to_string(Arena *arena, Json *item) {
-  return json_to_string_with_opts(arena, item, 0);
+  return json_to_string_with_opts(arena, item, JSON_NORAW);
 }
 
 /* Minimal JSON printer with raw output option.
    When raw is non-zero and the item is a JSON_STRING, it is printed without quotes.
 */
-char *json_to_string_with_opts(Arena *arena, Json *item, int raw) {
+char *json_to_string_with_opts(Arena *arena, Json *item, JsonRawOpt raw) {
     char *out = arena_alloc(arena, 1024);
     if (!out)
         return NULL;
@@ -303,7 +303,7 @@ char *json_to_string_with_opts(Arena *arena, Json *item, int raw) {
         }
         sprintf(ptr, "]");
     } else if (item->type == JSON_STRING) {
-        if (raw)
+        if ((int)raw)
             sprintf(ptr, "%s", item->string);
         else
             sprintf(ptr, "\"%s\"", item->string);

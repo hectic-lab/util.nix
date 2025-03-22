@@ -203,12 +203,17 @@ void substr(const char *src, char *dest, size_t start, size_t len);
 // ----------
 
 typedef enum {
+    JSON_NORAW = 0,
+    JSON_RAW = 1,
+} JsonRawOpt;
+
+typedef enum {
     JSON_NULL,
     JSON_BOOL,
     JSON_NUMBER,
     JSON_STRING,
     JSON_ARRAY,
-    JSON_OBJECT
+    JSON_OBJECT,
 } JsonType;
 
 /* Full JSON structure */
@@ -228,7 +233,7 @@ Json *json_parse(Arena *arena, const char **s);
 
 char *json_to_string(Arena *arena, Json *item);
 
-char *json_to_string_with_opts(Arena *arena, Json *item, int raw);
+char *json_to_string_with_opts(Arena *arena, Json *item, JsonRawOpt raw);
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item(Json *object, const char *key);
