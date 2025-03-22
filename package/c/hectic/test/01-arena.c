@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "chectic.h"
+#include "hectic.h"
 
 void test_arena_init() {
   Arena arena = arena_init(128);

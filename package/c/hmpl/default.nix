@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, chectic }:
+{ stdenv, gcc, lib, hectic }:
 
 stdenv.mkDerivation {
   pname = "hmpl";
@@ -6,7 +6,7 @@ stdenv.mkDerivation {
   src = ./.;
   doCheck = true;
 
-  buildInputs = [ chectic ];
+  buildInputs = [ hectic ];
 
   buildPhase = ''
     mkdir -p target
@@ -15,7 +15,7 @@ stdenv.mkDerivation {
     ${gcc}/bin/cc -Wall -Wextra -g \
       -std=c99 \
       -pedantic -fsanitize=address -c hmpl.c \
-      -lchectic \
+      -lhectic \
       -o target/hmpl.o
     ${gcc}/bin/ar rcs target/libhmpl.a target/hmpl.o
 
@@ -23,10 +23,19 @@ stdenv.mkDerivation {
     ${gcc}/bin/cc -Wall -Wextra -g \
       -pedantic -fsanitize=address main.c \
       -Ltarget -lhmpl \
-      -lchectic -o target/hmpl
+      -lhectic -o target/hmpl
   '';
 
-  checkPhase = '' '';
+  checkPhase = ''
+    mkdir -p target/test
+    for test_file in test/*.c; do
+      exe="target/test/$(basename ''${test_file%.c})"
+      ${gcc}/bin/cc -Wall -Wextra -g -pedantic \
+        -fsanitize=address -I. "$test_file" \
+	-Ltarget -lhmpl -lhectic -o "$exe"
+      "$exe"
+    done
+  '';
 
   installPhase = ''
     mkdir -p $out/bin $out/lib $out/include
@@ -36,7 +45,7 @@ stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "chectic";
+    description = "hectic";
     license = lib.licenses.mit;
   };
 }

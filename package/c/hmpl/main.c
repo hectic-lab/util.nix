@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "chectic.h"
+#include "hectic.h"
 #include "hmpl.h"
 
 int main(int argc, char *argv[]) {
@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     text = arena_strdup(&arena, "");
   }
 
-  render_template_with_arena(&arena, &text, context);
+  hmpl_render_with_arena(&arena, &text, context);
   printf("%s", text);
 
   arena_free(&arena);

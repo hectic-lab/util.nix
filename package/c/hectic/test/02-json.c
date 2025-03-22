@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "chectic.h"
+#include "hectic.h"
 
 #define ARENA_SIZE 1024 * 1024
 
