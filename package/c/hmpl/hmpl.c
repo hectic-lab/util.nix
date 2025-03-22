@@ -2,26 +2,28 @@
 
 char *eval(Arena *arena, const Json * const context, const char * const key) {
   if (!context || !key) return NULL;
+
   char *key_copy = arena_strdup(arena, key);
-  char *token, *rest = key_copy;
   Json *res = context;
-  while ((token = strtok_r(rest, ".", &rest))) {
-      raise_debug("context: %s; token: %s", json_print(arena, res), key);
-      res = json_get_object_item(res, &token);
-      if (!res)
-          return NULL;
+  char *start = key_copy;
+  char *dot;
+
+  // Instead of using strtok_r, manually split the string using strchr.
+  while ((dot = strchr(start, '.')) != NULL) {
+    *dot = '\0';
+    raise_debug("res: %s, token: %s, key: %s", json_to_string(arena, res), start, key);
+    res = json_get_object_item(res, start);
+    if (!res)
+      return NULL;
+    start = dot + 1;
   }
-  if (res == JSON_STRING && res->string)
-      return arena_strdup(arena, res->string);
-  else if (res == JSON_NUMBER) {
-      char buf[64];
-      snprintf(buf, sizeof(buf), "%g", res->number);
-      return arena_strdup(arena, buf);
-  }
-  char *temp = json_print(arena, res);
-  char *result = arena_strdup(arena, temp);
-  free(temp);
-  return result;
+
+  raise_debug("res: %s, token: %s, key: %s", json_to_string(arena, res), start, key);
+  res = json_get_object_item(res, start);
+  if (!res)
+    return NULL;
+
+  return json_to_string_with_opts(arena, res, 1);
 }
 
 /* Modified: text is passed by reference so we can update it and free old allocations */

@@ -226,10 +226,9 @@ typedef struct Json {
 
 Json *json_parse(Arena *arena, const char **s);
 
-/* Minimal JSON printer.
-   For simplicity, a fixed-size buffer is used.
-   In production you’d dynamically size or use the arena. */
-char *json_print(Arena *arena, Json *item);
+char *json_to_string(Arena *arena, Json *item);
+
+char *json_to_string_with_opts(Arena *arena, Json *item, int raw);
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item(Json *object, const char *key);
