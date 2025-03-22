@@ -1,52 +1,31 @@
 #include "hmpl.h"
 
-Arena *cJSON_global_arena;
-size_t last_size = 0;  // tracked externally, unsafe but works for simple use
-
-void *arena_malloc(size_t size) {
-  void *ptr = arena_alloc(cJSON_global_arena, size);
-  last_size = size;
-  return ptr;
-}
-
-void arena_free_stub(void *ptr) {
-  raise_debug("WARN: cJSON tried to free %p — ignored", ptr);
-}
-		       
-void init_cjson_with_arenas(Arena *arena) {
-  cJSON_global_arena = arena;
-  cJSON_InitHooks(&(cJSON_Hooks){
-    .malloc_fn = arena_malloc,
-    .free_fn = arena_free_stub,
-  });
-}
-
-char *eval(Arena *arena, const cJSON * const context, const char * const key) {
+char *eval(Arena *arena, const Json * const context, const char * const key) {
   if (!context || !key) return NULL;
   char *key_copy = arena_strdup(arena, key);
   char *token, *rest = key_copy;
-  cJSON *res = context;
+  Json *res = context;
   while ((token = strtok_r(rest, ".", &rest))) {
-      raise_debug("context: %s; token: %s", cJSON_Print(res), key);
-      res = cJSON_GetObjectItemCaseSensitive(res, token);
+      raise_debug("context: %s; token: %s", json_print(arena, res), key);
+      res = json_get_object_item(res, &token);
       if (!res)
           return NULL;
   }
-  if (cJSON_IsString(res) && res->valuestring)
-      return arena_strdup(arena, res->valuestring);
-  else if (cJSON_IsNumber(res)) {
+  if (res == JSON_STRING && res->string)
+      return arena_strdup(arena, res->string);
+  else if (res == JSON_NUMBER) {
       char buf[64];
-      snprintf(buf, sizeof(buf), "%g", res->valuedouble);
+      snprintf(buf, sizeof(buf), "%g", res->number);
       return arena_strdup(arena, buf);
   }
-  char *temp = cJSON_PrintUnformatted(res);
+  char *temp = json_print(arena, res);
   char *result = arena_strdup(arena, temp);
   free(temp);
   return result;
 }
 
 /* Modified: text is passed by reference so we can update it and free old allocations */
-void render_template_placeholders(Arena *arena, char **text_ptr, cJSON *context, const char * const prefix) {
+void render_template_placeholders(Arena *arena, char **text_ptr, Json *context, const char * const prefix) {
   raise_debug("render_template_placeholders");
   char start_pattern[256];
   snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix);
@@ -86,8 +65,8 @@ void render_template_placeholders(Arena *arena, char **text_ptr, cJSON *context,
   }
 }
 
-void render_template_with_arena(Arena *arena, char **text, const cJSON * const context) {
-  if (!cJSON_IsObject(context)) {
+void render_template_with_arena(Arena *arena, char **text, const Json * const context) {
+  if (context->type != JSON_OBJECT) {
     raise_exception("Malformed context: context is not json");
     exit(1);
   }
@@ -95,7 +74,7 @@ void render_template_with_arena(Arena *arena, char **text, const cJSON * const c
   render_template_placeholders(arena, text, context, "");
 }
 
-void render_template(char **text, const cJSON * const context) {
+void render_template(char **text, const Json * const context) {
   Arena arena = arena_init(1024 * 1024);
 
   render_template_with_arena(&arena, text, context);

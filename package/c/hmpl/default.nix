@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, chectic, cjson }:
+{ stdenv, gcc, lib, chectic }:
 
 stdenv.mkDerivation {
   pname = "hmpl";
@@ -6,7 +6,7 @@ stdenv.mkDerivation {
   src = ./.;
   doCheck = true;
 
-  buildInputs = [ chectic cjson ];
+  buildInputs = [ chectic ];
 
   buildPhase = ''
     mkdir -p target
@@ -15,7 +15,7 @@ stdenv.mkDerivation {
     ${gcc}/bin/cc -Wall -Wextra -g \
       -std=c99 \
       -pedantic -fsanitize=address -c hmpl.c \
-      -lchectic -lcjson \
+      -lchectic \
       -o target/hmpl.o
     ${gcc}/bin/ar rcs target/libhmpl.a target/hmpl.o
 
@@ -23,7 +23,7 @@ stdenv.mkDerivation {
     ${gcc}/bin/cc -Wall -Wextra -g \
       -pedantic -fsanitize=address main.c \
       -Ltarget -lhmpl \
-      -lchectic -lcjson -o target/hmpl
+      -lchectic -o target/hmpl
   '';
 
   checkPhase = '' '';

@@ -311,13 +311,22 @@ char *json_print(Arena *arena, Json *item) {
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item(Json *object, const char *key) {
+    raise_debug("json get object item for %s", key);
     if (!object || object->type != JSON_OBJECT)
         return NULL;
     Json *child = object->child;
     while (child) {
+	raise_debug("child->key: %s, key: %s", child->key, key);
         if (child->key && strcmp(child->key, key) == 0)
             return child;
         child = child->next;
     }
     return NULL;
 }
+
+//bool json_is_string(const Json * const item) {
+//  if (item == NULL) {
+//    return false;
+//  }
+//  return item->type == JSON_STRING;
+//}
