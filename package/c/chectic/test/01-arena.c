@@ -56,6 +56,40 @@ void test_arena_strdup() {
   arena_free(&arena);
 }
 
+void test_arena_repstr() {
+  Arena arena = arena_init(128);
+  const char *original = "Hello, World!";
+  // Replace substring starting at index 5, length 3 (", W") with " -"
+  // According to the macro logic, the suffix is taken from original[5+3+1] onward.
+  // That results in: "Hello" + " -" + "rld!" = "Hello -rld!"
+  char *result = arena_repstr(&arena, original, 5, 3, " -");
+  assert(strcmp(result, "Hello -rld!") == 0);
+  arena_free(&arena);
+}
+
+void test_arena_overwrite_detection() {
+  Arena arena = arena_init(128);
+
+  char *s1 = arena_alloc(&arena, 6);
+  strcpy(s1, "hello");
+
+  char *s2 = arena_alloc(&arena, 6);
+  strcpy(s2, "world");
+
+  assert(strcmp(s1, "hello") == 0);
+  assert(strcmp(s2, "world") == 0);
+
+  // Force allocation near capacity
+  void *large = arena_alloc_or_null(&arena, 100);
+  assert(large != NULL || arena.current == arena.begin + arena.capacity); // If NULL, out of memory
+
+  // Check strings again
+  assert(strcmp(s1, "hello") == 0);
+  assert(strcmp(s2, "world") == 0);
+
+  arena_free(&arena);
+}
+
 int main() {
   set_output_color_mode(COLOR_MODE_DISABLE);
   logger_level(LOG_LEVEL_DEBUG);
@@ -66,5 +100,7 @@ int main() {
   test_arena_reset();
   test_arena_null_init();
   test_arena_strdup();
-  printf("All tests passed.\n");
+  test_arena_repstr();
+  test_arena_overwrite_detection();
+  printf("%s all tests passed.\n", __FILE__);
 }

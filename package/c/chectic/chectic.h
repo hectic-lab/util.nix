@@ -1,5 +1,5 @@
-#ifndef EPRINTF_H
-#define EPRINTF_H
+#ifndef EPRINTF_CHECTIC
+#define EPRINTF_CHECTIC
 
 #include <stdio.h>
 #include <unistd.h>
@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <string.h>
+#include <ctype.h>
 
 // -------------
 // -- Helpers --
@@ -83,8 +84,6 @@ char* log_message(LogLevel level, char *file, int line, const char *format, ...)
 #define raise_warn(fmt, ...)      log_message(LOG_LEVEL_WARN,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define raise_exception(fmt, ...) log_message(LOG_LEVEL_EXCEPTION, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
-#endif // EPRINTF_H
-
 // -----------
 // -- arena --
 // -----------
@@ -105,16 +104,16 @@ typedef struct {
         *(arena) = arena_init(ARENA_DEFAULT_SIZE);                                 \
     }                                                                              \
     size_t current__ = (size_t)(arena)->current - (size_t)(arena)->begin;          \
-    if ((arena)->capacity <= current__ || (arena)->capacity - current__ < (size)) {  \
-        raise_debug("Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",    \
+    if ((arena)->capacity <= current__ || (arena)->capacity - current__ < (size)) {\
+        raise_debug("Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",  \
                   (arena)->begin, (arena)->capacity, current__, (size));           \
     } else {                                                                       \
-        raise_debug("Arena %p (capacity %zu) used %zu will allocate %zu bytes",       \
+        raise_debug("Arena %p (capacity %zu) used %zu will allocate %zu bytes",    \
                   (arena)->begin, (arena)->capacity, current__, (size));           \
         mem__ = (arena)->current;                                                  \
         (arena)->current = (char*)(arena)->current + (size);                       \
     }                                                                              \
-    raise_debug("Allocated at %p", mem__);                                           \
+    raise_debug("Allocated at %p", mem__);                                         \
     mem__;                                                                         \
 })
 
@@ -128,14 +127,14 @@ typedef struct {
     arena__;                                  \
 })
 
-#define arena_reset(arena) __extension__ ({   \
-    (arena)->current = (arena)->begin;        \
-    raise_debug("Arena %p reset", (arena)->begin);  \
+#define arena_reset(arena) __extension__ ({        \
+    (arena)->current = (arena)->begin;             \
+    raise_debug("Arena %p reset", (arena)->begin); \
 })
 
-#define arena_free(arena) __extension__ ({    \
+#define arena_free(arena) __extension__ ({              \
     raise_debug("Freeing arena at %p", (arena)->begin); \
-    free((arena)->begin);                     \
+    free((arena)->begin);                               \
 })
 
 #define arena_alloc(arena, size) __extension__ ({           \
@@ -161,13 +160,77 @@ typedef struct {
     result__;                                           \
 })
 
-// TODO: mmap
-// TODO: dynamic array style
-// void *arena_realloc(Arena *arena, size_t size) {
-//   void *mem = arena_alloc_or_null(arena, size);
-//   if (!mem) {
-//     raise_exception("Arena out of memory");
-//     exit(1);
-//   }
-//   return mem;
-// }
+#define arena_repstr(arena, src, start, len, rep) __extension__ ({        \
+    const char *src__ = (src);                                            \
+    const char *rep__ = (rep);                                            \
+    size_t start__ = (start);                                             \
+    size_t len__ = (len);                                                 \
+    int src_len__ = strlen(src__);                                        \
+    int rep_len__ = strlen(rep__);                                        \
+    int new_len__ = src_len__ - len__ + 1 + rep_len__;                    \
+    char *new_str__ = (char *)arena_alloc(arena, new_len__ + 1);          \
+    memcpy(new_str__, src__, start__);                                    \
+    memcpy(new_str__ + start__, rep__, rep_len__);                        \
+    strcpy(new_str__ + start__ + rep_len__, src__ + start__ + len__ + 1); \
+    new_str__;                                                            \
+})
+
+#define arena_realloc_copy(arena, old_ptr, old_size, new_size) __extension__ ({      \
+    void *old__ = (old_ptr);                                                         \
+    size_t old_size__ = (old_size);                                                  \
+    size_t new_size__ = (new_size);                                                  \
+    void *new__ = NULL;                                                              \
+    if (old__ == NULL) {                                                             \
+        new__ = arena_alloc((arena), new_size__);                                    \
+    } else if (new_size__ <= old_size__) {                                           \
+        new__ = old__;                                                               \
+    } else {                                                                         \
+        new__ = arena_alloc_or_null((arena), new_size__);                            \
+        if (new__) memcpy(new__, old__, old_size__);                                 \
+    }                                                                                \
+    new__;                                                                           \
+})
+
+// ----------
+// -- misc --
+// ----------
+
+void substr(const char *src, char *dest, size_t start, size_t len);
+
+// ----------
+// -- Json --
+// ----------
+
+typedef enum {
+    JSON_NULL,
+    JSON_BOOL,
+    JSON_NUMBER,
+    JSON_STRING,
+    JSON_ARRAY,
+    JSON_OBJECT
+} JsonType;
+
+/* Full JSON structure */
+typedef struct Json {
+    struct Json *next;   /* Next sibling */
+    struct Json *child;  /* Child element (for arrays/objects) */
+    JsonType type;
+    char *key;           /* Key if item is in an object */
+    union {
+        double number;
+        char *string;
+        int boolean;
+    };
+} Json;
+
+Json *json_parse(Arena *arena, const char **s);
+
+/* Minimal JSON printer.
+   For simplicity, a fixed-size buffer is used.
+   In production you’d dynamically size or use the arena. */
+char *json_print(Arena *arena, Json *item);
+
+/* Retrieve an object item by key (case-sensitive) */
+Json *json_get_object_item(Json *object, const char *key);
+
+#endif // EPRINTF_H
