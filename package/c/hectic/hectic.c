@@ -154,14 +154,15 @@ char* arena_strdup__(const char *file, int line, Arena *arena, const char *s) {
 
 char* arena_repstr__(const char *file, int line, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep) {
-    int src_len = strlen(src);
-    int rep_len = strlen(rep);
-    int new_len = src_len - (int)len + rep_len;
-    char *new_str = (char*)arena_alloc__(file, line, arena, new_len + 1);
-    memcpy(new_str, src, start);
-    memcpy(new_str + start, rep, rep_len);
-    strcpy(new_str + start + rep_len, src + start + len);
-    return new_str;
+  raise_message(LOG_LEVEL_TRACE, file, line, "arena_repstr__(%p, %p, %zu, \"%s\")", src, start, len, rep);
+  int src_len = strlen(src);
+  int rep_len = strlen(rep);
+  int new_len = src_len - (int)len + rep_len;
+  char *new_str = (char*)arena_alloc__(file, line, arena, new_len + 1);
+  memcpy(new_str, src, start);
+  memcpy(new_str + start, rep, rep_len);
+  strcpy(new_str + start + rep_len, src + start + len);
+  return new_str;
 }
 
 void* arena_realloc_copy__(const char *file, int line, Arena *arena,
@@ -183,18 +184,31 @@ void* arena_realloc_copy__(const char *file, int line, Arena *arena,
 // -- misc --
 // ----------
 
-void substr_clone(const char *src, char *dest, size_t start, size_t len) {
-    raise_debug("substr_cloneing %s (%p) from %p to %zu", src, src, start, len);
+void substr_clone__(const char *file, int line, const char * const src, char *dest, size_t from, size_t len) {
+    // Log function entry with all parameters.
+    raise_message(LOG_LEVEL_TRACE, file, line,
+        "substr_cloning(src=\"%s\", src_ptr=%p, dest=%p, from=%zu, len=%zu)",
+        src, src, dest, from, len);
+
     size_t srclen = strlen(src);
-    if (start >= srclen) {
+    if (from >= srclen) {
+        // Log warning with context when 'from' is out of range.
+        raise_message(LOG_LEVEL_WARN, file, line,
+            "Invalid 'from' index (%zu): exceeds source length (%zu)",
+            from, srclen);
         dest[0] = '\0';
         return;
     }
-    if (start + len > srclen)
-        len = srclen - start;
-    strncpy(dest, src + start, len);
+    if (from + len > srclen)
+        len = srclen - from;
+
+    strncpy(dest, src + from, len);
     dest[len] = '\0';
-    raise_trace("%s", dest);
+
+    // Log success message with result.
+    raise_message(LOG_LEVEL_TRACE, file, line,
+        "Completed substr_cloning: result=\"%s\", copied_length=%zu",
+        dest, len);
 }
 
 // ----------
@@ -202,7 +216,7 @@ void substr_clone(const char *src, char *dest, size_t start, size_t len) {
 // ----------
 
 /* Utility: Skip whitespace */
-static const char *json_skip_whitespace(const char *s) {
+static const char *skip_whitespace(const char *s) {
     while (*s && isspace((unsigned char)*s))
         s++;
     return s;
@@ -243,7 +257,7 @@ static Json *json_parse_value__(const char **s, Arena *arena);
 static Json *json_parse_array__(const char **s, Arena *arena) {
     if (**s != '[') return NULL;
     (*s)++; // skip '['
-    *s = json_skip_whitespace(*s);
+    *s = skip_whitespace(*s);
     Json *array = arena_alloc(arena, sizeof(Json));
     if (!array) return NULL;
     memset(array, 0, sizeof(Json));
@@ -262,10 +276,10 @@ static Json *json_parse_array__(const char **s, Arena *arena) {
             last->next = element;
         }
         last = element;
-        *s = json_skip_whitespace(*s);
+        *s = skip_whitespace(*s);
         if (**s == ',') {
             (*s)++;
-            *s = json_skip_whitespace(*s);
+            *s = skip_whitespace(*s);
         } else if (**s == ']') {
             (*s)++;
             break;
@@ -280,7 +294,7 @@ static Json *json_parse_array__(const char **s, Arena *arena) {
 static Json *json_parse_object__(const char **s, Arena *arena) {
     if (**s != '{') return NULL;
     (*s)++; // skip '{'
-    *s = json_skip_whitespace(*s);
+    *s = skip_whitespace(*s);
     Json *object = arena_alloc(arena, sizeof(Json));
     if (!object) return NULL;
     memset(object, 0, sizeof(Json));
@@ -293,10 +307,10 @@ static Json *json_parse_object__(const char **s, Arena *arena) {
     while (**s) {
         char *key = json_parse_string__(s, arena);
         if (!key) return NULL;
-        *s = json_skip_whitespace(*s);
+        *s = skip_whitespace(*s);
         if (**s != ':') return NULL;
         (*s)++; // skip ':'
-        *s = json_skip_whitespace(*s);
+        *s = skip_whitespace(*s);
         Json *value = json_parse_value__(s, arena);
         if (!value) return NULL;
         value->key = key; // assign key to the value
@@ -306,10 +320,10 @@ static Json *json_parse_object__(const char **s, Arena *arena) {
             last->next = value;
         }
         last = value;
-        *s = json_skip_whitespace(*s);
+        *s = skip_whitespace(*s);
         if (**s == ',') {
             (*s)++;
-            *s = json_skip_whitespace(*s);
+            *s = skip_whitespace(*s);
         } else if (**s == '}') {
             (*s)++;
             break;
@@ -322,7 +336,7 @@ static Json *json_parse_object__(const char **s, Arena *arena) {
 
 /* Full JSON value parser */
 static Json *json_parse_value__(const char **s, Arena *arena) {
-    *s = json_skip_whitespace(*s);
+    *s = skip_whitespace(*s);
     if (**s == '"') {
         Json *item = arena_alloc(arena, sizeof(Json));
         if (!item) return NULL;
@@ -423,7 +437,7 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
 }
 
 /* Retrieve an object item by key (case-sensitive) */
-Json *json_get_object_item(Json *object, const char *key) {
+Json *json_get_object_item(const Json * const object, const char * const key) {
     raise_debug("json get object item for %s", key);
     if (!object || object->type != JSON_OBJECT)
         return NULL;

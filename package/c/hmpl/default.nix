@@ -10,11 +10,11 @@ stdenv.mkDerivation {
   nativeBuildInputs = [ gcc ];
 
   buildPhase = ''
-    ${bash}/bin/sh ./build.sh
+    ${bash}/bin/sh ./make.sh build
   '';
 
   checkPhase = ''
-    ${bash}/bin/sh ./check.sh
+    ${bash}/bin/sh ./make.sh check
   '';
 
   installPhase = ''

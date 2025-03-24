@@ -76,19 +76,59 @@ typedef enum {
 
 void logger_level_reset();
 
+void init_logger(void);
+
 void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
 
 char* raise_message(LogLevel level, const char *file, int line, const char *format, ...);
 
-#define raise_trace(fmt, ...)     raise_message(LOG_LEVEL_TRACE,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_debug(fmt, ...)     raise_message(LOG_LEVEL_DEBUG,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_log(fmt, ...)       raise_message(LOG_LEVEL_LOG,       __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_info(fmt, ...)      raise_message(LOG_LEVEL_INFO,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_notice(fmt, ...)    raise_message(LOG_LEVEL_NOTICE,    __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_warn(fmt, ...)      raise_message(LOG_LEVEL_WARN,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_exception(fmt, ...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#ifndef PRECOMPILED_LOG_LEVEL
+#define PRECOMPILED_LOG_LEVEL LOG_LEVEL_TRACE  // default level
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_TRACE
+#define raise_trace(...) ((void)0)  // log removed at compile time
+#else
+#define raise_trace(...) raise_message(LOG_LEVEL_TRACE, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_DEBUG
+#define raise_debug(...) ((void)0)
+#else
+#define raise_debug(...) raise_message(LOG_LEVEL_DEBUG, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_LOG
+#define raise_log(...) ((void)0)
+#else
+#define raise_log(...) raise_message(LOG_LEVEL_LOG, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_INFO
+#define raise_info(...) ((void)0)
+#else
+#define raise_info(...) raise_message(LOG_LEVEL_INFO, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_NOTICE
+#define raise_notice(...) ((void)0)
+#else
+#define raise_notice(...) raise_message(LOG_LEVEL_NOTICE, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_WARN
+#define raise_warn(...) ((void)0)
+#else
+#define raise_warn(...) raise_message(LOG_LEVEL_WARN, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_EXCEPTION
+#define raise_exception(...) ((void)0)
+#else
+#define raise_exception(...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __LINE__, ##__VA_ARGS__)
+#endif
 
 // -----------
 // -- arena --
@@ -162,6 +202,9 @@ void* arena_realloc_copy__(const char *file, int line, Arena *arena,
 #define MEM_RiB (MEM_YiB * 1024)
 #define MEM_QiB (MEM_RiB * 1024)
 
+void substr_clone__(const char *file, int line, const char * const src, char *dest, size_t from, size_t len);
+#define substr_clone(src, dest, from, len) substr_clone__(__FILE__, __LINE__, src, dest, from, len)
+
 // ----------
 // -- Json --
 // ----------
@@ -200,6 +243,6 @@ char *json_to_string(Arena *arena, const Json * const item);
 char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt raw);
 
 /* Retrieve an object item by key (case-sensitive) */
-Json *json_get_object_item(Json *object, const char *key);
+Json *json_get_object_item(const Json * const object, const char * const key);
 
 #endif // EPRINTF_H

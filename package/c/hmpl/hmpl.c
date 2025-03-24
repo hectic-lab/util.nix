@@ -28,7 +28,7 @@ char *eval_string(Arena *arena, const Json * const context, const char * const q
 
 /* Modified: text is passed by reference so we can update it and free old allocations */
 // {{[prefix]key}}
-void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix) {
+void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * const context, const char * const prefix) {
   raise_debug("hmpl_render_interpolation_tags");
   char start_pattern[256];
   snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix);
@@ -58,7 +58,7 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, Json *context
       }
       char *new_text = arena_repstr(arena, current_text,
         start_index,
-        end - start + 1,
+        end - start + 2,
         replacement);
 
       *text_ptr = new_text;
@@ -134,8 +134,7 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, Json *context
 
 // {{#array_key}}
 void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix_start, const char * const prefix_end, const char * const separator_pattern){
-  raise_debug("hmpl_render_section_tags");
-  printf('key');
+  raise_debug("hmpl_render_section_tags(%p, %s, <optimized>, %s, %s, %s)", arena, *text_ptr, prefix_start, prefix_end, separator_pattern);
   char start_pattern[32];
   snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix_start);
   int start_pattern_length = strlen(start_pattern);
@@ -153,7 +152,6 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
   int offset = 0;
 
   while (1) {
-    printf('key');
     char *current_text = *text_ptr;
     char *opening_tag_start = strstr(current_text + offset, start_pattern);
     if (!opening_tag_start)
@@ -174,26 +172,14 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
       raise_exception("Malformed template: missing closing braces for section tag");
       exit(1);
     }
-    printf('key');
-
-    printf('key');
     assert((size_t)opening_tag_end > (size_t)opening_tag_separator);
     assert((size_t)opening_tag_separator > (size_t)opening_tag_start);
-    printf('key');
 
     int key_length = (opening_tag_separator - current_text) - relative_key_start;
     assert(key_length > 0);
-    printf('key');
     
     char *key = arena_alloc(arena, key_length + 1);
-    //substr_clone(current_text, key, relative_key_start, key_length);
-    printf('key');
-    key[2] = 'c';
-    char c=key[2];
-    printf('ksdjfoejisvjmeiw');
-    printf('key: %d\n', c);
-    printf('key: %p\n', key[2]);
-    printf('key: %p\n', key);
+    substr_clone(current_text, key, relative_key_start, key_length);
 
     int element_name_length = (opening_tag_end - current_text) - element_name_start;
     assert(element_name_length > 0);
@@ -203,11 +189,11 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
 
     int close_tag_patern_length = start_pattern_length + key_length + end_pattern_length;
     char *close_tag_patern = arena_alloc(arena, close_tag_patern_length + 1);
-    snprintf(close_tag_patern, sizeof(close_tag_patern), "%s%s%s", start_pattern, key, end_pattern);
+    snprintf(close_tag_patern, sizeof(*close_tag_patern), "%s%s%s", start_pattern, key, end_pattern);
 
     char *close_tag = strstr(opening_tag_end + offset + 1, close_tag_patern);
     if (!close_tag) {
-       raise_exception('Malformed template: missing loop end for key %s', key);
+       raise_exception("Malformed template: missing loop end for key %s", key);
        exit(1);
     }
 
@@ -219,26 +205,34 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
     
         char *replacement = arena_alloc(arena, MEM_KiB * elem_count);
         size_t offset = 0;
+
+        char *block_buff = arena_alloc(arena, MEM_KiB);
+	size_t block_start = (size_t)opening_tag_end + 2;
+	size_t block_len = (size_t)opening_tag_end - (size_t)close_tag - 2;
+	raise_trace("block_len %p = %p - %p - 2", block_len, opening_tag_end, close_tag);
+	assert(block_len > 0);
+        substr_clone(current_text, block_buff, block_start, block_len);
     
         for (Json *elem = arr->child; elem; elem = elem->next) {
-            char *block = arena_alloc(arena, MEM_KiB);
-            substr_clone(current_text, block, opening_tag_end + 2, close_tag - opening_tag_end - 2);
+	    char *block = arena_strdup(arena, block_buff);
     
             char *prefix = arena_alloc(arena, element_name_length + 2);
             snprintf(prefix, element_name_length + 2, "%s.", element_name);
     
-            hmpl_render_interpolation_tags(arena, block, context, prefix);
+            hmpl_render_interpolation_tags(arena, &block, context, prefix);
+	    raise_trace("block after: %s", block);
     
             size_t block_len = strlen(block);
             memcpy(replacement + offset, block, block_len);
             offset += block_len;
         }
-    
+
         replacement[offset] = '\0';
+	raise_trace("replacement: %s", replacement);
 
         char *new_text = arena_repstr(arena, current_text,
-          opening_tag_start - 1,
-          close_tag + close_tag_patern_length - opening_tag_start + 1,
+          (size_t)opening_tag_start - 1,
+          close_tag + close_tag_patern_length - opening_tag_start + 2,
           replacement);
 
          *text_ptr = new_text;
