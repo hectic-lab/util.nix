@@ -16,7 +16,7 @@ static void test_parse_json_object(void) {
     Json *child = root->child;
     assert(child && strcmp(child->key, "key") == 0);
     assert(child->type == JSON_STRING);
-    assert(strcmp(child->string, "value") == 0);
+    assert(strcmp(child->JsonValue.string, "value") == 0);
     arena_free(&arena);
 }
 
@@ -26,7 +26,7 @@ static void test_parse_json_number(void) {
     const char *json = "42";
     Json *root = json_parse(&arena, &json);
     assert(root->type == JSON_NUMBER);
-    assert(root->number == 42);
+    assert(root->JsonValue.number == 42);
     arena_free(&arena);
 }
 
@@ -36,7 +36,7 @@ static void test_parse_json_string(void) {
     const char *json = "\"hello\"";
     Json *root = json_parse(&arena, &json);
     assert(root->type == JSON_STRING);
-    assert(strcmp(root->string, "hello") == 0);
+    assert(strcmp(root->JsonValue.string, "hello") == 0);
     arena_free(&arena);
 }
 
@@ -47,10 +47,10 @@ static void test_get_object_items(void) {
     Json *root = json_parse(&arena, &json);
     Json *item_a = json_get_object_item(root, "a");
     assert(item_a && item_a->type == JSON_STRING);
-    assert(strcmp(item_a->string, "1") == 0);
+    assert(strcmp(item_a->JsonValue.string, "1") == 0);
     Json *item_b = json_get_object_item(root, "b");
     assert(item_b && item_b->type == JSON_NUMBER);
-    assert(item_b->number == 2);
+    assert(item_b->JsonValue.number == 2);
     arena_free(&arena);
 }
 
@@ -103,7 +103,7 @@ static void test_nested_json_object(void) {
     Json *inner = json_get_object_item(outer, "inner");
     assert(inner != NULL);
     assert(inner->type == JSON_NUMBER);
-    assert(inner->number == 100);
+    assert(inner->JsonValue.number == 100);
 
     arena_free(&arena);
 }
@@ -114,6 +114,7 @@ static void test_arena_reset_reuse(void) {
     const char *json1 = "{\"key\":\"value\"}";
     Json *root1 = json_parse(&arena, &json1);
     char *printed1 = json_to_string(&arena, root1);
+    assert(strcmp(printed1, "{\"key\":\"value\"}") == 0);
     arena_reset(&arena);
     const char *json2 = "\"another test\"";
     Json *root2 = json_parse(&arena, &json2);
