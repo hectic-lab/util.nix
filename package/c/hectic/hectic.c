@@ -10,6 +10,7 @@ void set_output_color_mode(ColorMode mode) {
 
 const char* log_level_to_string(LogLevel level) {
     switch (level) {
+        case LOG_LEVEL_TRACE: return "TRACE";
         case LOG_LEVEL_DEBUG: return "DEBUG";
         case LOG_LEVEL_LOG:  return "LOG";
         case LOG_LEVEL_INFO:  return "INFO";
@@ -22,7 +23,9 @@ const char* log_level_to_string(LogLevel level) {
 
 LogLevel log_level_from_string(const char *level_str) {
     if (!level_str) return LOG_LEVEL_INFO;
-    if (strcmp(level_str, "DEBUG") == 0)
+    if (strcmp(level_str, "TRACE") == 0)
+        return LOG_LEVEL_TRACE;
+    else if (strcmp(level_str, "DEBUG") == 0)
         return LOG_LEVEL_DEBUG;
     else if (strcmp(level_str, "LOG") == 0)
         return LOG_LEVEL_LOG;
@@ -75,22 +78,11 @@ char* log_message(LogLevel level, char *file, int line, const char *format, ...)
     return timeStr;
 }
 
-// -----------
-// -- utils --
-// -----------
+// ----------
+// -- misc --
+// ----------
 
-void substr(const char *src, char *dest, size_t start, size_t len) {
-    raise_debug("substring %s from %zu to %zu", src, start, len);
-    size_t srclen = strlen(src);
-    if (start >= srclen) {
-        dest[0] = '\0';
-        return;
-    }
-    if (start + len > srclen)
-        len = srclen - start;
-    strncpy(dest, src + start, len);
-    dest[len] = '\0';
-}
+//void fomatBytes(size_t bytes, char )
 
 // ----------
 // -- Json --
@@ -223,7 +215,7 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_STRING;
-        item->string = json_parse_string__(s, arena);
+        item->JsonValue.string = json_parse_string__(s, arena);
         return item;
     } else if (strncmp(*s, "null", 4) == 0) {
         Json *item = arena_alloc(arena, sizeof(Json));
@@ -237,7 +229,7 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_BOOL;
-        item->boolean = 1;
+        item->JsonValue.boolean = 1;
         *s += 4;
         return item;
     } else if (strncmp(*s, "false", 5) == 0) {
@@ -245,7 +237,7 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_BOOL;
-        item->boolean = 0;
+        item->JsonValue.boolean = 0;
         *s += 5;
         return item;
     } else if ((**s == '-') || isdigit((unsigned char)**s)) {
@@ -253,7 +245,7 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_NUMBER;
-        item->number = json_parse_number__(s);
+        item->JsonValue.number = json_parse_number__(s);
         return item;
     } else if (**s == '[') {
         return json_parse_array__(s, arena);
@@ -267,14 +259,14 @@ Json *json_parse(Arena *arena, const char **s) {
     return json_parse_value__(s, arena);
 }
 
-char *json_to_string(Arena *arena, Json *item) {
+char *json_to_string(Arena *arena, const Json * const item) {
   return json_to_string_with_opts(arena, item, JSON_NORAW);
 }
 
 /* Minimal JSON printer with raw output option.
    When raw is non-zero and the item is a JSON_STRING, it is printed without quotes.
 */
-char *json_to_string_with_opts(Arena *arena, Json *item, JsonRawOpt raw) {
+char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt raw) {
     char *out = arena_alloc(arena, 1024);
     if (!out)
         return NULL;
@@ -304,13 +296,13 @@ char *json_to_string_with_opts(Arena *arena, Json *item, JsonRawOpt raw) {
         sprintf(ptr, "]");
     } else if (item->type == JSON_STRING) {
         if ((int)raw)
-            sprintf(ptr, "%s", item->string);
+            sprintf(ptr, "%s", item->JsonValue.string);
         else
-            sprintf(ptr, "\"%s\"", item->string);
+            sprintf(ptr, "\"%s\"", item->JsonValue.string);
     } else if (item->type == JSON_NUMBER) {
-        sprintf(ptr, "%g", item->number);
+        sprintf(ptr, "%g", item->JsonValue.number);
     } else if (item->type == JSON_BOOL) {
-        sprintf(ptr, item->boolean ? "true" : "false");
+        sprintf(ptr, item->JsonValue.boolean ? "true" : "false");
     } else if (item->type == JSON_NULL) {
         sprintf(ptr, "null");
     }

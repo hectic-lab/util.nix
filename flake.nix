@@ -94,6 +94,10 @@
       devShells.${system} = let
         shells = self.devShells.${system};
       in {
+        c = pkgs.mkShell {
+	  buildInputs = (with pkgs; [ gdb gcc ]) ++ (with self.packages.${system}; [ hectic nvim-pager]);
+          PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
+	};
         default = pkgs.mkShell {
           buildInputs =
             (with self.packages.${system}; [

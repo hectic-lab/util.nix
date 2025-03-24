@@ -91,12 +91,31 @@
 #define TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT \ 
   TEST_DATA_INTERPOLATION_RESULT
 
+#define TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT   \ 
+  "{"                                                \
+  "  \"array\": ["                                   \
+  "    { \"field\": { \"subfield\": \"value1\" } }," \
+  "    { \"field\": { \"subfield\": \"value2\" } }," \
+  "    { \"field\": { \"subfield\": \"value3\" } }"  \
+  "  ]"                                              \
+  "}"
+
+#define TEST_DATA_SIMPLE_SECTION_ITERATION_TEMPLATE \ 
+  "{{#array element}}"                              \
+  "  {{element.field.subfield}}"                    \
+  "{{/array}}"
+
+#define TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT \ 
+  "value1"                                        \
+  "value2"                                        \
+  "value3"
+
 void test_eval_single_level_key(Arena *arena) {
     char *context_text = arena_strdup(arena, "{\"name\": \"world\"}");
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
-    char *result = eval(arena, context, "name");
+    char *result = eval_string(arena, context, "name");
     raise_debug("eval result: %s", result);
     assert(result && strcmp(result, "world") == 0);
 }
@@ -106,7 +125,7 @@ void test_eval_nested_key(Arena *arena) {
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
-    char *result = eval(arena, context, "person.name");
+    char *result = eval_string(arena, context, "person.name");
     raise_notice("context: %s, eval result: %s", json_to_string(arena, context), result);
     assert(result && strcmp(result, "Alice") == 0);
 }
@@ -133,14 +152,31 @@ void test_render_interpolation_tags_with_prefix(Arena *arena) {
     assert(strcmp(text, TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT) == 0);
 }
 
+void test_render_section_tags(Arena *arena) {
+    char *context_text = arena_strdup(arena, TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT);
+    Json *context = json_parse(arena, &context_text);
+    if (!context) { raise_exception("Malformed json"); exit(1); }
+
+    char *text = arena_strdup(arena, TEST_DATA_SIMPLE_SECTION_ITERATION_TEMPLATE); 
+
+    hmpl_render_section_tags(arena, &text, context, "#", "/", " ");
+    assert(strcmp(text, TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT) == 0);
+}
+
 int main(void) {
     init_logger();
-    Arena arena = arena_init(1024 * 1024);
+    Arena arena = arena_init(MEM_MiB * 3);
 
+    // evaluation
     test_eval_single_level_key(&arena);
     test_eval_nested_key(&arena);
+
+    // interpolation tags
     test_render_interpolation_tags(&arena);
     test_render_interpolation_tags_with_prefix(&arena);
+
+    // section tags
+    test_render_section_tags(&arena);
 
     printf("All tests passed.\n");
 

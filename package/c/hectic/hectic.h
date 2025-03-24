@@ -1,6 +1,9 @@
 #ifndef EPRINTF_HECTIC
 #define EPRINTF_HECTIC
 
+// NOTE(yukkop): definitions and features from the POSIX.1-2008 standard
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -30,7 +33,7 @@ typedef enum {
 } ColorMode;
 
 // Static color mode variable
-static ColorMode color_mode = COLOR_MODE_AUTO;
+static ColorMode color_mode __attribute__((unused)) = COLOR_MODE_AUTO;
 
 // Function to set color mode
 void set_output_color_mode(ColorMode mode);
@@ -62,6 +65,7 @@ void set_output_color_mode(ColorMode mode);
 // ------------
 
 typedef enum {
+  LOG_LEVEL_TRACE,
   LOG_LEVEL_DEBUG,
   LOG_LEVEL_LOG,
   LOG_LEVEL_INFO,
@@ -78,6 +82,15 @@ LogLevel log_level_from_string(const char *level_str);
 
 char* log_message(LogLevel level, char *file, int line, const char *format, ...);
 
+#define raise_trace_with_opt(file, line, fmt, ...)     log_message(LOG_LEVEL_TRACE, file, line, fmt, ##__VA_ARGS__)
+#define raise_debug_with_opt(file, line, fmt, ...)     log_message(LOG_LEVEL_DEBUG, file, line, fmt, ##__VA_ARGS__)
+#define raise_log_with_opt(file, line, fmt, ...)       log_message(LOG_LEVEL_LOG, file, line, fmt, ##__VA_ARGS__)
+#define raise_info_with_opt(file, line, fmt, ...)      log_message(LOG_LEVEL_INFO, file, line, fmt, ##__VA_ARGS__)
+#define raise_notice_with_opt(file, line, fmt, ...)    log_message(LOG_LEVEL_NOTICE, file, line, fmt, ##__VA_ARGS__)
+#define raise_warn_with_opt(file, line, fmt, ...)      log_message(LOG_LEVEL_WARN, file, line, fmt, ##__VA_ARGS__)
+#define raise_exception_with_opt(file, line, fmt, ...) log_message(LOG_LEVEL_EXCEPTION, file, line, fmt, ##__VA_ARGS__)
+
+#define raise_trace(fmt, ...)     log_message(LOG_LEVEL_TRACE,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define raise_debug(fmt, ...)     log_message(LOG_LEVEL_DEBUG,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define raise_log(fmt, ...)       log_message(LOG_LEVEL_LOG,       __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define raise_info(fmt, ...)      log_message(LOG_LEVEL_INFO,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
@@ -89,7 +102,7 @@ char* log_message(LogLevel level, char *file, int line, const char *format, ...)
 // -- arena --
 // -----------
 
-#define ARENA_DEFAULT_SIZE 1024
+#define ARENA_DEFAULT_SIZE MEM_MiB
 
 typedef struct {
   void *begin;
@@ -100,6 +113,7 @@ typedef struct {
 // NOTE(yukkop): This macro is used to define procedures so that `__LINE__` and `__FILE__`
 // in `raise_debug` reflect the location where the macro is called, not where it's defined.
 #define arena_alloc_or_null(arena, size) __extension__ ({                          \
+    raise_trace("arena_alloc_or_null(%p, %zu)", (arena), (size));                       \
     void *mem__ = NULL;                                                            \
     if ((arena)->begin == 0) {                                                     \
         *(arena) = arena_init(ARENA_DEFAULT_SIZE);                                 \
@@ -196,7 +210,17 @@ typedef struct {
 // -- misc --
 // ----------
 
-void substr(const char *src, char *dest, size_t start, size_t len);
+#define MEM_b   1
+#define MEM_KiB 1024
+#define MEM_MiB (MEM_KiB * 1024)
+#define MEM_GiB (MEM_MiB * 1024)
+#define MEM_TiB (MEM_TiB * 1024)
+#define MEM_PiB (MEM_TiB * 1024)
+#define MEM_EiB (MEM_PiB * 1024)
+#define MEM_ZiB (MEM_EiB * 1024)
+#define MEM_YiB (MEM_ZiB * 1024)
+#define MEM_RiB (MEM_YiB * 1024)
+#define MEM_QiB (MEM_RiB * 1024)
 
 // ----------
 // -- Json --
@@ -226,14 +250,14 @@ typedef struct Json {
         double number;
         char *string;
         int boolean;
-    };
+    } JsonValue;
 } Json;
 
 Json *json_parse(Arena *arena, const char **s);
 
-char *json_to_string(Arena *arena, Json *item);
+char *json_to_string(Arena *arena, const Json * const item);
 
-char *json_to_string_with_opts(Arena *arena, Json *item, JsonRawOpt raw);
+char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt raw);
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item(Json *object, const char *key);

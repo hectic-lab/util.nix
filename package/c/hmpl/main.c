@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
   init_logger();
   raise_info("start");
 
-  Arena arena = arena_init(1024 * 1024);
+  Arena arena = arena_init(MEM_MiB);
 
   raise_info("read the arguments");
   char *text = NULL;

@@ -59,7 +59,7 @@ void test_arena_strdup() {
 void test_arena_repstr() {
   Arena arena = arena_init(128);
   const char *original = "Hello, World!";
-  // Replace substring starting at index 5, length 3 (", W") with " -"
+  // Replace substr_cloneing starting at index 5, length 3 (", W") with " -"
   // According to the macro logic, the suffix is taken from original[5+3+1] onward.
   // That results in: "Hello" + " -" + "rld!" = "Hello -rld!"
   char *result = arena_repstr(&arena, original, 5, 3, " -");
