@@ -31,7 +31,7 @@
   "  }\n"                                      \
   "}"
 
-#define TEST_DATA_INTERPOLATION_TEMPLATE              \ 
+#define TEST_DATA_INTERPOLATION_TEMPLATE              \
   "Hello {{persona.name}} {{persona.surname}},\n"     \
   "\n"                                                \
   "Your home address:\n"                              \
@@ -49,7 +49,7 @@
   "Home Phone: {{persona.contact.phone.home}}\n"      \
   "Mobile Phone: {{persona.contact.phone.mobile}}\n"
 
-#define TEST_DATA_INTERPOLATION_RESULT \ 
+#define TEST_DATA_INTERPOLATION_RESULT \
       "Hello John Doe,\n"              \
       "\n"                             \
       "Your home address:\n"           \
@@ -70,7 +70,7 @@
 #define TEST_DATA_INTERPOLATION_WITH_PREFIX_CONTEXT \
   TEST_DATA_INTERPOLATION_CONTEXT
 
-#define TEST_DATA_INTERPOLATION_WITH_PREFIX_TEMPLATE  \ 
+#define TEST_DATA_INTERPOLATION_WITH_PREFIX_TEMPLATE  \
   "Hello {{.persona.name}} {{.persona.surname}},\n"   \
   "\n"                                                \
   "Your home address:\n"                              \
@@ -88,10 +88,10 @@
   "Home Phone: {{.persona.contact.phone.home}}\n"     \
   "Mobile Phone: {{.persona.contact.phone.mobile}}\n"
 
-#define TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT \ 
+#define TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT \
   TEST_DATA_INTERPOLATION_RESULT
 
-#define TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT   \ 
+#define TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT   \
   "{"                                                \
   "  \"array\": ["                                   \
   "    { \"field\": { \"subfield\": \"value1\" } }," \
@@ -100,18 +100,18 @@
   "  ]"                                              \
   "}"
 
-#define TEST_DATA_SIMPLE_SECTION_ITERATION_TEMPLATE \ 
+#define TEST_DATA_SIMPLE_SECTION_ITERATION_TEMPLATE \
   "{{#array element}}"                              \
   "  {{element.field.subfield}}"                    \
   "{{/array}}"
 
-#define TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT \ 
+#define TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT \
   "value1"                                        \
   "value2"                                        \
   "value3"
 
 void test_eval_single_level_key(Arena *arena) {
-    char *context_text = arena_strdup(arena, "{\"name\": \"world\"}");
+    const char *context_text = arena_strdup(arena, "{\"name\": \"world\"}");
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
@@ -121,7 +121,7 @@ void test_eval_single_level_key(Arena *arena) {
 }
 
 void test_eval_nested_key(Arena *arena) {
-    char *context_text = arena_strdup(arena, "{\"person\": {\"name\": \"Alice\"}}");
+    const char *context_text = arena_strdup(arena, "{\"person\": {\"name\": \"Alice\"}}");
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
@@ -131,18 +131,20 @@ void test_eval_nested_key(Arena *arena) {
 }
 
 void test_render_interpolation_tags(Arena *arena) {
-    char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_CONTEXT);
+    raise_trace("test_render_interpolation_tags(arena)");
+    const char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_CONTEXT);
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
     char *text = arena_strdup(arena, TEST_DATA_INTERPOLATION_TEMPLATE); 
 
     hmpl_render_interpolation_tags(arena, &text, context, "");
+    raise_trace("text: %s", text);
     assert(strcmp(text, TEST_DATA_INTERPOLATION_RESULT) == 0);
 }
 
 void test_render_interpolation_tags_with_prefix(Arena *arena) {
-    char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_WITH_PREFIX_CONTEXT);
+    const char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_WITH_PREFIX_CONTEXT);
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
@@ -153,7 +155,7 @@ void test_render_interpolation_tags_with_prefix(Arena *arena) {
 }
 
 void test_render_section_tags(Arena *arena) {
-    char *context_text = arena_strdup(arena, TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT);
+    const char *context_text = arena_strdup(arena, TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT);
     Json *context = json_parse(arena, &context_text);
     if (!context) { raise_exception("Malformed json"); exit(1); }
 
