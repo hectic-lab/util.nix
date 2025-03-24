@@ -60,10 +60,10 @@ void test_arena_repstr() {
   Arena arena = arena_init(128);
   const char *original = "Hello, World!";
   // Replace substr_cloneing starting at index 5, length 3 (", W") with " -"
-  // According to the macro logic, the suffix is taken from original[5+3+1] onward.
-  // That results in: "Hello" + " -" + "rld!" = "Hello -rld!"
+  // That results in: "Hello" + " -" + "orld!" = "Hello -orld!"
   char *result = arena_repstr(&arena, original, 5, 3, " -");
-  assert(strcmp(result, "Hello -rld!") == 0);
+  raise_debug("%s", result);
+  assert(strcmp(result, "Hello -orld!") == 0);
   arena_free(&arena);
 }
 
@@ -81,7 +81,7 @@ void test_arena_overwrite_detection() {
 
   // Force allocation near capacity
   void *large = arena_alloc_or_null(&arena, 100);
-  assert(large != NULL || arena.current == arena.begin + arena.capacity); // If NULL, out of memory
+  assert(large != NULL || (size_t)arena.current == (size_t)arena.begin + arena.capacity); // If NULL, out of memory
 
   // Check strings again
   assert(strcmp(s1, "hello") == 0);

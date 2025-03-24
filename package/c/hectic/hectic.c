@@ -55,7 +55,7 @@ void init_logger(void) {
     current_log_level = log_level_from_string(getenv("LOG_LEVEL"));
 }
 
-char* log_message(LogLevel level, char *file, int line, const char *format, ...) {
+char* raise_message(LogLevel level, const char *file, int line, const char *format, ...) {
     if (level < current_log_level) {
         return NULL;
     }
@@ -78,11 +78,124 @@ char* log_message(LogLevel level, char *file, int line, const char *format, ...)
     return timeStr;
 }
 
+// -----------
+// -- arena --
+// -----------
+
+Arena arena_init__(const char *file, int line, size_t size) {
+    Arena arena;
+    arena.begin = malloc(size);
+    memset(arena.begin, 0, size);
+    arena.current = arena.begin;
+    arena.capacity = size;
+    raise_message(LOG_LEVEL_DEBUG, file, line,
+	"Initialized arena at %p with capacity %zu", arena.begin, size);
+    return arena;
+}
+
+void* arena_alloc_or_null__(const char *file, int line, Arena *arena, size_t size) {
+    raise_message(LOG_LEVEL_TRACE, file, line, "arena_alloc_or_null(%p, %zu)", arena, size);
+    void *mem = NULL;
+    if (arena->begin == 0) {
+        *arena = arena_init__(file, line, 1024); // ARENA_DEFAULT_SIZE assumed as 1024
+    }
+    size_t current = (size_t)arena->current - (size_t)arena->begin;
+    if (arena->capacity <= current || arena->capacity - current < size) {
+        raise_message(LOG_LEVEL_DEBUG, file, line,
+	    "Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",
+                               arena->begin, arena->capacity, current, size);
+	return NULL;
+    } else {
+        raise_message(LOG_LEVEL_DEBUG, file, line,
+	    "Arena %p (capacity %zu) used %zu will allocate %zu bytes",
+                               arena->begin, arena->capacity, current, size);
+        mem = arena->current;
+        arena->current = (char*)arena->current + size;
+    }
+    raise_message(LOG_LEVEL_DEBUG, file, line, "Allocated at %p", mem);
+    return mem;
+}
+
+void* arena_alloc__(const char *file, int line, Arena *arena, size_t size) {
+    void *mem = arena_alloc_or_null__(file, line, arena, size);
+    if (!mem) {
+        raise_message(LOG_LEVEL_DEBUG, file, line, 
+	  "Arena out of memory when trying to allocate %zu bytes", size);
+        raise_message(LOG_LEVEL_EXCEPTION, file, line, 
+	  "Arena out of memory");
+        exit(1);
+    }
+    return mem;
+}
+
+void arena_reset__(const char *file, int line, Arena *arena) {
+  arena->current = arena->begin;
+  raise_message(LOG_LEVEL_DEBUG, file, line, 
+    "Arena %p reset", arena->begin);
+}
+
+void arena_free__(const char *file, int line, Arena *arena) {
+  raise_message(LOG_LEVEL_DEBUG, file, line,
+    "Freeing arena at %p", arena->begin);
+  free(arena->begin);
+}
+
+char* arena_strdup__(const char *file, int line, Arena *arena, const char *s) {
+    char *result;
+    if (s) {
+        size_t len = strlen(s) + 1;
+        result = (char*)arena_alloc__(file, line, arena, len);
+        memcpy(result, s, len);
+    } else {
+        result = NULL;
+    }
+    return result;
+}
+
+char* arena_repstr__(const char *file, int line, Arena *arena,
+                             const char *src, size_t start, size_t len, const char *rep) {
+    int src_len = strlen(src);
+    int rep_len = strlen(rep);
+    int new_len = src_len - (int)len + rep_len;
+    char *new_str = (char*)arena_alloc__(file, line, arena, new_len + 1);
+    memcpy(new_str, src, start);
+    memcpy(new_str + start, rep, rep_len);
+    strcpy(new_str + start + rep_len, src + start + len);
+    return new_str;
+}
+
+void* arena_realloc_copy__(const char *file, int line, Arena *arena,
+                           void *old_ptr, size_t old_size, size_t new_size) {
+    void *new_ptr = NULL;
+    if (old_ptr == NULL) {
+        new_ptr = arena_alloc__(file, line, arena, new_size);
+    } else if (new_size <= old_size) {
+        new_ptr = old_ptr;
+    } else {
+        new_ptr = arena_alloc_or_null__(file, line, arena, new_size);
+        if (new_ptr)
+            memcpy(new_ptr, old_ptr, old_size);
+    }
+    return new_ptr;
+}
+
 // ----------
 // -- misc --
 // ----------
 
-//void fomatBytes(size_t bytes, char )
+void substr_clone(const char *src, char *dest, size_t start, size_t len) {
+    raise_debug("substr_cloneing %s (%p) from %p to %zu", src, src, start, len);
+    size_t srclen = strlen(src);
+    if (start >= srclen) {
+        dest[0] = '\0';
+        return;
+    }
+    if (start + len > srclen)
+        len = srclen - start;
+    strncpy(dest, src + start, len);
+    dest[len] = '\0';
+    raise_trace("%s", dest);
+}
 
 // ----------
 // -- Json --

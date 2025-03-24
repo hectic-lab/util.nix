@@ -80,23 +80,15 @@ void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
 
-char* log_message(LogLevel level, char *file, int line, const char *format, ...);
+char* raise_message(LogLevel level, const char *file, int line, const char *format, ...);
 
-#define raise_trace_with_opt(file, line, fmt, ...)     log_message(LOG_LEVEL_TRACE, file, line, fmt, ##__VA_ARGS__)
-#define raise_debug_with_opt(file, line, fmt, ...)     log_message(LOG_LEVEL_DEBUG, file, line, fmt, ##__VA_ARGS__)
-#define raise_log_with_opt(file, line, fmt, ...)       log_message(LOG_LEVEL_LOG, file, line, fmt, ##__VA_ARGS__)
-#define raise_info_with_opt(file, line, fmt, ...)      log_message(LOG_LEVEL_INFO, file, line, fmt, ##__VA_ARGS__)
-#define raise_notice_with_opt(file, line, fmt, ...)    log_message(LOG_LEVEL_NOTICE, file, line, fmt, ##__VA_ARGS__)
-#define raise_warn_with_opt(file, line, fmt, ...)      log_message(LOG_LEVEL_WARN, file, line, fmt, ##__VA_ARGS__)
-#define raise_exception_with_opt(file, line, fmt, ...) log_message(LOG_LEVEL_EXCEPTION, file, line, fmt, ##__VA_ARGS__)
-
-#define raise_trace(fmt, ...)     log_message(LOG_LEVEL_TRACE,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_debug(fmt, ...)     log_message(LOG_LEVEL_DEBUG,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_log(fmt, ...)       log_message(LOG_LEVEL_LOG,       __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_info(fmt, ...)      log_message(LOG_LEVEL_INFO,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_notice(fmt, ...)    log_message(LOG_LEVEL_NOTICE,    __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_warn(fmt, ...)      log_message(LOG_LEVEL_WARN,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-#define raise_exception(fmt, ...) log_message(LOG_LEVEL_EXCEPTION, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_trace(fmt, ...)     raise_message(LOG_LEVEL_TRACE,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_debug(fmt, ...)     raise_message(LOG_LEVEL_DEBUG,     __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_log(fmt, ...)       raise_message(LOG_LEVEL_LOG,       __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_info(fmt, ...)      raise_message(LOG_LEVEL_INFO,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_notice(fmt, ...)    raise_message(LOG_LEVEL_NOTICE,    __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_warn(fmt, ...)      raise_message(LOG_LEVEL_WARN,      __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+#define raise_exception(fmt, ...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 
 // -----------
 // -- arena --
@@ -110,101 +102,49 @@ typedef struct {
   size_t capacity; 
 } Arena;
 
+Arena arena_init__(const char *file, int line, size_t size);
+
+void* arena_alloc_or_null__(const char *file, int line, Arena *arena, size_t size);
+
+void* arena_alloc__(const char *file, int line, Arena *arena, size_t size);
+
+void arena_reset__(const char *file, int line, Arena *arena);
+
+void arena_free__(const char *file, int line, Arena *arena);
+
+char* arena_strdup__(const char *file, int line, Arena *arena, const char *s);
+
+char* arena_repstr__(const char *file, int line, Arena *arena,
+                             const char *src, size_t start, size_t len, const char *rep);
+
+void* arena_realloc_copy__(const char *file, int line, Arena *arena,
+                           void *old_ptr, size_t old_size, size_t new_size);
+
 // NOTE(yukkop): This macro is used to define procedures so that `__LINE__` and `__FILE__`
 // in `raise_debug` reflect the location where the macro is called, not where it's defined.
-#define arena_alloc_or_null(arena, size) __extension__ ({                          \
-    raise_trace("arena_alloc_or_null(%p, %zu)", (arena), (size));                       \
-    void *mem__ = NULL;                                                            \
-    if ((arena)->begin == 0) {                                                     \
-        *(arena) = arena_init(ARENA_DEFAULT_SIZE);                                 \
-    }                                                                              \
-    size_t current__ = (size_t)(arena)->current - (size_t)(arena)->begin;          \
-    if ((arena)->capacity <= current__ || (arena)->capacity - current__ < (size)) {\
-        raise_debug("Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",  \
-                  (arena)->begin, (arena)->capacity, current__, (size));           \
-    } else {                                                                       \
-        raise_debug("Arena %p (capacity %zu) used %zu will allocate %zu bytes",    \
-                  (arena)->begin, (arena)->capacity, current__, (size));           \
-        mem__ = (arena)->current;                                                  \
-        (arena)->current = (char*)(arena)->current + (size);                       \
-    }                                                                              \
-    raise_debug("Allocated at %p", mem__);                                         \
-    mem__;                                                                         \
-})
+#define arena_alloc_or_null(arena, size) \
+        arena_alloc_or_null__(__FILE__, __LINE__, arena, size)
 
-#define arena_init(size) __extension__ ({     \
-    Arena arena__;                            \
-    arena__.begin = malloc(size);             \
-    memset(arena__.begin, 0, size);           \
-    arena__.current = arena__.begin;          \
-    arena__.capacity = size;                  \
-    raise_debug("Initialized arena at %p with capacity %zu", arena__.begin, size);   \
-    arena__;                                  \
-})
+#define arena_init(size) \
+        arena_init__(__FILE__, __LINE__, size)
 
-#define arena_reset(arena) __extension__ ({        \
-    (arena)->current = (arena)->begin;             \
-    raise_debug("Arena %p reset", (arena)->begin); \
-})
+#define arena_reset(arena) \
+        arena_reset__(__FILE__, __LINE__, arena)
 
-#define arena_free(arena) __extension__ ({              \
-    raise_debug("Freeing arena at %p", (arena)->begin); \
-    free((arena)->begin);                               \
-})
+#define arena_free(arena) \
+        arena_free__(__FILE__, __LINE__, arena)
 
-#define arena_alloc(arena, size) __extension__ ({           \
-    void *mem__ = arena_alloc_or_null((arena), (size));     \
-    if (!mem__) {                                           \
-        raise_debug("Arena out of memory when trying to allocate %zu bytes", (size)); \
-        raise_exception("Arena out of memory");             \
-        exit(1);                                            \
-    }                                                       \
-    mem__;                                                  \
-})
+#define arena_alloc(arena, size) \
+	arena_alloc__(__FILE__, __LINE__, arena, size)
 
-#define arena_strdup(arena, s) __extension__ ({         \
-    const char *s__ = (s);                              \
-    char *result__;                                     \
-    if (s__) {                                          \
-        size_t len__ = strlen(s__) + 1;                 \
-        result__ = (char *)arena_alloc(arena, len__);   \
-        memcpy(result__, s__, len__);                   \
-    } else {                                            \
-        result__ = NULL;                                \
-    }                                                   \
-    result__;                                           \
-})
+#define arena_strdup(arena, s) \
+	arena_strdup__(__FILE__, __LINE__, arena, s)
 
-#define arena_repstr(arena, src, start, len, rep) __extension__ ({        \
-    const char *src__ = (src);                                            \
-    const char *rep__ = (rep);                                            \
-    size_t start__ = (start);                                             \
-    size_t len__ = (len);                                                 \
-    int src_len__ = strlen(src__);                                        \
-    int rep_len__ = strlen(rep__);                                        \
-    int new_len__ = src_len__ - len__ + 1 + rep_len__;                    \
-    char *new_str__ = (char *)arena_alloc(arena, new_len__ + 1);          \
-    memcpy(new_str__, src__, start__);                                    \
-    memcpy(new_str__ + start__, rep__, rep_len__);                        \
-    strcpy(new_str__ + start__ + rep_len__, src__ + start__ + len__ + 1); \
-    new_str__;                                                            \
-})
+#define arena_repstr(arena, src, start, len, rep) \
+	arena_repstr__(__FILE__, __LINE__, arena, src, start, len, rep)
 
-#define arena_realloc_copy(arena, old_ptr, old_size, new_size) __extension__ ({      \
-    void *old__ = (old_ptr);                                                         \
-    size_t old_size__ = (old_size);                                                  \
-    size_t new_size__ = (new_size);                                                  \
-    void *new__ = NULL;                                                              \
-    if (old__ == NULL) {                                                             \
-        new__ = arena_alloc((arena), new_size__);                                    \
-    } else if (new_size__ <= old_size__) {                                           \
-        new__ = old__;                                                               \
-    } else {                                                                         \
-        new__ = arena_alloc_or_null((arena), new_size__);                            \
-        if (new__) memcpy(new__, old__, old_size__);                                 \
-    }                                                                                \
-    new__;                                                                           \
-})
+#define arena_realloc_copy(arena, old_ptr, old_size, new_size) \
+	arena_realloc_copy__(__FILE__, __LINE__, arena, old_ptr, old_size, new_size)
 
 // ----------
 // -- misc --

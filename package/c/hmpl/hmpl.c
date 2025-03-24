@@ -132,20 +132,6 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, Json *context
 //   RETURN result;
 // END $$;
 
-void substr_clone(const char *src, char *dest, size_t start, size_t len) {
-    raise_debug("substr_cloneing %s (%p) from %p to %zu", src, src, start, len);
-    size_t srclen = strlen(src);
-    if (start >= srclen) {
-        dest[0] = '\0';
-        return;
-    }
-    if (start + len > srclen)
-        len = srclen - start;
-    strncpy(dest, src + start, len);
-    dest[len] = '\0';
-    raise_trace("%s", dest);
-}
-
 // {{#array_key}}
 void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix_start, const char * const prefix_end, const char * const separator_pattern){
   raise_debug("hmpl_render_section_tags");
@@ -198,12 +184,13 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
     int key_length = (opening_tag_separator - current_text) - relative_key_start;
     assert(key_length > 0);
     printf('key');
+    
     char *key = arena_alloc(arena, key_length + 1);
-    printf('key');
     //substr_clone(current_text, key, relative_key_start, key_length);
+    printf('key');
     key[2] = 'c';
     char c=key[2];
-    printf('key');
+    printf('ksdjfoejisvjmeiw');
     printf('key: %d\n', c);
     printf('key: %p\n', key[2]);
     printf('key: %p\n', key);
