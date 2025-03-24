@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib }:
+{ stdenv, gcc, lib, bash }:
 
 stdenv.mkDerivation {
   pname = "hectic";
@@ -6,22 +6,15 @@ stdenv.mkDerivation {
   src = ./.;
   doCheck = true;
 
+  nativeBuildInputs = [ gcc ];
+
   buildPhase = ''
-    mkdir -p target
-    ${gcc}/bin/cc -Wall -Wextra -g \
-      -std=c99 \
-      -pedantic -fsanitize=address \
-      -c hectic.c -o target/hectic.o
-    ${gcc}/bin/ar rcs target/libhectic.a target/hectic.o
+    ls
+    ${bash}/bin/sh ./make.sh build
   '';
 
   checkPhase = ''
-    mkdir -p target/test
-    for test_file in test/*.c; do
-      exe="target/test/$(basename ''${test_file%.c})"
-      ${gcc}/bin/cc -Wall -Wextra -g -pedantic -fsanitize=address -I. "$test_file" -Ltarget -lhectic -o "$exe"
-      "$exe"
-    done
+    ${bash}/bin/sh ./make.sh check
   '';
 
   installPhase = ''
@@ -31,7 +24,7 @@ stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "libhectic";
+    description = "hectic";
     license = lib.licenses.mit;
   };
 }

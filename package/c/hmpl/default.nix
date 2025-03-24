@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, hectic }:
+{ stdenv, gcc, lib, hectic, bash }:
 
 stdenv.mkDerivation {
   pname = "hmpl";
@@ -7,35 +7,14 @@ stdenv.mkDerivation {
   doCheck = true;
 
   buildInputs = [ hectic ];
+  nativeBuildInputs = [ gcc ];
 
   buildPhase = ''
-    mkdir -p target
-
-    echo "# Build library"
-    ${gcc}/bin/cc -Wall -Wextra -g \
-      -std=c99 \
-      -pedantic -fsanitize=address -c hmpl.c \
-      -lhectic \
-      -o target/hmpl.o
-    ${gcc}/bin/ar rcs target/libhmpl.a target/hmpl.o
-
-    echo "# Build app"
-    ${gcc}/bin/cc -Wall -Wextra -g \
-      -pedantic -fsanitize=address main.c \
-      -Ltarget -lhmpl \
-      -lhectic -o target/hmpl
+    ${bash}/bin/sh ./build.sh
   '';
 
   checkPhase = ''
-    mkdir -p target/test
-    export LOG_LEVEL=DEBUG 
-    for test_file in test/*.c; do
-      exe="target/test/$(basename ''${test_file%.c})"
-      ${gcc}/bin/cc -Wall -Wextra -g -pedantic \
-        -fsanitize=address -I. "$test_file" \
-	-Ltarget -lhmpl -lhectic -o "$exe"
-      "$exe"
-    done
+    ${bash}/bin/sh ./check.sh
   '';
 
   installPhase = ''
