@@ -207,11 +207,12 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
         size_t offset = 0;
 
         char *block_buff = arena_alloc(arena, MEM_KiB);
-	size_t block_start = (size_t)opening_tag_end + 2;
+	size_t relative_block_start = (size_t)opening_tag_end + 2 - (size_t)current_text;
+	raise_trace("relative_block_start: %p = %p - 2 - %p", opening_tag_end, current_text);
 	size_t block_len = (size_t)opening_tag_end - (size_t)close_tag - 2;
 	raise_trace("block_len %p = %p - %p - 2", block_len, opening_tag_end, close_tag);
 	assert(block_len > 0);
-        substr_clone(current_text, block_buff, block_start, block_len);
+        substr_clone(current_text, block_buff, relative_block_start, block_len);
     
         for (Json *elem = arr->child; elem; elem = elem->next) {
 	    char *block = arena_strdup(arena, block_buff);
