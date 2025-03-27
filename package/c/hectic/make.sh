@@ -45,6 +45,7 @@ CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address"
 LDFLAGS="-lhectic"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
+DEBUG=0
 
 MODE="${1:-build}"
 shift
@@ -56,7 +57,12 @@ while [ $# -gt 0 ]; do
       RUN_TESTS=0
       ;;
     --debug)
-      OPTFLAGS="-O0"
+      if ! command -v gdb >/dev/null 2>&1; then
+        echo "Error: Required dependency '$dep' not found." >&2
+        exit 1
+      fi
+      OPTFLAGS="-O0 -gdwarf-2 -g3"
+      DEBUG=1
       ;;
     --color)
       COLOR_FLAG="-fdiagnostics-color=always"
@@ -89,7 +95,13 @@ case "$MODE" in
       exe="target/test/$(basename "${test_file%.c}")"
       # shellcheck disable=SC2086
       cc $CFLAGS $OPTFLAGS -pedantic -I. "$test_file" -Ltarget -lhectic $LDFLAGS -o "$exe"
+      if [ "$?" -ne 0 ]; then
+        exit 1
+      fi
       if [ "$RUN_TESTS" -eq 1 ]; then
+	      if [ "$DEBUG" -eq 1 ]; then
+          gdb -tui "$exe"
+	      fi
         "$exe"
       fi
     done

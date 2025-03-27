@@ -225,28 +225,45 @@ static const char *skip_whitespace(const char *s) {
 /* Parse a JSON string (does not handle full escaping) */
 static char *json_parse_string__(const char **s_ptr, Arena *arena) {
     const char *s = *s_ptr;
-    if (*s != '"') return NULL;
+    raise_debug("Entering json_parse_string__ at position: %p", s);
+    if (*s != '"') {
+        raise_debug("Expected '\"' at start of string, got: %c", *s);
+        return NULL;
+    }
     s++; // skip opening quote
     const char *start = s;
     while (*s && *s != '"') {
-        if (*s == '\\') s++; // skip escaped char
+        if (*s == '\\') {
+            s++; // skip escape char indicator
+        }
         s++;
     }
-    if (*s != '"') return NULL;
+    if (*s != '"') {
+        raise_debug("Unterminated string starting at: %p", start);
+        return NULL;
+    }
     size_t len = s - start;
     char *str = arena_alloc(arena, len + 1);
-    if (!str) return NULL;
+    if (!str) {
+        raise_debug("Memory allocation failed in json_parse_string__");
+        return NULL;
+    }
     memcpy(str, start, len);
     str[len] = '\0';
     *s_ptr = s + 1; // skip closing quote
+    raise_debug("Parsed string: \"%s\" (length: %zu)", str, len);
     return str;
 }
 
 /* Parse a number using strtod */
 static double json_parse_number__(const char **s_ptr) {
+    raise_debug("Parsing number at position: %p", *s_ptr);
     char *end;
     double num = strtod(*s_ptr, &end);
+    if (*s_ptr == end)
+        raise_debug("No valid number found at: %p", *s_ptr);
     *s_ptr = end;
+    raise_debug("Parsed number: %g", num);
     return num;
 }
 
@@ -255,26 +272,33 @@ static Json *json_parse_value__(const char **s, Arena *arena);
 
 /* Parse a JSON array: [ value, value, ... ] */
 static Json *json_parse_array__(const char **s, Arena *arena) {
+    raise_debug("Entering json_parse_array__ at position: %p", *s);
     if (**s != '[') return NULL;
     (*s)++; // skip '['
     *s = skip_whitespace(*s);
     Json *array = arena_alloc(arena, sizeof(Json));
-    if (!array) return NULL;
+    if (!array) {
+        raise_debug("Memory allocation failed in json_parse_array__");
+        return NULL;
+    }
     memset(array, 0, sizeof(Json));
     array->type = JSON_ARRAY;
     Json *last = NULL;
     if (**s == ']') { // empty array
         (*s)++;
+        raise_debug("Parsed empty array");
         return array;
     }
     while (**s) {
         Json *element = json_parse_value__(s, arena);
-        if (!element) return NULL;
+        if (!element) {
+            raise_debug("Failed to parse array element");
+            return NULL;
+        }
         if (!array->child)
             array->child = element;
-        else {
+        else
             last->next = element;
-        }
         last = element;
         *s = skip_whitespace(*s);
         if (**s == ',') {
@@ -284,41 +308,56 @@ static Json *json_parse_array__(const char **s, Arena *arena) {
             (*s)++;
             break;
         } else {
-            return NULL; // error
+            raise_debug("Unexpected character '%c' in array", **s);
+            return NULL;
         }
     }
+    raise_debug("Completed parsing array");
     return array;
 }
 
 /* Parse a JSON object: { "key": value, ... } */
 static Json *json_parse_object__(const char **s, Arena *arena) {
+    raise_debug("Entering json_parse_object__ at position: %p", *s);
     if (**s != '{') return NULL;
     (*s)++; // skip '{'
     *s = skip_whitespace(*s);
     Json *object = arena_alloc(arena, sizeof(Json));
-    if (!object) return NULL;
+    if (!object) {
+        raise_debug("Memory allocation failed in json_parse_object__");
+        return NULL;
+    }
     memset(object, 0, sizeof(Json));
     object->type = JSON_OBJECT;
     Json *last = NULL;
     if (**s == '}') {
         (*s)++;
+        raise_debug("Parsed empty object");
         return object;
     }
     while (**s) {
         char *key = json_parse_string__(s, arena);
-        if (!key) return NULL;
+        if (!key) {
+            raise_debug("Failed to parse key in object");
+            return NULL;
+        }
         *s = skip_whitespace(*s);
-        if (**s != ':') return NULL;
+        if (**s != ':') {
+            raise_debug("Expected ':' after key \"%s\", got: %c", key, **s);
+            return NULL;
+        }
         (*s)++; // skip ':'
         *s = skip_whitespace(*s);
         Json *value = json_parse_value__(s, arena);
-        if (!value) return NULL;
+        if (!value) {
+            raise_debug("Failed to parse value for key \"%s\"", key);
+            return NULL;
+        }
         value->key = key; // assign key to the value
         if (!object->child)
             object->child = value;
-        else {
+        else
             last->next = value;
-        }
         last = value;
         *s = skip_whitespace(*s);
         if (**s == ',') {
@@ -328,18 +367,24 @@ static Json *json_parse_object__(const char **s, Arena *arena) {
             (*s)++;
             break;
         } else {
-            return NULL; // error
+            raise_debug("Unexpected character '%c' in object", **s);
+            return NULL;
         }
     }
+    raise_debug("Completed parsing object");
     return object;
 }
 
 /* Full JSON value parser */
 static Json *json_parse_value__(const char **s, Arena *arena) {
     *s = skip_whitespace(*s);
+    raise_debug("Parsing JSON value at position: %p", *s);
     if (**s == '"') {
         Json *item = arena_alloc(arena, sizeof(Json));
-        if (!item) return NULL;
+        if (!item) {
+            raise_debug("Memory allocation failed in json_parse_value__ for string");
+            return NULL;
+        }
         memset(item, 0, sizeof(Json));
         item->type = JSON_STRING;
         item->JsonValue.string = json_parse_string__(s, arena);
@@ -369,7 +414,10 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         return item;
     } else if ((**s == '-') || isdigit((unsigned char)**s)) {
         Json *item = arena_alloc(arena, sizeof(Json));
-        if (!item) return NULL;
+        if (!item) {
+            raise_debug("Memory allocation failed in json_parse_value__ for number");
+            return NULL;
+        }
         memset(item, 0, sizeof(Json));
         item->type = JSON_NUMBER;
         item->JsonValue.number = json_parse_number__(s);
@@ -379,15 +427,19 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
     } else if (**s == '{') {
         return json_parse_object__(s, arena);
     }
+    raise_debug("Unrecognized JSON value at position: %p", *s);
     return NULL;
 }
 
 Json *json_parse(Arena *arena, const char **s) {
-    return json_parse_value__(s, arena);
+    Json *result = json_parse_value__(s, arena);
+    if (!result)
+        raise_debug("json_parse failed at position: %p", *s);
+    return result;
 }
 
 char *json_to_string(Arena *arena, const Json * const item) {
-  return json_to_string_with_opts(arena, item, JSON_NORAW);
+    return json_to_string_with_opts(arena, item, JSON_NORAW);
 }
 
 /* Minimal JSON printer with raw output option.
@@ -395,8 +447,10 @@ char *json_to_string(Arena *arena, const Json * const item) {
 */
 char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt raw) {
     char *out = arena_alloc(arena, 1024);
-    if (!out)
+    if (!out) {
+        raise_debug("Memory allocation failed in json_to_string_with_opts");
         return NULL;
+    }
     char *ptr = out;
     if (item->type == JSON_OBJECT) {
         ptr += sprintf(ptr, "{");
@@ -433,27 +487,54 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
     } else if (item->type == JSON_NULL) {
         sprintf(ptr, "null");
     }
+    raise_debug("Converted JSON to string: %s", out);
     return out;
 }
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item(const Json * const object, const char * const key) {
-    raise_debug("json get object item for %s", key);
-    if (!object || object->type != JSON_OBJECT)
+    raise_debug("json_get_object_item: Searching for key \"%s\"", key);
+    if (!object || object->type != JSON_OBJECT) {
+        raise_debug("Invalid object passed to json_get_object_item");
         return NULL;
+    }
     Json *child = object->child;
     while (child) {
-	raise_debug("child->key: %s, key: %s", child->key, key);
-        if (child->key && strcmp(child->key, key) == 0)
+        raise_debug("Comparing child key \"%s\" with \"%s\"", child->key, key);
+        if (child->key && strcmp(child->key, key) == 0) {
+            raise_debug("Key \"%s\" found", key);
             return child;
+        }
         child = child->next;
     }
+    raise_debug("Key \"%s\" not found in object", key);
     return NULL;
 }
 
-//bool json_is_string(const Json * const item) {
-//  if (item == NULL) {
-//    return false;
-//  }
-//  return item->type == JSON_STRING;
-//}
+// -----------
+// -- slice --
+// -----------
+
+// Create a slice from an array with boundary check.
+Slice slice_create__(const char *file, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
+    raise_message(LOG_LEVEL_TRACE, file, line, "slice_create(<optimized>, <optimized>, <optimized>, <optimized>, <optimized>)");
+    if (start + len > array_len)
+        return (Slice){NULL, 0, isize};
+    return (Slice){ (char *)array + start * isize, len, isize };
+}
+
+// Return a subslice from an existing slice.
+Slice slice_subslice__(const char *file, int line, Slice s, size_t start, size_t len) {
+    raise_message(LOG_LEVEL_TRACE, file, line, "slice_subslice(<optimized>, <optimized>, <optimized>)");
+    if (start + len > s.len)
+        return (Slice){NULL, 0, s.isize};
+    return (Slice){(char*)s.data + start * s.isize, len, s.isize};
+}
+
+int* arena_slice_copy__(const char *file, int line, Arena *arena, Slice s) {
+    raise_message(LOG_LEVEL_TRACE, file, line, "arena_slice_copy(<optimized>, <optimized>)");
+    int *copy = (void*) arena_alloc__(file, line, arena, s.len * sizeof(int));
+    if (copy)
+        memcpy(copy, s.data, s.len * s.isize);
+    return copy;
+}

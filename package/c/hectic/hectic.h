@@ -246,3 +246,49 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
 Json *json_get_object_item(const Json * const object, const char * const key);
 
 #endif // EPRINTF_H
+
+// -----------
+// -- Slice --
+// -----------
+
+typedef struct {
+    void *data;
+    size_t len;
+    size_t isize;
+} Slice;
+
+// Usage:
+// printf("Content: %.*s\n", SLICE_ARGS(slice, char));
+// printf("Content: %d\n", SLICE_ARGS(slice, int));
+#define SLICE_ARGS(slice, type) ((int)((slice).len / sizeof(type))), ((type*)((slice).data))
+
+Slice slice_create__(const char *file, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len);
+
+Slice slice_subslice__(const char *file, int line, Slice s, size_t start, size_t len);
+
+int* arena_slice_copy__(const char *file, int line, Arena *arena, Slice s);
+
+#define slice_create(type, array, array_len, start, len) \
+  slice_create__(__FILE__, __LINE__, sizeof(type), array, array_len, start, len)
+
+#define slice_subslice(s, start, len) \
+  slice_subslice__(__FILE__, __LINE__, s, start, len)
+
+#define arena_slice_copy(arena, s) \
+  arena_slice_copy__(__FILE__, __LINE__, arena, s)
+
+#define SLICE_TO_STRING(type, slice, fmt) __extension__ ({          \
+    size_t count = (slice).len / (slice).isize;                     \
+    size_t bufsize = count * 32 + 1;                                \
+    char *buf = malloc(bufsize);                                    \
+    if (buf) {                                                      \
+        buf[0] = '\0';                                              \
+        for (size_t i = 0; i < count; i++) {                        \
+            char temp[32];                                          \
+            snprintf(temp, sizeof(temp), fmt " ",                   \
+                     ((type *)((slice).data))[i]);                  \
+            strncat(buf, temp, bufsize - strlen(buf) - 1);          \
+        }                                                           \
+    }                                                               \
+    buf;                                                            \
+})
