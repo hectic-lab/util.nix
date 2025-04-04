@@ -55,7 +55,8 @@ void init_logger(void) {
     current_log_level = log_level_from_string(getenv("LOG_LEVEL"));
 }
 
-char* raise_message(LogLevel level, const char *file, int line, const char *format, ...) {
+char* raise_message(LogLevel level, const char *file, const char *func, int line, const char *format, ...) {
+    (void)func;
     if (level < current_log_level) {
         return NULL;
     }
@@ -82,69 +83,69 @@ char* raise_message(LogLevel level, const char *file, int line, const char *form
 // -- arena --
 // -----------
 
-Arena arena_init__(const char *file, int line, size_t size) {
+Arena arena_init__(const char *file, const char *func, int line, size_t size) {
     Arena arena;
     arena.begin = malloc(size);
     memset(arena.begin, 0, size);
     arena.current = arena.begin;
     arena.capacity = size;
-    raise_message(LOG_LEVEL_DEBUG, file, line,
+    raise_message(LOG_LEVEL_DEBUG, file, func, line,
 	"Initialized arena at %p with capacity %zu", arena.begin, size);
     return arena;
 }
 
-void* arena_alloc_or_null__(const char *file, int line, Arena *arena, size_t size) {
-    raise_message(LOG_LEVEL_TRACE, file, line, "arena_alloc_or_null(%p, %zu)", arena, size);
+void* arena_alloc_or_null__(const char *file, const char *func, int line, Arena *arena, size_t size) {
+    raise_message(LOG_LEVEL_TRACE, file, func, line, "arena_alloc_or_null(%p, %zu)", arena, size);
     void *mem = NULL;
     if (arena->begin == 0) {
         *arena = arena_init__(file, line, 1024); // ARENA_DEFAULT_SIZE assumed as 1024
     }
     size_t current = (size_t)arena->current - (size_t)arena->begin;
     if (arena->capacity <= current || arena->capacity - current < size) {
-        raise_message(LOG_LEVEL_DEBUG, file, line,
+        raise_message(LOG_LEVEL_DEBUG, file, func, line,
 	    "Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",
                                arena->begin, arena->capacity, current, size);
 	return NULL;
     } else {
-        raise_message(LOG_LEVEL_DEBUG, file, line,
+        raise_message(LOG_LEVEL_DEBUG, file, func, line,
 	    "Arena %p (capacity %zu) used %zu will allocate %zu bytes",
                                arena->begin, arena->capacity, current, size);
         mem = arena->current;
         arena->current = (char*)arena->current + size;
     }
-    raise_message(LOG_LEVEL_DEBUG, file, line, "Allocated at %p", mem);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Allocated at %p", mem);
     return mem;
 }
 
-void* arena_alloc__(const char *file, int line, Arena *arena, size_t size) {
-    void *mem = arena_alloc_or_null__(file, line, arena, size);
+void* arena_alloc__(const char *file, const char *func, int line, Arena *arena, size_t size) {
+    void *mem = arena_alloc_or_null__(file, func, line, arena, size);
     if (!mem) {
-        raise_message(LOG_LEVEL_DEBUG, file, line, 
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, 
 	  "Arena out of memory when trying to allocate %zu bytes", size);
-        raise_message(LOG_LEVEL_EXCEPTION, file, line, 
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line, 
 	  "Arena out of memory");
         exit(1);
     }
     return mem;
 }
 
-void arena_reset__(const char *file, int line, Arena *arena) {
+void arena_reset__(const char *file, const char *func, int line, Arena *arena) {
   arena->current = arena->begin;
-  raise_message(LOG_LEVEL_DEBUG, file, line, 
+  raise_message(LOG_LEVEL_DEBUG, file, func, line, 
     "Arena %p reset", arena->begin);
 }
 
-void arena_free__(const char *file, int line, Arena *arena) {
-  raise_message(LOG_LEVEL_DEBUG, file, line,
+void arena_free__(const char *file, const char *func, int line, Arena *arena) {
+  raise_message(LOG_LEVEL_DEBUG, file, func, line,
     "Freeing arena at %p", arena->begin);
   free(arena->begin);
 }
 
-char* arena_strdup__(const char *file, int line, Arena *arena, const char *s) {
+char* arena_strdup__(const char *file, const char *func, int line, Arena *arena, const char *s) {
     char *result;
     if (s) {
         size_t len = strlen(s) + 1;
-        result = (char*)arena_alloc__(file, line, arena, len);
+        result = (char*)arena_alloc__(file, func, line, arena, len);
         memcpy(result, s, len);
     } else {
         result = NULL;
@@ -152,28 +153,28 @@ char* arena_strdup__(const char *file, int line, Arena *arena, const char *s) {
     return result;
 }
 
-char* arena_repstr__(const char *file, int line, Arena *arena,
+char* arena_repstr__(const char *file, const char *func, int line, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep) {
-  raise_message(LOG_LEVEL_TRACE, file, line, "arena_repstr__(%p, %p, %zu, \"%s\")", src, start, len, rep);
+  raise_message(LOG_LEVEL_TRACE, file, func, line, "arena_repstr__(%p, %p, %zu, \"%s\")", src, start, len, rep);
   int src_len = strlen(src);
   int rep_len = strlen(rep);
   int new_len = src_len - (int)len + rep_len;
-  char *new_str = (char*)arena_alloc__(file, line, arena, new_len + 1);
+  char *new_str = (char*)arena_alloc__(file, func, line, arena, new_len + 1);
   memcpy(new_str, src, start);
   memcpy(new_str + start, rep, rep_len);
   strcpy(new_str + start + rep_len, src + start + len);
   return new_str;
 }
 
-void* arena_realloc_copy__(const char *file, int line, Arena *arena,
+void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *arena,
                            void *old_ptr, size_t old_size, size_t new_size) {
     void *new_ptr = NULL;
     if (old_ptr == NULL) {
-        new_ptr = arena_alloc__(file, line, arena, new_size);
+        new_ptr = arena_alloc__(file, func, line, arena, new_size);
     } else if (new_size <= old_size) {
         new_ptr = old_ptr;
     } else {
-        new_ptr = arena_alloc_or_null__(file, line, arena, new_size);
+        new_ptr = arena_alloc_or_null__(file, func, line, arena, new_size);
         if (new_ptr)
             memcpy(new_ptr, old_ptr, old_size);
     }
@@ -184,16 +185,16 @@ void* arena_realloc_copy__(const char *file, int line, Arena *arena,
 // -- misc --
 // ----------
 
-void substr_clone__(const char *file, int line, const char * const src, char *dest, size_t from, size_t len) {
+void substr_clone__(const char *file, const char *func, int line, const char * const src, char *dest, size_t from, size_t len) {
     // Log function entry with all parameters.
-    raise_message(LOG_LEVEL_TRACE, file, line,
+    raise_message(LOG_LEVEL_TRACE, file, func, line,
         "substr_cloning(src=\"%s\", src_ptr=%p, dest=%p, from=%zu, len=%zu)",
         src, src, dest, from, len);
 
     size_t srclen = strlen(src);
     if (from >= srclen) {
         // Log warning with context when 'from' is out of range.
-        raise_message(LOG_LEVEL_WARN, file, line,
+        raise_message(LOG_LEVEL_WARN, file, func, line,
             "Invalid 'from' index (%zu): exceeds source length (%zu)",
             from, srclen);
         dest[0] = '\0';
@@ -206,7 +207,7 @@ void substr_clone__(const char *file, int line, const char * const src, char *de
     dest[len] = '\0';
 
     // Log success message with result.
-    raise_message(LOG_LEVEL_TRACE, file, line,
+    raise_message(LOG_LEVEL_TRACE, file, func, line,
         "Completed substr_cloning: result=\"%s\", copied_length=%zu",
         dest, len);
 }
