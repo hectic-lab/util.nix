@@ -2,6 +2,7 @@
 # Usage: make.sh [build|check] [--norun] [--debug] [--color]
 # Options:
 #   build         Build the library and app (default if no mode is provided).
+#   watch         Build the library and app and watch for changes.
 #   check         Build tests; runs them unless --norun is specified.
 #   --norun       (check only) Build tests but do not run them.
 #   --debug       Build with -O0 (debug mode).
@@ -15,6 +16,14 @@ check_dependencies() {
       exit 1
     fi
   done
+  
+  # Check for either fswatch or inotifywait
+  if ! command -v fswatch >/dev/null 2>&1 && ! command -v inotifywait >/dev/null 2>&1; then
+    echo "Error: Neither fswatch nor inotifywait found. Please install one of them." >&2
+    echo "  On macOS: brew install fswatch" >&2
+    echo "  On Linux: sudo apt install inotify-tools" >&2
+    exit 1
+  fi
 }
 check_dependencies
 
@@ -22,6 +31,7 @@ print_help() {
   cat <<EOF
 Usage: $0 [build|check] [--norun] [--debug] [--color]
   build         Build the library and app (default).
+  watch         Build the library and app and watch for changes.
   check         Build tests; runs them unless --norun is specified.
   --norun       (check only) Build tests but do not run them.
   --debug       Build with debug flags (-O0).
@@ -66,6 +76,7 @@ while [ $# -gt 0 ]; do
       ;;
     --color)
       COLOR_FLAG="-fdiagnostics-color=always"
+
       ;;
     *)
       echo "Unknown option: $1"
@@ -81,6 +92,9 @@ if [ -n "$COLOR_FLAG" ]; then
 fi
 
 case "$MODE" in
+  watch)
+    find . -type d | nix run .#watch -- 'sh ./make.sh build' -p '*.c' -p '*.h' 2>&1
+    ;;
   build)
     mkdir -p target
     echo "# Build library"

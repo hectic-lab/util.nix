@@ -82,7 +82,7 @@ void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
 
-char* raise_message(LogLevel level, const char *file, int line, const char *format, ...);
+char* raise_message(LogLevel level, const char *file, const char *func, int line, const char *format, ...);
 
 #ifndef PRECOMPILED_LOG_LEVEL
 #define PRECOMPILED_LOG_LEVEL LOG_LEVEL_TRACE  // default level
@@ -91,43 +91,43 @@ char* raise_message(LogLevel level, const char *file, int line, const char *form
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_TRACE
 #define raise_trace(...) ((void)0)  // log removed at compile time
 #else
-#define raise_trace(...) raise_message(LOG_LEVEL_TRACE, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_trace(...) raise_message(LOG_LEVEL_TRACE, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_DEBUG
 #define raise_debug(...) ((void)0)
 #else
-#define raise_debug(...) raise_message(LOG_LEVEL_DEBUG, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_debug(...) raise_message(LOG_LEVEL_DEBUG, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_LOG
 #define raise_log(...) ((void)0)
 #else
-#define raise_log(...) raise_message(LOG_LEVEL_LOG, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_log(...) raise_message(LOG_LEVEL_LOG, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_INFO
 #define raise_info(...) ((void)0)
 #else
-#define raise_info(...) raise_message(LOG_LEVEL_INFO, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_info(...) raise_message(LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_NOTICE
 #define raise_notice(...) ((void)0)
 #else
-#define raise_notice(...) raise_message(LOG_LEVEL_NOTICE, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_notice(...) raise_message(LOG_LEVEL_NOTICE, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_WARN
 #define raise_warn(...) ((void)0)
 #else
-#define raise_warn(...) raise_message(LOG_LEVEL_WARN, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_warn(...) raise_message(LOG_LEVEL_WARN, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_EXCEPTION
 #define raise_exception(...) ((void)0)
 #else
-#define raise_exception(...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __LINE__, ##__VA_ARGS__)
+#define raise_exception(...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 // -----------
@@ -142,49 +142,49 @@ typedef struct {
   size_t capacity; 
 } Arena;
 
-Arena arena_init__(const char *file, int line, size_t size);
+Arena arena_init__(const char *file, const char *func, int line, size_t size);
 
-void* arena_alloc_or_null__(const char *file, int line, Arena *arena, size_t size);
+void* arena_alloc_or_null__(const char *file, const char *func, int line, Arena *arena, size_t size);
 
-void* arena_alloc__(const char *file, int line, Arena *arena, size_t size);
+void* arena_alloc__(const char *file, const char *func, int line, Arena *arena, size_t size);
 
-void arena_reset__(const char *file, int line, Arena *arena);
+void arena_reset__(const char *file, const char *func, int line, Arena *arena);
 
-void arena_free__(const char *file, int line, Arena *arena);
+void arena_free__(const char *file, const char *func, int line, Arena *arena);
 
-char* arena_strdup__(const char *file, int line, Arena *arena, const char *s);
+char* arena_strdup__(const char *file, const char *func, int line, Arena *arena, const char *s);
 
-char* arena_repstr__(const char *file, int line, Arena *arena,
+char* arena_repstr__(const char *file, const char *func, int line, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep);
 
-void* arena_realloc_copy__(const char *file, int line, Arena *arena,
+void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *arena,
                            void *old_ptr, size_t old_size, size_t new_size);
 
 // NOTE(yukkop): This macro is used to define procedures so that `__LINE__` and `__FILE__`
 // in `raise_debug` reflect the location where the macro is called, not where it's defined.
 #define arena_alloc_or_null(arena, size) \
-        arena_alloc_or_null__(__FILE__, __LINE__, arena, size)
+        arena_alloc_or_null__(__FILE__, __func__, __LINE__, arena, size)
 
 #define arena_init(size) \
-        arena_init__(__FILE__, __LINE__, size)
+        arena_init__(__FILE__, __func__, __LINE__, size)
 
 #define arena_reset(arena) \
-        arena_reset__(__FILE__, __LINE__, arena)
+        arena_reset__(__FILE__, __func__, __LINE__, arena)
 
 #define arena_free(arena) \
-        arena_free__(__FILE__, __LINE__, arena)
+        arena_free__(__FILE__, __func__, __LINE__, arena)
 
 #define arena_alloc(arena, size) \
-	arena_alloc__(__FILE__, __LINE__, arena, size)
+	arena_alloc__(__FILE__, __func__, __LINE__, arena, size)
 
 #define arena_strdup(arena, s) \
-	arena_strdup__(__FILE__, __LINE__, arena, s)
+	arena_strdup__(__FILE__, __func__, __LINE__, arena, s)
 
 #define arena_repstr(arena, src, start, len, rep) \
-	arena_repstr__(__FILE__, __LINE__, arena, src, start, len, rep)
+	arena_repstr__(__FILE__, __func__, __LINE__, arena, src, start, len, rep)
 
 #define arena_realloc_copy(arena, old_ptr, old_size, new_size) \
-	arena_realloc_copy__(__FILE__, __LINE__, arena, old_ptr, old_size, new_size)
+	arena_realloc_copy__(__FILE__, __func__, __LINE__, arena, old_ptr, old_size, new_size)
 
 // ----------
 // -- misc --
@@ -245,8 +245,6 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item(const Json * const object, const char * const key);
 
-#endif // EPRINTF_H
-
 // -----------
 // -- Slice --
 // -----------
@@ -269,13 +267,13 @@ Slice slice_subslice__(const char *file, int line, Slice s, size_t start, size_t
 int* arena_slice_copy__(const char *file, int line, Arena *arena, Slice s);
 
 #define slice_create(type, array, array_len, start, len) \
-  slice_create__(__FILE__, __LINE__, sizeof(type), array, array_len, start, len)
+  slice_create__(__FILE__, __func__, __LINE__, sizeof(type), array, array_len, start, len)
 
 #define slice_subslice(s, start, len) \
-  slice_subslice__(__FILE__, __LINE__, s, start, len)
+  slice_subslice__(__FILE__, __func__, __LINE__, s, start, len)
 
 #define arena_slice_copy(arena, s) \
-  arena_slice_copy__(__FILE__, __LINE__, arena, s)
+  arena_slice_copy__(__FILE__, __func__, __LINE__, arena, s)
 
 #define SLICE_TO_STRING(type, slice, fmt) __extension__ ({          \
     size_t count = (slice).len / (slice).isize;                     \
@@ -292,3 +290,5 @@ int* arena_slice_copy__(const char *file, int line, Arena *arena, Slice s);
     }                                                               \
     buf;                                                            \
 })
+
+#endif // EPRINTF_H

@@ -1,15 +1,14 @@
-{ stdenv, gcc, lib, bash, inotify-tools }:
+{ stdenv, gcc, lib, hectic, bash }:
 
 stdenv.mkDerivation {
-  pname = "hectic";
+  pname = "watch";
   version = "1.0";
   src = ./.;
   doCheck = true;
 
-  nativeBuildInputs = [ gcc inotify-tools ];
+  nativeBuildInputs = [ gcc gdb ];
 
   buildPhase = ''
-    ls
     ${bash}/bin/sh ./make.sh build
   '';
 
@@ -18,13 +17,14 @@ stdenv.mkDerivation {
   '';
 
   installPhase = ''
-    mkdir -p $out/lib $out/include
-    cp target/libhectic.a $out/lib/
-    cp hectic.h $out/include/
+    mkdir -p $out/bin $out/lib $out/include
+    cp target/hmpl $out/bin/hmpl
+    cp target/libhmpl.a $out/lib/
+    cp hmpl.h $out/include/hmpl.h
   '';
 
   meta = {
-    description = "hectic";
+    description = "watch";
     license = lib.licenses.mit;
   };
 }
