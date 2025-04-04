@@ -202,7 +202,7 @@ void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *
 #define MEM_RiB (MEM_YiB * 1024)
 #define MEM_QiB (MEM_RiB * 1024)
 
-void substr_clone__(const char *file, int line, const char * const src, char *dest, size_t from, size_t len);
+void substr_clone__(const char *file, const char *func, int line, const char * const src, char *dest, size_t from, size_t len);
 #define substr_clone(src, dest, from, len) substr_clone__(__FILE__, __LINE__, src, dest, from, len)
 
 // ----------
@@ -260,11 +260,11 @@ typedef struct {
 // printf("Content: %d\n", SLICE_ARGS(slice, int));
 #define SLICE_ARGS(slice, type) ((int)((slice).len / sizeof(type))), ((type*)((slice).data))
 
-Slice slice_create__(const char *file, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len);
+Slice slice_create__(const char *file, const char *func, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len);
 
-Slice slice_subslice__(const char *file, int line, Slice s, size_t start, size_t len);
+Slice slice_subslice__(const char *file, const char *func, int line, Slice s, size_t start, size_t len);
 
-int* arena_slice_copy__(const char *file, int line, Arena *arena, Slice s);
+int* arena_slice_copy__(const char *file, const char *func, int line, Arena *arena, Slice s);
 
 #define slice_create(type, array, array_len, start, len) \
   slice_create__(__FILE__, __func__, __LINE__, sizeof(type), array, array_len, start, len)

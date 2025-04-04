@@ -98,7 +98,7 @@ void* arena_alloc_or_null__(const char *file, const char *func, int line, Arena 
     raise_message(LOG_LEVEL_TRACE, file, func, line, "arena_alloc_or_null(%p, %zu)", arena, size);
     void *mem = NULL;
     if (arena->begin == 0) {
-        *arena = arena_init__(file, line, 1024); // ARENA_DEFAULT_SIZE assumed as 1024
+        *arena = arena_init__(file, func, line, 1024); // ARENA_DEFAULT_SIZE assumed as 1024
     }
     size_t current = (size_t)arena->current - (size_t)arena->begin;
     if (arena->capacity <= current || arena->capacity - current < size) {
@@ -517,24 +517,24 @@ Json *json_get_object_item(const Json * const object, const char * const key) {
 // -----------
 
 // Create a slice from an array with boundary check.
-Slice slice_create__(const char *file, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
-    raise_message(LOG_LEVEL_TRACE, file, line, "slice_create(<optimized>, <optimized>, <optimized>, <optimized>, <optimized>)");
+Slice slice_create__(const char *file, const char *func, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
+    raise_message(LOG_LEVEL_TRACE, file, func, line, "slice_create(<optimized>, <optimized>, <optimized>, <optimized>, <optimized>)");
     if (start + len > array_len)
         return (Slice){NULL, 0, isize};
     return (Slice){ (char *)array + start * isize, len, isize };
 }
 
 // Return a subslice from an existing slice.
-Slice slice_subslice__(const char *file, int line, Slice s, size_t start, size_t len) {
-    raise_message(LOG_LEVEL_TRACE, file, line, "slice_subslice(<optimized>, <optimized>, <optimized>)");
+Slice slice_subslice__(const char *file, const char *func, int line, Slice s, size_t start, size_t len) {
+    raise_message(LOG_LEVEL_TRACE, file, func, line, "slice_subslice(<optimized>, <optimized>, <optimized>)");
     if (start + len > s.len)
         return (Slice){NULL, 0, s.isize};
     return (Slice){(char*)s.data + start * s.isize, len, s.isize};
 }
 
-int* arena_slice_copy__(const char *file, int line, Arena *arena, Slice s) {
-    raise_message(LOG_LEVEL_TRACE, file, line, "arena_slice_copy(<optimized>, <optimized>)");
-    int *copy = (void*) arena_alloc__(file, line, arena, s.len * sizeof(int));
+int* arena_slice_copy__(const char *file, const char *func, int line, Arena *arena, Slice s) {
+    raise_message(LOG_LEVEL_TRACE, file, func, line, "arena_slice_copy(<optimized>, <optimized>)");
+    int *copy = (void*) arena_alloc__(file, func, line, arena, s.len * sizeof(int));
     if (copy)
         memcpy(copy, s.data, s.len * s.isize);
     return copy;
