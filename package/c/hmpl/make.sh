@@ -2,6 +2,8 @@
 # Usage: make.sh [build|check] [--norun] [--debug] [--color]
 # Options:
 #   build         Build the library and app (default if no mode is provided).
+#   watch         Build the library and app and watch for changes.
+#   run           Build and run the app.
 #   check         Build tests; runs them unless --norun is specified.
 #   --norun       (check only) Build tests but do not run them.
 #   --debug       Build with -O0 (debug mode).
@@ -9,7 +11,7 @@
 #   help, --help  Show this help message.
 
 check_dependencies() {
-  for dep in cc ar; do
+  for dep in cc ar entr pager; do
     if ! command -v "$dep" >/dev/null 2>&1; then
       echo "Error: Required dependency '$dep' not found." >&2
       exit 1
@@ -22,6 +24,8 @@ print_help() {
   cat <<EOF
 Usage: $0 [build|check] [--norun] [--debug] [--color]
   build         Build the library and app (default).
+  watch         Build the library and app and watch for changes.
+  run           Build and run the app.
   check         Build tests; runs them unless --norun is specified.
   --norun       (check only) Build tests but do not run them.
   --debug       Build with debug flags (-O0).
@@ -74,21 +78,30 @@ if [ -n "$COLOR_FLAG" ]; then
   CFLAGS="$CFLAGS $COLOR_FLAG"
 fi
 
-case "$MODE" in
-  build)
-    mkdir -p target
-    echo "# Build library"
-    # shellcheck disable=SC2086
-    cc $CFLAGS $OPTFLAGS $STD_FLAGS -c hmpl.c -lhectic -o target/hmpl.o
-    ar rcs target/libhmpl.a target/hmpl.o
+build() {
+  mkdir -p target
+  echo "# Build library"
+  # shellcheck disable=SC2086
+  cc $CFLAGS $OPTFLAGS $STD_FLAGS -c hmpl.c -lhectic -o target/hmpl.o
+  ar rcs target/libhmpl.a target/hmpl.o
 
-    echo "# Build app"
-    # shellcheck disable=SC2086
-    cc $CFLAGS $OPTFLAGS main.c -Ltarget -lhmpl $LDFLAGS -o target/hmpl
+  echo "# Build app"
+  # shellcheck disable=SC2086
+  cc $CFLAGS $OPTFLAGS main.c -Ltarget -lhmpl $LDFLAGS -o target/hmpl
+}
+
+case "$MODE" in
+  watch)
+    entr -r sh ./make.sh build | pager
+    ;;
+  build)
+    build
+    ;;
+  run)
+    build && ./target/hmpl
     ;;
   check)
     mkdir -p target/test
-    export LOG_LEVEL=TRACE
     for test_file in test/*.c; do
       exe="target/test/$(basename "${test_file%.c}")"
       # shellcheck disable=SC2086

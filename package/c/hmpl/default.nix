@@ -25,7 +25,7 @@ stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "hectic";
+    description = "hmpl";
     license = lib.licenses.mit;
   };
 }

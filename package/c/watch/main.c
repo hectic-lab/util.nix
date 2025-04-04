@@ -9,6 +9,8 @@
 #include <fnmatch.h>
 #include <getopt.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <signal.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -19,15 +21,27 @@
 #define MAX_PATTERNS 32
 #define POLL_INTERVAL_MS 100
 
+// Global flag to indicate if we're running in pager mode
+int pager_mode = 0;
+FILE *output_stream = NULL;
+int running = 1;
+
+void signal_handler(int sig) {
+    (void)sig; // Mark parameter as used to avoid warning
+    running = 0;
+}
+
 void print_usage(const char *prog_name) {
     fprintf(stderr, "Usage: %s <command> [-p <pattern1>] [-p <pattern2>] ... <dir1> [dir2] ...\n", prog_name);
     fprintf(stderr, "   or: find . -type d | %s <command> [-p <pattern1>] [-p <pattern2>] ...\n", prog_name);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -p <pattern>    File pattern to watch (can be used multiple times)\n");
+    fprintf(stderr, "  -P              Enable pager-friendly output (refresh mode)\n");
     fprintf(stderr, "  -h              Show this help message\n");
     fprintf(stderr, "Examples:\n");
     fprintf(stderr, "  %s 'make' -p '*.c' -p '*.h' ./src\n", prog_name);
     fprintf(stderr, "  find . -type d | %s 'echo changed' -p '*.py'\n", prog_name);
+    fprintf(stderr, "  %s -P 'make' -p '*.c' -p '*.h' ./src | less\n", prog_name);
     exit(EXIT_FAILURE);
 }
 
@@ -148,6 +162,10 @@ int match_any_pattern(const char *filename, char **patterns, int num_patterns) {
 }
 
 int main(int argc, char *argv[]) {
+    // Register signal handlers
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+
     if (argc < 2) {
         print_usage(argv[0]);
     }
@@ -159,7 +177,7 @@ int main(int argc, char *argv[]) {
     optind = 2;
     int opt;
     
-    while ((opt = getopt(argc, argv, "p:h")) != -1) {
+    while ((opt = getopt(argc, argv, "p:Ph")) != -1) {
         switch (opt) {
             case 'p':
                 if (num_patterns < MAX_PATTERNS) {
@@ -168,6 +186,9 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "Too many patterns (max %d)\n", MAX_PATTERNS);
                     exit(EXIT_FAILURE);
                 }
+                break;
+            case 'P':
+                pager_mode = 1;
                 break;
             case 'h':
                 print_usage(argv[0]);
@@ -183,6 +204,15 @@ int main(int argc, char *argv[]) {
         print_usage(argv[0]);
     }
     
+    // Set output stream - stderr for normal mode, stdout for pager mode
+    output_stream = pager_mode ? stdout : stderr;
+    
+    // Check if stdout is being piped and we're not in pager mode
+    if (!pager_mode && !isatty(STDOUT_FILENO)) {
+        pager_mode = 1;
+        output_stream = stdout;
+    }
+
     struct dir_info dirs[MAX_DIRS];
     int num_dirs = 0;
     struct file_hash files;
@@ -242,13 +272,13 @@ int main(int argc, char *argv[]) {
     }
 
     // Print the directories and patterns we're watching
-    fprintf(stderr, "Watching %d directories for files matching: ", num_dirs);
+    fprintf(output_stream, "Watching %d directories for files matching: ", num_dirs);
     for (int i = 0; i < num_patterns; i++) {
-        fprintf(stderr, "'%s'%s", patterns[i], (i < num_patterns - 1) ? ", " : "\n");
+        fprintf(output_stream, "'%s'%s", patterns[i], (i < num_patterns - 1) ? ", " : "\n");
     }
     
     for (int i = 0; i < num_dirs; i++) {
-        fprintf(stderr, "  %s\n", dirs[i].path);
+        fprintf(output_stream, "  %s\n", dirs[i].path);
     }
     
     for (int i = 0; i < num_dirs; i++) {
@@ -281,8 +311,9 @@ int main(int argc, char *argv[]) {
         closedir(dir);
     }
     
-    fprintf(stderr, "Initially found %d matching files\n", files.count);
-    fprintf(stderr, "Waiting for file modifications...\n");
+    fprintf(output_stream, "Initially found %d matching files\n", files.count);
+    fprintf(output_stream, "Waiting for file modifications...\n");
+    fflush(output_stream);
 
     struct timeval tv;
     tv.tv_sec = 0;
@@ -302,7 +333,8 @@ int main(int argc, char *argv[]) {
     
     int first_scan = 1;
     
-    while (1) {
+    // Main watch loop
+    while (running) {
         select(0, NULL, NULL, NULL, &tv);
         
         int any_changes = 0;
@@ -337,14 +369,14 @@ int main(int argc, char *argv[]) {
                         existing->exists = 1;
                         if (existing->mtime != st.st_mtime) {
                             if (!first_scan) {
-                                fprintf(stderr, "File modified: %s\n", filepath);
+                                fprintf(output_stream, "File modified: %s\n", filepath);
                                 any_changes = 1;
                             }
                             existing->mtime = st.st_mtime;
                         }
                     } else {
                         if (!first_scan) {
-                            fprintf(stderr, "New file: %s\n", filepath);
+                            fprintf(output_stream, "New file: %s\n", filepath);
                             any_changes = 1;
                         }
                         struct file_info *file = malloc(sizeof(struct file_info));
@@ -361,7 +393,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < files.size; i++) {
             if (files.items[i] != NULL && files.items[i]->exists == 0) {
                 if (!first_scan) {
-                    fprintf(stderr, "File deleted: %s\n", files.items[i]->path);
+                    fprintf(output_stream, "File deleted: %s\n", files.items[i]->path);
                     any_changes = 1;
                 }
             }
@@ -369,8 +401,42 @@ int main(int argc, char *argv[]) {
         
         hash_remove_nonexistent(&files);
         
+        // If in pager mode and any changes occur, clear screen and reprint status
+        if (pager_mode && any_changes) {
+            // Use ANSI escape codes to clear screen
+            fprintf(output_stream, "\033[2J\033[H");
+            
+            // Reprint header
+            fprintf(output_stream, "Watching %d directories for files matching: ", num_dirs);
+            for (int i = 0; i < num_patterns; i++) {
+                fprintf(output_stream, "'%s'%s", patterns[i], (i < num_patterns - 1) ? ", " : "\n");
+            }
+            
+            // List current files
+            fprintf(output_stream, "Currently watching %d files:\n", files.count);
+            int file_count = 0;
+            for (int i = 0; i < files.size && file_count < files.count; i++) {
+                if (files.items[i] != NULL) {
+                    fprintf(output_stream, "  %s\n", files.items[i]->path);
+                    file_count++;
+                }
+            }
+            
+            // Show last action
+            time_t current_time = time(NULL);
+            fprintf(output_stream, "\nLast event: Command executed at %s", ctime(&current_time));
+            fprintf(output_stream, "Command: %s\n", command);
+            
+            // Make sure output is flushed to the pager
+            fflush(output_stream);
+        } else if (any_changes) {
+            // In normal mode, just show status messages
+            fprintf(output_stream, "Executing command: %s\n", command);
+            fflush(output_stream);
+        }
+        
+        // Execute command if changes detected
         if (any_changes) {
-            fprintf(stderr, "Executing command: %s\n", command);
             int res = system(command);
             if (res != 0) {
                 perror("system");
@@ -393,5 +459,6 @@ int main(int argc, char *argv[]) {
     free(patterns);
     hash_free(&files);
     
+    fprintf(output_stream, "Watch terminated.\n");
     return 0;
 }
