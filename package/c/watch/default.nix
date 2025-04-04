@@ -1,10 +1,10 @@
-{ stdenv, gcc, lib, hectic, bash }:
+{ stdenv, gcc, lib, bash, gdb }:
 
 stdenv.mkDerivation {
   pname = "watch";
   version = "1.0";
   src = ./.;
-  doCheck = true;
+  doCheck = false;
 
   nativeBuildInputs = [ gcc gdb ];
 
@@ -17,10 +17,8 @@ stdenv.mkDerivation {
   '';
 
   installPhase = ''
-    mkdir -p $out/bin $out/lib $out/include
-    cp target/hmpl $out/bin/hmpl
-    cp target/libhmpl.a $out/lib/
-    cp hmpl.h $out/include/hmpl.h
+    mkdir -p $out/bin
+    cp target/watch $out/bin/watch
   '';
 
   meta = {

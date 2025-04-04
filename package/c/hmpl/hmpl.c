@@ -66,180 +66,148 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * 
   }
 }
 
-// CREATE OR REPLACE FUNCTION common.render_template_loop_blocks(result TEXT, context JSONB)
-// RETURNS TEXT LANGUAGE plpgsql AS $$
-// DECLARE
-//   loop_start INT;
-//   key_end INT;
-//   loop_end INT;
-//   loop_key TEXT;
-//   block TEXT;
-//   rendered_block TEXT;
-//   arr JSONB;
-//   item JSONB;
-//   item_text TEXT;
-// BEGIN
-//   LOOP
-//     loop_start := strpos(result, '{{#');
-//     EXIT WHEN loop_start = 0; -- Exit if no loop start found.
-//     
-//     -- Locate the end of the loop key marker.
-//     key_end := strpos(result, '}}', loop_start);
-//     IF key_end = 0 THEN
-//       RAISE EXCEPTION 'Malformed template: missing closing braces for loop start';
-//     END IF;
-//     
-//     -- Extract the key used for the loop.
-//     loop_key := substr_cloneing(result from loop_start + 3 for key_end - loop_start - 3);
-// 
-//     RAISE DEBUG 'loop key %', loop_key;
-//     
-//     -- Find the matching loop end marker for this key.
-//     loop_end := strpos(result, '{{/#' || loop_key || '}}', key_end);
-//     IF loop_end = 0 THEN
-//       RAISE EXCEPTION 'Malformed template: missing loop end for key %', loop_key;
-//     END IF;
-// 
-//     -- Extract the inner block of the loop.
-//     block := substr_cloneing(result from key_end + 2 for loop_end - key_end - 2);
-// 
-//     -- Retrieve the JSON array from the context for the loop key.
-//     arr := eval_value(context, loop_key);
-//     rendered_block := '';
-//     
-//     -- If an array is found, iterate over each element.
-//     IF arr IS NOT NULL AND jsonb_typeof(arr) = 'array' THEN
-//       FOR item IN SELECT * FROM jsonb_array_elements(arr) LOOP
-//         item_text := block;  -- Begin with the raw block.
-//         IF jsonb_typeof(item) != 'object' THEN
-//           -- Replace interpolation for primitive values.
-//           item_text := replace(item_text, '{{.}}', item::text);
-//         ELSE
-//           -- For object values, iterate over each key/value.
-//           item_text := render_template_interpolations(item_text, item, '.'::CHAR(1));
-//           item_text := render_template_conditions(item_text, item, '.');
-//         END IF;
-//         rendered_block := rendered_block || item_text;
-//       END LOOP;
-//     END IF;
-//     
-//     -- Replace the entire loop block in the result with the rendered content.
-//     result := substr_cloneing(result from 1 for loop_start - 1)
-//               || rendered_block
-//               || substr_cloneing(result from loop_end + char_length('{{/#' || loop_key || '}}'));
-//   END LOOP;
-// 
-//   RETURN result;
-// END $$;
-
-// {{#array_key}}
-void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix_start, const char * const prefix_end, const char * const separator_pattern){
-  raise_debug("hmpl_render_section_tags(%p, %s, <optimized>, %s, %s, %s)", arena, *text_ptr, prefix_start, prefix_end, separator_pattern);
-  char start_pattern[32];
-  snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix_start);
-  int start_pattern_length = strlen(start_pattern);
-
-  // TODO: rename close_tag_start_pattern
-  char end_pattern[32];
-  snprintf(end_pattern, sizeof(end_pattern), "{{%s", prefix_end);
-  int end_pattern_length = strlen(end_pattern);
-
-  int separator_pattern_length = strlen(separator_pattern);
-  if (!separator_pattern || separator_pattern_length == 0) {
-    raise_exception("Unexpected usage: separator pattern cannot be empty");
-  }
-
-  int offset = 0;
-
-  while (1) {
-    char *current_text = *text_ptr;
-    char *opening_tag_start = strstr(current_text + offset, start_pattern);
-    if (!opening_tag_start)
-      break;
-    int start_index = opening_tag_start - current_text;
-    int relative_key_start = start_index + start_pattern_length;
-
-    char *opening_tag_separator = strstr(opening_tag_start, separator_pattern);
-    if (!opening_tag_start) {
-      raise_exception("Malformed template: missing separator for section tag or not specifiet name for element");
-      exit(1);
-    }
-    int separator_index = opening_tag_separator - current_text;
-    int element_name_start = separator_index + separator_pattern_length;
-
-    char *opening_tag_end = strstr(opening_tag_separator, "}}");
-    if (!opening_tag_end) {
-      raise_exception("Malformed template: missing closing braces for section tag");
-      exit(1);
-    }
-    assert((size_t)opening_tag_end > (size_t)opening_tag_separator);
-    assert((size_t)opening_tag_separator > (size_t)opening_tag_start);
-
-    int key_length = (opening_tag_separator - current_text) - relative_key_start;
-    assert(key_length > 0);
+// {{item#array}}...{{/array}}
+void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix_start, const char * const prefix_end, const char * const separator_pattern) {
+    raise_debug("hmpl_render_section_tags(%p, %s, <optimized>, %s, %s, %s)", arena, *text_ptr, prefix_start, prefix_end, separator_pattern);
     
-    char *key = arena_alloc(arena, key_length + 1);
-    substr_clone(current_text, key, relative_key_start, key_length);
+    // Create search patterns
+    char start_pattern[32];
+    snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix_start);
+    Slice start_slice = slice_create(char, start_pattern, strlen(start_pattern), 0, strlen(start_pattern));
 
-    int element_name_length = (opening_tag_end - current_text) - element_name_start;
-    assert(element_name_length > 0);
-
-    char *element_name = arena_alloc(arena, element_name_length + 1);
-    substr_clone(current_text, element_name, element_name_start, element_name_length);
-
-    int close_tag_patern_length = start_pattern_length + key_length + end_pattern_length;
-    char *close_tag_patern = arena_alloc(arena, close_tag_patern_length + 1);
-    snprintf(close_tag_patern, sizeof(*close_tag_patern), "%s%s%s", start_pattern, key, end_pattern);
-
-    char *close_tag = strstr(opening_tag_end + offset + 1, close_tag_patern);
-    if (!close_tag) {
-       raise_exception("Malformed template: missing loop end for key %s", key);
-       exit(1);
+    // Create a mutable copy of separator_pattern
+    char separator_copy[32];
+    strncpy(separator_copy, separator_pattern, sizeof(separator_copy) - 1);
+    separator_copy[sizeof(separator_copy) - 1] = '\0';
+    Slice separator_slice = slice_create(char, separator_copy, strlen(separator_copy), 0, strlen(separator_copy));
+    if (separator_slice.len == 0) {
+        raise_exception("Unexpected usage: separator pattern cannot be empty");
     }
 
-    Json *arr = eval_object(arena, context, key);
+    // Create slice for the text
+    Slice text_slice = slice_create(char, *text_ptr, strlen(*text_ptr), 0, strlen(*text_ptr));
+    size_t offset = 0;
 
-    if (arr && arr->type == JSON_ARRAY) {
-        size_t elem_count = 0;
-        for (Json *e = arr->child; e; e = e->next) elem_count++;
-    
-        char *replacement = arena_alloc(arena, MEM_KiB * elem_count);
-        size_t offset = 0;
+    while (1) {
+        // Find tag start
+        char *text_data = (char*)text_slice.data;
+        char *opening_tag_start = strstr(text_data + offset, (char*)start_slice.data);
+        if (!opening_tag_start) break;
 
-        char *block_buff = arena_alloc(arena, MEM_KiB);
-	size_t relative_block_start = (size_t)opening_tag_end + 2 - (size_t)current_text;
-	raise_trace("relative_block_start: %p = %p - 2 - %p", opening_tag_end, current_text);
-	size_t block_len = (size_t)opening_tag_end - (size_t)close_tag - 2;
-	raise_trace("block_len %p = %p - %p - 2", block_len, opening_tag_end, close_tag);
-	assert(block_len > 0);
-        substr_clone(current_text, block_buff, relative_block_start, block_len);
-    
-        for (Json *elem = arr->child; elem; elem = elem->next) {
-	    char *block = arena_strdup(arena, block_buff);
-    
-            char *prefix = arena_alloc(arena, element_name_length + 2);
-            snprintf(prefix, element_name_length + 2, "%s.", element_name);
-    
-            hmpl_render_interpolation_tags(arena, &block, context, prefix);
-	    raise_trace("block after: %s", block);
-    
-            size_t block_len = strlen(block);
-            memcpy(replacement + offset, block, block_len);
-            offset += block_len;
+        // Create slice for separator search
+        size_t start_index = opening_tag_start - text_data;
+        Slice remaining_slice = slice_subslice(text_slice, start_index, text_slice.len - start_index);
+        
+        // Find separator
+        char *opening_tag_separator = strstr((char*)remaining_slice.data, (char*)separator_slice.data);
+        if (!opening_tag_separator) {
+            raise_exception("Malformed template: missing separator for section tag or not specified name for element");
+            exit(1);
+        }
+        
+        // Extract element name (now before separator)
+        size_t separator_index = opening_tag_separator - (char*)remaining_slice.data;
+        size_t element_name_start = start_slice.len;
+        size_t element_name_length = separator_index;
+        
+        char *element_name = arena_alloc(arena, element_name_length + 1);
+        substr_clone((char*)remaining_slice.data, element_name, element_name_start, element_name_length);
+        element_name[element_name_length] = '\0';
+
+        // Find closing braces
+        Slice after_separator = slice_subslice(remaining_slice, separator_index + separator_slice.len, 
+                                             remaining_slice.len - separator_index - separator_slice.len);
+        char *opening_tag_end = strstr((char*)after_separator.data, "}}");
+        if (!opening_tag_end) {
+            raise_exception("Malformed template: missing closing braces for section tag");
+            exit(1);
         }
 
-        replacement[offset] = '\0';
-	raise_trace("replacement: %s", replacement);
+        // Extract key (now after separator)
+        size_t key_start = 0;
+        size_t key_length = opening_tag_end - (char*)after_separator.data;
+        char *key = arena_alloc(arena, key_length + 1);
+        substr_clone((char*)after_separator.data, key, key_start, key_length);
+        key[key_length] = '\0';
 
-        char *new_text = arena_repstr(arena, current_text,
-          (size_t)opening_tag_start - 1,
-          close_tag + close_tag_patern_length - opening_tag_start + 2,
-          replacement);
+        // Create pattern for closing tag
+        char *close_tag_pattern = arena_alloc(arena, start_slice.len + key_length + 3); // +3 for "{{" and "}}"
+        snprintf(close_tag_pattern, start_slice.len + key_length + 3, 
+                "{{%s%s}}", prefix_end, key);
 
-         *text_ptr = new_text;
+        // Find closing tag
+        size_t after_opening_end = (opening_tag_end - (char*)after_separator.data) + 2;
+        Slice after_opening_slice = slice_subslice(after_separator, after_opening_end, 
+                                                 after_separator.len - after_opening_end);
+        
+        // Find the exact closing tag by checking for complete tag pattern
+        char *close_tag = NULL;
+        char *search_start = (char*)after_opening_slice.data;
+        while ((search_start = strstr(search_start, "{{")) != NULL) {
+            if (strncmp(search_start, close_tag_pattern, strlen(close_tag_pattern)) == 0) {
+                close_tag = search_start;
+                break;
+            }
+            search_start += 2; // Move past the "{{" we found
+        }
+        
+        if (!close_tag) {
+            raise_exception("Malformed template: missing loop end for key %s", key);
+            exit(1);
+        }
+
+        // Get array from context
+        Json *arr = eval_object(arena, context, key);
+
+        if (arr && arr->type == JSON_ARRAY) {
+            // Count array elements
+            size_t elem_count = 0;
+            for (Json *e = arr->child; e; e = e->next) elem_count++;
+            
+            // Allocate memory for replacement
+            char *replacement = arena_alloc(arena, MEM_KiB * elem_count);
+            size_t replacement_offset = 0;
+
+            // Extract template block
+            size_t block_start = after_opening_end;
+            size_t block_length = (close_tag - (char*)after_opening_slice.data);
+            char *block_buff = arena_alloc(arena, block_length + 1);
+            substr_clone((char*)after_opening_slice.data, block_buff, block_start, block_length);
+            block_buff[block_length] = '\0';
+
+            // Process each array element
+            for (Json *elem = arr->child; elem; elem = elem->next) {
+                char *block = arena_strdup(arena, block_buff);
+                
+                char *prefix = arena_alloc(arena, element_name_length + 2);
+                snprintf(prefix, element_name_length + 2, "%s.", element_name);
+                
+                hmpl_render_interpolation_tags(arena, &block, context, prefix);
+                raise_trace("block after: %s", block);
+                
+                size_t block_len = strlen(block);
+                memcpy(replacement + replacement_offset, block, block_len);
+                replacement_offset += block_len;
+            }
+
+            replacement[replacement_offset] = '\0';
+            raise_trace("replacement: %s", replacement);
+
+            // Calculate replacement positions
+            size_t replace_start = start_index;
+            size_t replace_length = (close_tag - (char*)after_opening_slice.data) + 
+                                  start_slice.len + key_length + 2;
+
+            // Perform replacement
+            char *new_text = arena_repstr(arena, (char*)text_slice.data, replace_start, replace_length, replacement);
+            *text_ptr = new_text;
+            
+            // Update text slice
+            text_slice = slice_create(char, new_text, strlen(new_text), 0, strlen(new_text));
+        }
+        
+        offset = start_index;
     }
-    offset = start_index;
-  }
 }
 
 void hmpl_render_with_arena(Arena *arena, char **text, const Json * const context) {
