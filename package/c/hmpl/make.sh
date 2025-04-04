@@ -11,7 +11,7 @@
 #   help, --help  Show this help message.
 
 check_dependencies() {
-  for dep in cc ar entr pager; do
+  for dep in cc ar pager; do
     if ! command -v "$dep" >/dev/null 2>&1; then
       echo "Error: Required dependency '$dep' not found." >&2
       exit 1
@@ -92,7 +92,7 @@ build() {
 
 case "$MODE" in
   watch)
-    entr -r sh ./make.sh build | pager
+    find . -type d | nix run .#watch -- 'sh ./make.sh build && sh ./make.sh check' -i -p '*.c' -p '*.h' 2>&1
     ;;
   build)
     build
