@@ -93,7 +93,7 @@ fi
 
 case "$MODE" in
   watch)
-    find . -type d | nix run .#watch -- 'sh ./make.sh build' -p '*.c' -p '*.h' 2>&1
+    find . -type d | nix run .#watch -- 'sh ./make.sh build && sh ./make.sh check' -p '*.c' -p '*.h' 2>&1
     ;;
   build)
     mkdir -p target

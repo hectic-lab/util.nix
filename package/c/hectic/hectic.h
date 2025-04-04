@@ -42,8 +42,16 @@ void set_output_color_mode(ColorMode mode);
 #define IS_TERMINAL() (isatty(fileno(stderr)))
 #define USE_COLOR() ((color_mode == COLOR_MODE_FORCE) || (color_mode == COLOR_MODE_AUTO && IS_TERMINAL()))
 
-#define COLOR_RED (USE_COLOR() ? "\033[1;31m" : "")
-#define COLOR_RESET (USE_COLOR() ? "\033[0m" : "")
+#define COLOR_RED "\033[1;31m"
+#define COLOR_GREEN "\033[1;32m"
+#define COLOR_YELLOW "\033[1;33m"
+#define COLOR_BLUE "\033[1;34m"
+#define COLOR_MAGENTA "\033[1;35m"
+#define COLOR_CYAN "\033[1;36m"
+#define COLOR_WHITE "\033[1;37m"
+#define COLOR_RESET "\033[0m"
+
+#define OPTIONAL_COLOR(color) (USE_COLOR() ? color : "")
 
 // ------------ 
 // -- Errors --
@@ -203,7 +211,7 @@ void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *
 #define MEM_QiB (MEM_RiB * 1024)
 
 void substr_clone__(const char *file, const char *func, int line, const char * const src, char *dest, size_t from, size_t len);
-#define substr_clone(src, dest, from, len) substr_clone__(__FILE__, __LINE__, src, dest, from, len)
+#define substr_clone(src, dest, from, len) substr_clone__(__FILE__, __func__, __LINE__, src, dest, from, len)
 
 // ----------
 // -- Json --
