@@ -21,6 +21,20 @@ const char* log_level_to_string(LogLevel level) {
     }
 }
 
+const char* log_level_to_color(LogLevel level) {
+    switch (level) {
+        case LOG_LEVEL_TRACE: return COLOR_GREEN;
+        case LOG_LEVEL_DEBUG: return COLOR_BLUE;
+        case LOG_LEVEL_LOG:  return COLOR_CYAN;
+        case LOG_LEVEL_INFO:  return COLOR_GREEN;
+        case LOG_LEVEL_NOTICE:  return COLOR_CYAN;
+        case LOG_LEVEL_WARN:  return COLOR_YELLOW;
+        case LOG_LEVEL_EXCEPTION: return COLOR_RED;
+        default:              return COLOR_RESET;
+    }
+}
+
+
 LogLevel log_level_from_string(const char *level_str) {
     if (!level_str) return LOG_LEVEL_INFO;
     if (strcmp(level_str, "TRACE") == 0)
@@ -55,7 +69,13 @@ void init_logger(void) {
     current_log_level = log_level_from_string(getenv("LOG_LEVEL"));
 }
 
-char* raise_message(LogLevel level, const char *file, const char *func, int line, const char *format, ...) {
+char* raise_message(
+  LogLevel level,
+  const char *file,
+  const char *func,
+  int line,
+  const char *format,
+  ...) {
     (void)func;
     if (level < current_log_level) {
         return NULL;
@@ -67,7 +87,7 @@ char* raise_message(LogLevel level, const char *file, const char *func, int line
     static char timeStr[20];
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tm_info);
 
-    fprintf(stderr, "%s %s %s:%d ", timeStr, log_level_to_string(level), file, line);
+    fprintf(stderr, "%s %s%s%s %s:%d ", timeStr, log_level_to_color(level), log_level_to_string(level), COLOR_RESET, file, line);
 
     va_list args;
     va_start(args, format);
