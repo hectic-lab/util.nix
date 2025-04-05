@@ -106,9 +106,7 @@
   "{{/array}}"
 
 #define TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT \
-  "value1"                                        \
-  "value2"                                        \
-  "value3"
+  "  value1  value2  value3"
 
 #define TEST_DATA_COMPLEX_SECTION_ITERATION_CONTEXT \
   "{"                                               \
