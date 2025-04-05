@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, bash, inotify-tools }:
+{ stdenv, gcc, lib, bash, c-hectic }:
 
 stdenv.mkDerivation {
   pname = "prettify";
@@ -6,7 +6,7 @@ stdenv.mkDerivation {
   src = ./.;
   doCheck = false;
 
-  nativeBuildInputs = [ gcc ];
+  nativeBuildInputs = [ gcc c-hectic ];
 
   buildPhase = ''
     ls

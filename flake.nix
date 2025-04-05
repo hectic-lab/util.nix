@@ -72,7 +72,7 @@
           };
         };
       in {
-        "python3.asyncio" = pkgs.python3Packages.buildPythonPackage rec {
+        py3-asyncio = pkgs.python3Packages.buildPythonPackage rec {
           pname = "asyncio";
           version = "3.4.3";
           src = pkgs.python3Packages.fetchPypi {
@@ -80,7 +80,7 @@
             sha256 = "sha256-gzYP+LyXmA5P8lyWTHvTkj0zPRd6pPf7c2sBnybHy0E="; 
           };
         };
-        "python3.cryptomus" = pkgs.python3Packages.buildPythonPackage rec {
+        py3-cryptomus = pkgs.python3Packages.buildPythonPackage rec {
           pname = "cryptomus";
           version = "1.1";
           src = pkgs.python3Packages.fetchPypi {
@@ -88,7 +88,7 @@
             sha256 = "sha256-f0BBGfemKxMdz+LMvawWqqRfmF+TrCpMwgtJEYt+fgU="; 
           };
         };
-        "python3.modulegraph" = pkgs.python3Packages.buildPythonPackage rec {
+        py3-modulegraph = pkgs.python3Packages.buildPythonPackage rec {
           pname = "modulegraph";
           version = "0.19.6";
           src = pkgs.python3Packages.fetchPypi {
@@ -96,7 +96,7 @@
             sha256 = "sha256-yRTIyVoOEP6IUF1OnCKEtOPbxwlD4wbMZWfjbMVBv0s="; 
           };
         };
-        "python3.swifter" = pkgs.python3Packages.buildPythonPackage rec {
+        py3-swifter = pkgs.python3Packages.buildPythonPackage rec {
           pname = "swifter";
           version = "1.4.0";
           src = pkgs.python3Packages.fetchPypi {
@@ -104,7 +104,7 @@
             sha256 = "sha256-4bt0R2ohs/B6F6oYyX/cuoWZcmvRfacy8J2rzFDia6A="; 
           };
         };
-        "python3.aiogram-newsletter" = pkgs.python3Packages.buildPythonPackage rec {
+        py3-aiogram-newsletter = pkgs.python3Packages.buildPythonPackage rec {
           pname = "aiogram-newsletter";
           version = "0.0.10";
         
@@ -129,7 +129,7 @@
         pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
         pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
-        "c.hectic" = pkgs.callPackage ./package/c/hectic/default.nix {};
+        c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
         hmpl = pkgs.callPackage ./package/c/hmpl/default.nix { 
           hectic = self.packages.${system}.hectic;

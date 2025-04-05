@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, hectic, bash }:
+{ stdenv, gcc, lib, c-hectic, bash }:
 
 stdenv.mkDerivation {
   pname = "hmpl";
@@ -6,7 +6,7 @@ stdenv.mkDerivation {
   src = ./.;
   doCheck = true;
 
-  buildInputs = [ hectic ];
+  buildInputs = [ c-hectic ];
   nativeBuildInputs = [ gcc ];
 
   buildPhase = ''
