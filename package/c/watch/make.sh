@@ -107,15 +107,7 @@ case "$MODE" in
     fi
     ;;
   check)
-    mkdir -p target/test
-    for test_file in test/*.c; do
-      exe="target/test/$(basename "${test_file%.c}")"
-      # shellcheck disable=SC2086
-      cc $CFLAGS $OPTFLAGS -pedantic "$test_file" $LDFLAGS -o "$exe"
-      if [ "$RUN_TESTS" -eq 1 ]; then
-        "$exe"
-      fi
-    done
+    echo "No tests to run"
     ;;
   *)
     print_help

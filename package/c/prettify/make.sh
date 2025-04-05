@@ -80,14 +80,9 @@ fi
 
 build() {
   mkdir -p target
-  echo "# Build library"
-  # shellcheck disable=SC2086
-  cc $CFLAGS $OPTFLAGS $STD_FLAGS -c hmpl.c -lhectic -o target/hmpl.o
-  ar rcs target/libhmpl.a target/hmpl.o
-
   echo "# Build app"
   # shellcheck disable=SC2086
-  cc $CFLAGS $OPTFLAGS main.c -Ltarget -lhmpl $LDFLAGS -o target/hmpl
+  cc $CFLAGS $OPTFLAGS main.c $LDFLAGS -lhectic -o target/prettify
 }
 
 case "$MODE" in
@@ -98,18 +93,10 @@ case "$MODE" in
     build
     ;;
   run)
-    build && ./target/hmpl
+    build && ./target/prettify
     ;;
   check)
-    mkdir -p target/test
-    for test_file in test/*.c; do
-      exe="target/test/$(basename "${test_file%.c}")"
-      # shellcheck disable=SC2086
-      cc $CFLAGS $OPTFLAGS -pedantic -I. "$test_file" -Ltarget -lhmpl $LDFLAGS -o "$exe"
-      if [ "$RUN_TESTS" -eq 1 ]; then
-        LOG_LEVEL=TRACE ./"$exe"
-      fi
-    done
+    echo "No tests to run"
     ;;
   *)
     print_help

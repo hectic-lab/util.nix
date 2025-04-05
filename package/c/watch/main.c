@@ -21,8 +21,9 @@
 #define MAX_PATTERNS 32
 #define POLL_INTERVAL_MS 100
 
-// Global flag to indicate if we're running in pager mode
+// Global flags
 int pager_mode = 0;
+int ignore_errors = 0;
 FILE *output_stream = NULL;
 int running = 1;
 
@@ -37,11 +38,13 @@ void print_usage(const char *prog_name) {
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -p <pattern>    File pattern to watch (can be used multiple times)\n");
     fprintf(stderr, "  -P              Enable pager-friendly output (refresh mode)\n");
+    fprintf(stderr, "  -i, --ignore-errors  Continue watching even when command returns non-zero\n");
     fprintf(stderr, "  -h              Show this help message\n");
     fprintf(stderr, "Examples:\n");
     fprintf(stderr, "  %s 'make' -p '*.c' -p '*.h' ./src\n", prog_name);
     fprintf(stderr, "  find . -type d | %s 'echo changed' -p '*.py'\n", prog_name);
     fprintf(stderr, "  %s -P 'make' -p '*.c' -p '*.h' ./src | less\n", prog_name);
+    fprintf(stderr, "  %s -i 'sh ./make.sh check' -p '*.c' -p '*.h' .\n", prog_name);
     exit(EXIT_FAILURE);
 }
 
@@ -174,10 +177,16 @@ int main(int argc, char *argv[]) {
     char **patterns = malloc(MAX_PATTERNS * sizeof(char*));
     int num_patterns = 0;
     
+    // Define long options
+    static struct option long_options[] = {
+        {"ignore-errors", no_argument, NULL, 'i'},
+        {0, 0, 0, 0}
+    };
+    
     optind = 2;
     int opt;
     
-    while ((opt = getopt(argc, argv, "p:Ph")) != -1) {
+    while ((opt = getopt_long(argc, argv, "p:Phi", long_options, NULL)) != -1) {
         switch (opt) {
             case 'p':
                 if (num_patterns < MAX_PATTERNS) {
@@ -189,6 +198,9 @@ int main(int argc, char *argv[]) {
                 break;
             case 'P':
                 pager_mode = 1;
+                break;
+            case 'i':
+                ignore_errors = 1;
                 break;
             case 'h':
                 print_usage(argv[0]);
@@ -439,8 +451,15 @@ int main(int argc, char *argv[]) {
         if (any_changes) {
             int res = system(command);
             if (res != 0) {
-                perror("system");
-                exit(EXIT_FAILURE);
+                time_t current_time = time(NULL);
+                fprintf(output_stream, "Command failed at %s", ctime(&current_time));
+                fprintf(output_stream, "Command: %s (exit code: %d)\n", command, res);
+                fflush(output_stream);
+                
+                if (!ignore_errors) {
+                    fprintf(output_stream, "Exiting due to command failure. Use -i to ignore errors.\n");
+                    running = 0;
+                }
             }
         }
 

@@ -72,6 +72,50 @@
           };
         };
       in {
+        "python3.asyncio" = pkgs.python3Packages.buildPythonPackage rec {
+          pname = "asyncio";
+          version = "3.4.3";
+          src = pkgs.python3Packages.fetchPypi {
+            inherit pname version;
+            sha256 = "sha256-gzYP+LyXmA5P8lyWTHvTkj0zPRd6pPf7c2sBnybHy0E="; 
+          };
+        };
+        "python3.cryptomus" = pkgs.python3Packages.buildPythonPackage rec {
+          pname = "cryptomus";
+          version = "1.1";
+          src = pkgs.python3Packages.fetchPypi {
+            inherit pname version;
+            sha256 = "sha256-f0BBGfemKxMdz+LMvawWqqRfmF+TrCpMwgtJEYt+fgU="; 
+          };
+        };
+        "python3.modulegraph" = pkgs.python3Packages.buildPythonPackage rec {
+          pname = "modulegraph";
+          version = "0.19.6";
+          src = pkgs.python3Packages.fetchPypi {
+            inherit pname version;
+            sha256 = "sha256-yRTIyVoOEP6IUF1OnCKEtOPbxwlD4wbMZWfjbMVBv0s="; 
+          };
+        };
+        "python3.swifter" = pkgs.python3Packages.buildPythonPackage rec {
+          pname = "swifter";
+          version = "1.4.0";
+          src = pkgs.python3Packages.fetchPypi {
+            inherit pname version;
+            sha256 = "sha256-4bt0R2ohs/B6F6oYyX/cuoWZcmvRfacy8J2rzFDia6A="; 
+          };
+        };
+        "python3.aiogram-newsletter" = pkgs.python3Packages.buildPythonPackage rec {
+          pname = "aiogram-newsletter";
+          version = "0.0.10";
+        
+          src = pkgs.fetchFromGitHub {
+	    inherit pname version;
+            owner = "nessshon";
+            repo = "aiogram-newsletter";
+            rev = "bb8a42e4bcff66a9a606fc92ccc27b1d094b20fc";
+            sha256 = "sha256-atKhccp8Pr8anJUo+M9hnYkYrcgnB9SxrpmsiVusJZs=";
+          };
+        };
         nvim-alias = pkgs.callPackage ./package/nvim-alias.nix {};
         bolt-unpack = pkgs.callPackage ./package/bolt-unpack.nix {};
         nvim-pager = pkgs.callPackage ./package/nvim-pager.nix {};
@@ -85,19 +129,20 @@
         pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
         pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
-        hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
+        "c.hectic" = pkgs.callPackage ./package/c/hectic/default.nix {};
+        watch = pkgs.callPackage ./package/c/watch/default.nix {};
         hmpl = pkgs.callPackage ./package/c/hmpl/default.nix { 
-	  hectic = self.packages.${system}.hectic;
-	};
+          hectic = self.packages.${system}.hectic;
+        };
       };
 
       devShells.${system} = let
         shells = self.devShells.${system};
       in {
         c = pkgs.mkShell {
-	  buildInputs = (with pkgs; [ gdb gcc ]) ++ (with self.packages.${system}; [ hectic nvim-pager]);
+          buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ hectic nvim-pager watch ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
-	};
+        };
         default = pkgs.mkShell {
           buildInputs =
             (with self.packages.${system}; [
@@ -147,40 +192,39 @@
             users.users.root.openssh.authorizedKeys.keys = [ ];
             environment.systemPackages = with pkgs; [
               (pkgs.writers.writeMinCBin "minc-hello-world" ["<stdio.h>"] /*c*/ ''
-	        printf("hello world\n");
-	      '')
+                printf("hello world\n");
+              '')
               (pkgs.writers.writeMinCBin "minc-env" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
-	        char *env_name;
-	        if (argc > 1) {
+                char *env_name;
+                if (argc > 1) {
                   env_name = argv[1];
-		} else {
+                } else {
                   env_name = "HOME";
-		}
-
+                }
                 char *value = getenv(env_name);
                 if (value) {
                     printf("%s: %s\n", env_name, value);
                 } else {
                     printf("Environment variable %s not found.\n", env_name);
                 }
-	      '')
+              '')
               (pkgs.writers.writeMinCBin "minc-env-check" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
-	        char *env_name;
-	        if (argc > 1) {
+                char *env_name;
+                if (argc > 1) {
                   env_name = argv[1];
-		} else {
+                } else {
                   env_name = "HOME";
-		}
+                }
 
                 char *value = getenv(env_name);
                 if (value) {
-		    char buffer[128]; 
-		    sprintf(buffer, "echo $%s\n", env_name);
+                    char buffer[128]; 
+                    sprintf(buffer, "echo $%s\n", env_name);
                     system(buffer);
                 } else {
                     printf("Environment variable %s not found.\n", env_name);
                 }
-	      '')
+              '')
             ];
             programs.zsh.shellAliases = {
               jc = ''journalctl'';
@@ -343,7 +387,7 @@
               cargoHash = "sha256-AbLT7vcFV89zwZIaTC1ELat9l4UeNP8Bn9QMMOms1Co=";
           
               doCheck = false;
-          };
+            };
           buildHttpExt = versionSuffix:
             buildPostgresqlExtension {
               postgresql = prev."postgresql_${versionSuffix}";
@@ -361,14 +405,14 @@
         in {
           hectic = self.packages.${prev.system};
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
-	    http = buildHttpExt "17";
-	    pg_smtp_client = buildSmtpExt "17";
-	  };};
+            http = buildHttpExt "17";
+            pg_smtp_client = buildSmtpExt "17";
+          };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
-	    http = buildHttpExt "16";
-	    pg_smtp_client = buildSmtpExt "16";
-	  };};
-	  writers = let
+            http = buildHttpExt "16";
+            pg_smtp_client = buildSmtpExt "16";
+          };};
+          writers = let
             writeC =
               name: argsOrScript:
               if lib.isAttrs argsOrScript && !lib.isDerivation argsOrScript then
@@ -397,7 +441,7 @@
                     ${prev.gcc}/bin/gcc -xc -o $out $contentPath
                   '';
                 } name argsOrScript;
-	    writeMinC =
+            writeMinC =
               name: includes: body:
                 writeC name ''
                   ${builtins.concatStringsSep "\n" (map (h: "#include " + h) includes)}
@@ -406,20 +450,20 @@
                       ${body}
                   }
                 '';
-	  in prev.writers // {
+          in prev.writers // {
             writeCBin = name: writeC "/bin/${name}";
-	    writeC = writeC;
-	    writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
-	    writeMinC = writeMinC;
-	  };
+            writeC = writeC;
+            writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
+            writeMinC = writeMinC;
+          };
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
-	    http = buildHttpExt "15";
-	    pg_smtp_client = buildSmtpExt "15";
-	  };};
+            http = buildHttpExt "15";
+            pg_smtp_client = buildSmtpExt "15";
+          };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
-	    http = buildHttpExt "14";
-	    pg_smtp_client = buildSmtpExt "14";
-	  };};
+            http = buildHttpExt "14";
+            pg_smtp_client = buildSmtpExt "14";
+          };};
         }
       );
       lib = {

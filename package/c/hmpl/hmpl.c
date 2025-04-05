@@ -74,12 +74,14 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
     char start_pattern[32];
     snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix_start);
     Slice start_slice = slice_create(char, start_pattern, strlen(start_pattern), 0, strlen(start_pattern));
+    raise_trace("start_slice: %s", start_slice.data);
 
     // Create a mutable copy of separator_pattern
     char separator_copy[32];
     strncpy(separator_copy, separator_pattern, sizeof(separator_copy) - 1);
     separator_copy[sizeof(separator_copy) - 1] = '\0';
     Slice separator_slice = slice_create(char, separator_copy, strlen(separator_copy), 0, strlen(separator_copy));
+    raise_trace("separator_slice: %s", separator_slice.data);
     if (separator_slice.len == 0) {
         raise_exception("Unexpected usage: separator pattern cannot be empty");
     }
@@ -134,6 +136,7 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
         char *close_tag_pattern = arena_alloc(arena, start_slice.len + key_length + 3); // +3 for "{{" and "}}"
         snprintf(close_tag_pattern, start_slice.len + key_length + 3, 
                 "{{%s%s}}", prefix_end, key);
+        raise_trace("close_tag_pattern: %s", close_tag_pattern);
 
         // Find closing tag
         size_t after_opening_end = (opening_tag_end - (char*)after_separator.data) + 2;
