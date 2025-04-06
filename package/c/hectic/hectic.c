@@ -11,6 +11,7 @@ void set_output_color_mode(ColorMode mode) {
 const char* log_level_to_string(LogLevel level) {
     switch (level) {
         case LOG_LEVEL_TRACE: return "TRACE";
+        case LOG_LEVEL_ZALUPA: return "ZALUPA";
         case LOG_LEVEL_DEBUG: return "DEBUG";
         case LOG_LEVEL_LOG:  return "LOG";
         case LOG_LEVEL_INFO:  return "INFO";
@@ -24,6 +25,7 @@ const char* log_level_to_string(LogLevel level) {
 const char* log_level_to_color(LogLevel level) {
     switch (level) {
         case LOG_LEVEL_TRACE: return OPTIONAL_COLOR(COLOR_GREEN);
+        case LOG_LEVEL_ZALUPA: return OPTIONAL_COLOR(COLOR_MAGENTA);
         case LOG_LEVEL_DEBUG: return OPTIONAL_COLOR(COLOR_BLUE);
         case LOG_LEVEL_LOG:  return OPTIONAL_COLOR(COLOR_CYAN);
         case LOG_LEVEL_INFO:  return OPTIONAL_COLOR(COLOR_GREEN);
@@ -39,6 +41,8 @@ LogLevel log_level_from_string(const char *level_str) {
     if (!level_str) return LOG_LEVEL_INFO;
     if (strcmp(level_str, "TRACE") == 0)
         return LOG_LEVEL_TRACE;
+    else if (strcmp(level_str, "ZALUPA") == 0)
+        return LOG_LEVEL_ZALUPA;
     else if (strcmp(level_str, "DEBUG") == 0)
         return LOG_LEVEL_DEBUG;
     else if (strcmp(level_str, "LOG") == 0)
@@ -244,11 +248,11 @@ static const char *skip_whitespace(const char *s) {
 }
 
 /* Parse a JSON string (does not handle full escaping) */
-static char *json_parse_string__(const char **s_ptr, Arena *arena) {
+static char *json_parse_string__(const char *file, const char *func, int line, const char **s_ptr, Arena *arena) {
     const char *s = *s_ptr;
-    raise_debug("Entering json_parse_string__ at position: %p", s);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Entering json_parse_string__ at position: %p", s);
     if (*s != '"') {
-        raise_debug("Expected '\"' at start of string, got: %c", *s);
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Expected '\"' at start of string, got: %c", *s);
         return NULL;
     }
     s++; // skip opening quote
@@ -260,46 +264,46 @@ static char *json_parse_string__(const char **s_ptr, Arena *arena) {
         s++;
     }
     if (*s != '"') {
-        raise_debug("Unterminated string starting at: %p", start);
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Unterminated string starting at: %p", start);
         return NULL;
     }
     size_t len = s - start;
-    char *str = arena_alloc(arena, len + 1);
+    char *str = arena_alloc__(file, func, line, arena, len + 1);
     if (!str) {
-        raise_debug("Memory allocation failed in json_parse_string__");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_parse_string__");
         return NULL;
     }
     memcpy(str, start, len);
     str[len] = '\0';
     *s_ptr = s + 1; // skip closing quote
-    raise_debug("Parsed string: \"%s\" (length: %zu)", str, len);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsed string: \"%s\" (length: %zu)", str, len);
     return str;
 }
 
 /* Parse a number using strtod */
-static double json_parse_number__(const char **s_ptr) {
-    raise_debug("Parsing number at position: %p", *s_ptr);
+static double json_parse_number__(const char *file, const char *func, int line, const char **s_ptr) {
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsing number at position: %p", *s_ptr);
     char *end;
     double num = strtod(*s_ptr, &end);
     if (*s_ptr == end)
-        raise_debug("No valid number found at: %p", *s_ptr);
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "No valid number found at: %p", *s_ptr);
     *s_ptr = end;
-    raise_debug("Parsed number: %g", num);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsed number: %g", num);
     return num;
 }
 
 /* Forward declaration */
-static Json *json_parse_value__(const char **s, Arena *arena);
+static Json *json_parse_value__(const char *file, const char *func, int line, const char **s, Arena *arena);
 
 /* Parse a JSON array: [ value, value, ... ] */
-static Json *json_parse_array__(const char **s, Arena *arena) {
-    raise_debug("Entering json_parse_array__ at position: %p", *s);
+static Json *json_parse_array__(const char *file, const char *func, int line, const char **s, Arena *arena) {
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Entering json_parse_array__ at position: %p", *s);
     if (**s != '[') return NULL;
     (*s)++; // skip '['
     *s = skip_whitespace(*s);
-    Json *array = arena_alloc(arena, sizeof(Json));
+    Json *array = arena_alloc__(file, func, line, arena, sizeof(Json));
     if (!array) {
-        raise_debug("Memory allocation failed in json_parse_array__");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_parse_array__");
         return NULL;
     }
     memset(array, 0, sizeof(Json));
@@ -307,13 +311,13 @@ static Json *json_parse_array__(const char **s, Arena *arena) {
     Json *last = NULL;
     if (**s == ']') { // empty array
         (*s)++;
-        raise_debug("Parsed empty array");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsed empty array");
         return array;
     }
     while (**s) {
-        Json *element = json_parse_value__(s, arena);
+        Json *element = json_parse_value__(file, func, line, s, arena);
         if (!element) {
-            raise_debug("Failed to parse array element");
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Failed to parse array element");
             return NULL;
         }
         if (!array->child)
@@ -327,25 +331,26 @@ static Json *json_parse_array__(const char **s, Arena *arena) {
             *s = skip_whitespace(*s);
         } else if (**s == ']') {
             (*s)++;
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Completed parsing array");
             break;
         } else {
-            raise_debug("Unexpected character '%c' in array", **s);
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Unexpected character '%c' in array", **s);
             return NULL;
         }
     }
-    raise_debug("Completed parsing array");
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Completed parsing array");
     return array;
 }
 
 /* Parse a JSON object: { "key": value, ... } */
-static Json *json_parse_object__(const char **s, Arena *arena) {
-    raise_debug("Entering json_parse_object__ at position: %p", *s);
+static Json *json_parse_object__(const char *file, const char *func, int line, const char **s, Arena *arena) {
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Entering json_parse_object__ at position: %p", *s);
     if (**s != '{') return NULL;
     (*s)++; // skip '{'
     *s = skip_whitespace(*s);
-    Json *object = arena_alloc(arena, sizeof(Json));
+    Json *object = arena_alloc__(file, func, line, arena, sizeof(Json));
     if (!object) {
-        raise_debug("Memory allocation failed in json_parse_object__");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_parse_object__");
         return NULL;
     }
     memset(object, 0, sizeof(Json));
@@ -353,25 +358,25 @@ static Json *json_parse_object__(const char **s, Arena *arena) {
     Json *last = NULL;
     if (**s == '}') {
         (*s)++;
-        raise_debug("Parsed empty object");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsed empty object");
         return object;
     }
     while (**s) {
-        char *key = json_parse_string__(s, arena);
+        char *key = json_parse_string__(file, func, line, s, arena);
         if (!key) {
-            raise_debug("Failed to parse key in object");
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Failed to parse key in object");
             return NULL;
         }
         *s = skip_whitespace(*s);
         if (**s != ':') {
-            raise_debug("Expected ':' after key \"%s\", got: %c", key, **s);
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Expected ':' after key \"%s\", got: %c", key, **s);
             return NULL;
         }
         (*s)++; // skip ':'
         *s = skip_whitespace(*s);
-        Json *value = json_parse_value__(s, arena);
+        Json *value = json_parse_value__(file, func, line, s, arena);
         if (!value) {
-            raise_debug("Failed to parse value for key \"%s\"", key);
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Failed to parse value for key \"%s\"", key);
             return NULL;
         }
         value->key = key; // assign key to the value
@@ -388,37 +393,37 @@ static Json *json_parse_object__(const char **s, Arena *arena) {
             (*s)++;
             break;
         } else {
-            raise_debug("Unexpected character '%c' in object", **s);
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Unexpected character '%c' in object", **s);
             return NULL;
         }
     }
-    raise_debug("Completed parsing object");
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Completed parsing object");
     return object;
 }
 
 /* Full JSON value parser */
-static Json *json_parse_value__(const char **s, Arena *arena) {
+static Json *json_parse_value__(const char *file, const char *func, int line, const char **s, Arena *arena) {
     *s = skip_whitespace(*s);
-    raise_debug("Parsing JSON value at position: %p", *s);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsing JSON value at position: %p", *s);
     if (**s == '"') {
-        Json *item = arena_alloc(arena, sizeof(Json));
+        Json *item = arena_alloc__(file, func, line, arena, sizeof(Json));
         if (!item) {
-            raise_debug("Memory allocation failed in json_parse_value__ for string");
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_parse_value for string");
             return NULL;
         }
         memset(item, 0, sizeof(Json));
         item->type = JSON_STRING;
-        item->JsonValue.string = json_parse_string__(s, arena);
+        item->JsonValue.string = json_parse_string__(file, func, line, s, arena);
         return item;
     } else if (strncmp(*s, "null", 4) == 0) {
-        Json *item = arena_alloc(arena, sizeof(Json));
+        Json *item = arena_alloc__(file, func, line, arena, sizeof(Json));
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_NULL;
         *s += 4;
         return item;
     } else if (strncmp(*s, "true", 4) == 0) {
-        Json *item = arena_alloc(arena, sizeof(Json));
+        Json *item = arena_alloc__(file, func, line, arena, sizeof(Json));
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_BOOL;
@@ -426,7 +431,7 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         *s += 4;
         return item;
     } else if (strncmp(*s, "false", 5) == 0) {
-        Json *item = arena_alloc(arena, sizeof(Json));
+        Json *item = arena_alloc__(file, func, line, arena, sizeof(Json));
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_BOOL;
@@ -434,42 +439,42 @@ static Json *json_parse_value__(const char **s, Arena *arena) {
         *s += 5;
         return item;
     } else if ((**s == '-') || isdigit((unsigned char)**s)) {
-        Json *item = arena_alloc(arena, sizeof(Json));
+        Json *item = arena_alloc__(file, func, line, arena, sizeof(Json));
         if (!item) {
-            raise_debug("Memory allocation failed in json_parse_value__ for number");
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_parse_value for number");
             return NULL;
         }
         memset(item, 0, sizeof(Json));
         item->type = JSON_NUMBER;
-        item->JsonValue.number = json_parse_number__(s);
+        item->JsonValue.number = json_parse_number__(file, func, line, s);
         return item;
     } else if (**s == '[') {
-        return json_parse_array__(s, arena);
+        return json_parse_array__(file, func, line, s, arena);
     } else if (**s == '{') {
-        return json_parse_object__(s, arena);
+        return json_parse_object__(file, func, line, s, arena);
     }
-    raise_debug("Unrecognized JSON value at position: %p", *s);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Unrecognized JSON value at position: %p", *s);
     return NULL;
 }
 
-Json *json_parse(Arena *arena, const char **s) {
-    Json *result = json_parse_value__(s, arena);
+Json *json_parse__(const char* file, const char* func, int line, Arena *arena, const char **s) {
+    Json *result = json_parse_value__(file, func, line, s, arena);
     if (!result)
-        raise_debug("json_parse failed at position: %p", *s);
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "json_parse failed at position: %p", *s);
     return result;
 }
 
-char *json_to_string(Arena *arena, const Json * const item) {
-    return json_to_string_with_opts(arena, item, JSON_NORAW);
+char *json_to_string__(const char* file, const char* func, int line, Arena *arena, const Json * const item) {
+    return json_to_string_with_opts__(file, func, line, arena, item, JSON_NORAW);
 }
 
 /* Minimal JSON printer with raw output option.
    When raw is non-zero and the item is a JSON_STRING, it is printed without quotes.
 */
-char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt raw) {
-    char *out = arena_alloc(arena, 1024);
+char *json_to_string_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw) {
+    char *out = arena_alloc__(file, func, line, arena, 1024);
     if (!out) {
-        raise_debug("Memory allocation failed in json_to_string_with_opts");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_to_string_with_opts");
         return NULL;
     }
     char *ptr = out;
@@ -478,7 +483,7 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
         Json *child = item->child;
         while (child) {
             ptr += sprintf(ptr, "\"%s\":", child->key ? child->key : "");
-            char *child_str = json_to_string_with_opts(arena, child, raw);
+            char *child_str = json_to_string_with_opts__(file, func, line, arena, child, raw);
             ptr += sprintf(ptr, "%s", child_str);
             if (child->next)
                 ptr += sprintf(ptr, ",");
@@ -489,7 +494,7 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
         ptr += sprintf(ptr, "[");
         Json *child = item->child;
         while (child) {
-            char *child_str = json_to_string_with_opts(arena, child, raw);
+            char *child_str = json_to_string_with_opts__(file, func, line, arena, child, raw);
             ptr += sprintf(ptr, "%s", child_str);
             if (child->next)
                 ptr += sprintf(ptr, ",");
@@ -508,27 +513,27 @@ char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt
     } else if (item->type == JSON_NULL) {
         sprintf(ptr, "null");
     }
-    raise_debug("Converted JSON to string: %s", out);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Converted JSON to string: %s", out);
     return out;
 }
 
 /* Retrieve an object item by key (case-sensitive) */
-Json *json_get_object_item(const Json * const object, const char * const key) {
-    raise_debug("json_get_object_item: Searching for key \"%s\"", key);
+Json *json_get_object_item__(const char* file, const char* func, int line, const Json * const object, const char * const key) {
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "json_get_object_item: Searching for key \"%s\"", key);
     if (!object || object->type != JSON_OBJECT) {
-        raise_debug("Invalid object passed to json_get_object_item");
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Invalid object passed to json_get_object_item");
         return NULL;
     }
     Json *child = object->child;
     while (child) {
-        raise_debug("Comparing child key \"%s\" with \"%s\"", child->key, key);
+        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Comparing child key \"%s\" with \"%s\"", child->key, key);
         if (child->key && strcmp(child->key, key) == 0) {
-            raise_debug("Key \"%s\" found", key);
+            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Key \"%s\" found", key);
             return child;
         }
         child = child->next;
     }
-    raise_debug("Key \"%s\" not found in object", key);
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Key \"%s\" not found in object", key);
     return NULL;
 }
 
@@ -558,4 +563,154 @@ int* arena_slice_copy__(const char *file, const char *func, int line, Arena *are
     if (copy)
         memcpy(copy, s.data, s.len * s.isize);
     return copy;
+}
+
+// ------------
+// -- debug --
+// ------------
+
+char* slice_to_debug_str(Arena *arena, Slice slice) {
+  // Создадим полную информацию о структуре Slice
+  char buffer_meta[128];
+  snprintf(buffer_meta, sizeof(buffer_meta), "Slice{addr=%p, data=%p, len=%zu, isize=%zu, content=",
+           (void*)&slice, slice.data, slice.len, slice.isize);
+  
+  size_t meta_len = strlen(buffer_meta);
+  
+  // Для NULL-данных выведем простое сообщение
+  if (!slice.data) {
+    char* result = arena_alloc(arena, meta_len + 6);
+    strcpy(result, buffer_meta);
+    strcat(result, "NULL}");
+    return result;
+  }
+  
+  // Allocate buffer with space for quotes, metadata and null terminator
+  size_t buffer_size = meta_len + slice.len * 4 + 20; // Extra space for escaping and closing brace
+  char* buffer = arena_alloc(arena, buffer_size);
+  
+  // Копируем метаданные
+  strcpy(buffer, buffer_meta);
+  char* pos = buffer + meta_len;
+  
+  *pos++ = '"';
+  
+  // Copy slice data with escaping
+  for (size_t i = 0; i < slice.len; i++) {
+    char c = ((char*)slice.data)[i];
+    if (c == '\0') {
+      *pos++ = '\\';
+      *pos++ = '0';
+    } else if (c == '\n') {
+      *pos++ = '\\';
+      *pos++ = 'n';
+    } else if (c == '\r') {
+      *pos++ = '\\';
+      *pos++ = 'r';
+    } else if (c == '\t') {
+      *pos++ = '\\';
+      *pos++ = 't';
+    } else if (c == '"') {
+      *pos++ = '\\';
+      *pos++ = '"';
+    } else if (c == '\\') {
+      *pos++ = '\\';
+      *pos++ = '\\';
+    } else if (c < 32 || c > 126) {
+      // Non-printable characters as hex
+      pos += sprintf(pos, "\\x%02x", (unsigned char)c);
+    } else {
+      *pos++ = c;
+    }
+  }
+  
+  *pos++ = '"';
+  *pos++ = '}'; // Закрывающая скобка для структуры
+  *pos = '\0';
+
+  raise_trace("slice_to_debug_str: %s", buffer);
+  
+  return buffer;
+}
+
+char* json_to_debug_str(Arena *arena, Json json) {
+  // Добавляем информацию о самой структуре JSON
+  char meta_buffer[256];
+  const char* type_str = "";
+  
+  switch (json.type) {
+    case JSON_NULL: type_str = "NULL"; break;
+    case JSON_BOOL: type_str = "BOOL"; break;
+    case JSON_NUMBER: type_str = "NUMBER"; break;
+    case JSON_STRING: type_str = "STRING"; break;
+    case JSON_ARRAY: type_str = "ARRAY"; break;
+    case JSON_OBJECT: type_str = "OBJECT"; break;
+    default: type_str = "UNKNOWN";
+  }
+  
+  snprintf(meta_buffer, sizeof(meta_buffer), "Json{addr=%p, type=%s, key=%s, child=%p, next=%p, value=",
+           (void*)&json, type_str, json.key ? json.key : "NULL", (void*)json.child, (void*)json.next);
+  
+  size_t meta_len = strlen(meta_buffer);
+  char value_buffer[256] = {0};
+  
+  switch (json.type) {
+    case JSON_NULL:
+      strcpy(value_buffer, "null");
+      break;
+    
+    case JSON_BOOL:
+      strcpy(value_buffer, json.JsonValue.boolean ? "true" : "false");
+      break;
+    
+    case JSON_NUMBER:
+      snprintf(value_buffer, sizeof(value_buffer), "%g", json.JsonValue.number);
+      break;
+    
+    case JSON_STRING: {
+      if (!json.JsonValue.string) {
+        strcpy(value_buffer, "null");
+      } else {
+        snprintf(value_buffer, sizeof(value_buffer), "\"%s\"", json.JsonValue.string);
+      }
+      break;
+    }
+    
+    case JSON_ARRAY: {
+      // Для массивов просто отметим количество элементов
+      size_t count = 0;
+      Json *item = json.child;
+      while (item) {
+        count++;
+        item = item->next;
+      }
+      snprintf(value_buffer, sizeof(value_buffer), "[array with %zu elements]", count);
+      break;
+    }
+    
+    case JSON_OBJECT: {
+      // Для объектов отметим количество пар ключ-значение
+      size_t count = 0;
+      Json *item = json.child;
+      while (item) {
+        count++;
+        item = item->next;
+      }
+      snprintf(value_buffer, sizeof(value_buffer), "{object with %zu key-value pairs}", count);
+      break;
+    }
+    
+    default:
+      strcpy(value_buffer, "<UNKNOWN JSON TYPE>");
+  }
+  
+  // Создаем итоговую строку
+  size_t result_len = meta_len + strlen(value_buffer) + 2; // +2 для закрывающей скобки и нулевого символа
+  char* result = arena_alloc(arena, result_len);
+  
+  strcpy(result, meta_buffer);
+  strcat(result, value_buffer);
+  strcat(result, "}");
+  
+  return result;
 }
