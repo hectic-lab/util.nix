@@ -27,7 +27,6 @@ char *eval_string(Arena *arena, const Json * const context, const char * const q
   return json_to_string_with_opts(arena, res, JSON_RAW);
 }
 
-/* Modified: text is passed by reference so we can update it and free old allocations */
 // {{[prefix]key}}
 void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * const context, const char * const prefix) {
   raise_debug("hmpl_render_interpolation_tags(%p, %s, %s)", arena, *text_ptr, prefix);
@@ -58,13 +57,17 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * 
           offset = (end - current_text) + 2;
           continue;
       }
+      
+      // Вычисляем длину замены от начала {{[prefix] до конца }}
+      int replace_length = (end - start) + 2; // +2 для "}}"
+      
       char *new_text = arena_repstr(arena, current_text,
         start_index,
-        end - start + 2,
+        replace_length,
         replacement);
 
-      raise_zalupa("old_text: `%s`", current_text);
-      raise_zalupa("new_text: `%s`", new_text);
+      
+      
 
       *text_ptr = new_text;
       offset = start_index;
@@ -87,14 +90,14 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
     char start_pattern[32];
     snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix_start);
     Slice start_slice = slice_create(char, start_pattern, strlen(start_pattern), 0, strlen(start_pattern));
-    raise_zalupa("start_slice: `%s`", DEBUGSTR(arena, Slice, start_slice));
+    
 
     // Create a mutable copy of separator_pattern
     char separator_copy[32];
     strncpy(separator_copy, separator_pattern, sizeof(separator_copy) - 1);
     separator_copy[sizeof(separator_copy) - 1] = '\0';
     Slice separator_slice = slice_create(char, separator_copy, strlen(separator_copy), 0, strlen(separator_copy));
-    raise_zalupa("separator_slice: `%s`", separator_slice.data);
+    
     if (separator_slice.len == 0) {
         raise_exception("Unexpected usage: separator pattern cannot be empty");
     }
@@ -115,7 +118,7 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
         
         // Find separator
         char *opening_tag_separator = strstr((char*)remaining_slice.data, (char*)separator_slice.data);
-        raise_zalupa("opening_tag_separator: `%s`", opening_tag_separator);
+        
         if (!opening_tag_separator) {
             raise_exception("Malformed template: missing separator for section tag or not specified name for element");
             exit(1);
@@ -125,11 +128,11 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
         size_t separator_index = opening_tag_separator - (char*)remaining_slice.data - strlen(start_slice.data);
         size_t element_name_start = start_slice.len;
         size_t element_name_length = separator_index;
-        raise_zalupa("element_name_length: %zu", element_name_length);
+        
 
         char *element_name = arena_alloc(arena, element_name_length + 1);
         substr_clone((char*)remaining_slice.data, element_name, element_name_start, element_name_length);
-        raise_zalupa("element_name: `%s`", element_name);
+        
 
         // Find closing braces
         Slice after_separator = slice_subslice(remaining_slice, separator_index + separator_slice.len, 
@@ -145,19 +148,20 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
         size_t key_length = opening_tag_end - (char*)after_separator.data - strlen(start_slice.data);
         char *key = arena_alloc(arena, key_length + 1);
         substr_clone((char*)after_separator.data, key, key_start, key_length);
-        raise_zalupa("key: `%s`", key);
+        
         key[key_length] = '\0';
 
-        // +2 for "{{" and "}}"
-        char *close_tag_pattern = arena_alloc(arena, start_slice.len + key_length + strlen(prefix_end) + 2);
+        // +2 for "{{" and "}}" + 1 for null terminator
+        size_t close_tag_pattern_length = key_length + strlen(prefix_end) + 2 + 2 + 1;
+        char *close_tag_pattern = arena_alloc(arena, close_tag_pattern_length);
         snprintf(
           close_tag_pattern,
-          start_slice.len + key_length + strlen(prefix_end) + 2, 
+          close_tag_pattern_length,
           "{{%s%s}}",
           prefix_end,
           key
         );
-        raise_zalupa("close_tag_pattern: `%s`", close_tag_pattern);
+        
 
         size_t after_opening_end = (opening_tag_end - (char*)after_separator.data) + 2;
         Slice after_opening_slice = slice_subslice(
@@ -165,11 +169,11 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
           after_opening_end, 
           after_separator.len - after_opening_end
         );
-        raise_zalupa("after_opening_slice: `%s`", after_opening_slice.data);
+        
         
         // Find the exact closing tag by directly searching for the closing tag pattern
         char *close_tag = strstr(after_opening_slice.data, close_tag_pattern);
-        raise_zalupa("close_tag: `%s` (%p)", close_tag, close_tag);
+        
         
         if (!close_tag) {
             raise_exception("Malformed template: missing loop end for key %s", key);
@@ -178,7 +182,7 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
 
         // Get array from context
         Json *arr = eval_object(arena, context, key);
-        raise_zalupa("arr: %s", json_to_string(arena, arr));
+        
 
         if (arr && arr->type == JSON_ARRAY) {
             // Count array elements
@@ -194,7 +198,7 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
             char *block_buff = arena_alloc(arena, block_length + 1);
             substr_clone((char*)after_opening_slice.data, block_buff, 0, block_length);
             block_buff[block_length] = '\0';
-            raise_zalupa("block_buff: `%s`", block_buff);
+            
 
             // Process each array element
             for (Json *elem = arr->child; elem; elem = elem->next) {
@@ -202,7 +206,7 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
                 
                 char *prefix = arena_alloc(arena, element_name_length + 2);
                 snprintf(prefix, element_name_length + 2, "%s.", element_name);
-                raise_zalupa("prefix: `%s`", prefix);
+                
 
                 hmpl_render_interpolation_tags(arena, &block, elem, prefix);
                 raise_trace("block after: %s", block);
@@ -213,16 +217,18 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
             }
 
             replacement[replacement_offset] = '\0';
-            raise_zalupa("replacement: %s", replacement);
+            
 
             // Calculate replacement positions
             size_t replace_start = start_index;
             size_t replace_length = (close_tag - opening_tag_start) + strlen(close_tag_pattern);
-            raise_zalupa("replace_length: %zu = %zu - %zu + %zu", replace_length, (size_t)close_tag, start_index, strlen(close_tag_pattern));
+            
+            
+            
 
             // Perform replacement
             char *new_text = arena_repstr(arena, (char*)text_slice.data, replace_start, replace_length, replacement);
-            raise_zalupa("new_text: `%s`", new_text);
+            
             *text_ptr = new_text;
             
             // Update text slice
