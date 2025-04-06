@@ -74,12 +74,13 @@ void set_output_color_mode(ColorMode mode);
 
 typedef enum {
   LOG_LEVEL_TRACE,
+  LOG_LEVEL_ZALUPA,
   LOG_LEVEL_DEBUG,
   LOG_LEVEL_LOG,
   LOG_LEVEL_INFO,
   LOG_LEVEL_NOTICE,
   LOG_LEVEL_WARN,
-  LOG_LEVEL_EXCEPTION
+  LOG_LEVEL_EXCEPTION,
 } LogLevel;
 
 void logger_level_reset();
@@ -136,6 +137,12 @@ char* raise_message(LogLevel level, const char *file, const char *func, int line
 #define raise_exception(...) ((void)0)
 #else
 #define raise_exception(...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_ZALUPA
+#define raise_zalupa(...) ((void)0)
+#else
+#define raise_zalupa(...) raise_message(LOG_LEVEL_ZALUPA, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
 // -----------
@@ -244,14 +251,18 @@ typedef struct Json {
     } JsonValue;
 } Json;
 
-Json *json_parse(Arena *arena, const char **s);
+#define json_parse(arena, s) json_parse__(__FILE__, __func__, __LINE__, arena, s)
+Json *json_parse__(const char* file, const char* func, int line, Arena *arena, const char **s);
 
-char *json_to_string(Arena *arena, const Json * const item);
+#define json_to_string(arena, item) json_to_string__(__FILE__, __func__, __LINE__, arena, item)
+char *json_to_string__(const char* file, const char* func, int line, Arena *arena, const Json * const item);
 
-char *json_to_string_with_opts(Arena *arena, const Json * const item, JsonRawOpt raw);
+#define json_to_string_with_opts(arena, item, raw) json_to_string_with_opts__(__FILE__, __func__, __LINE__, arena, item, raw)
+char *json_to_string_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw);
 
 /* Retrieve an object item by key (case-sensitive) */
-Json *json_get_object_item(const Json * const object, const char * const key);
+#define json_get_object_item(object, key) json_get_object_item__(__FILE__, __func__, __LINE__, object, key)
+Json *json_get_object_item__(const char* file, const char* func, int line, const Json * const object, const char * const key);
 
 // -----------
 // -- Slice --
@@ -298,5 +309,14 @@ int* arena_slice_copy__(const char *file, const char *func, int line, Arena *are
     }                                                               \
     buf;                                                            \
 })
+
+// Utility functions for debug output of Slice and Json structures
+char* slice_to_debug_str(Arena *arena, Slice slice);
+char* json_to_debug_str(Arena *arena, Json json);
+
+#define DEBUGSTR(arena, type, value) DEBUGSTR_##type(arena, value)
+
+#define DEBUGSTR_Slice(arena, value) slice_to_debug_str(arena, value)
+#define DEBUGSTR_Json(arena, value)  json_to_debug_str(arena, value)
 
 #endif // EPRINTF_H
