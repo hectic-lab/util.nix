@@ -74,12 +74,20 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * 
 // {{item#array}}...{{/array}}
 void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, const char * const prefix_start, const char * const prefix_end, const char * const separator_pattern) {
     raise_debug("hmpl_render_section_tags(%p, %s, <optimized>, %s, %s, %s)", arena, *text_ptr, prefix_start, prefix_end, separator_pattern);
+
+    // prefix_start and prefix_end must be different
+    assert(strcmp(prefix_start, prefix_end) != 0);
+
+    // prefix_start, prefix_end and separator_pattern must be less than 28 characters
+    assert(strlen(prefix_start) < 28);
+    assert(0 < strlen(separator_pattern) && strlen(prefix_end) < 28);
+    assert(0 < strlen(separator_pattern) && strlen(separator_pattern) < 28);
     
     // Create search patterns
     char start_pattern[32];
     snprintf(start_pattern, sizeof(start_pattern), "{{%s", prefix_start);
     Slice start_slice = slice_create(char, start_pattern, strlen(start_pattern), 0, strlen(start_pattern));
-    raise_zalupa("start_slice: `%s`", start_slice.data);
+    raise_zalupa("start_slice: `%s`", DEBUGSTR(arena, Slice, start_slice));
 
     // Create a mutable copy of separator_pattern
     char separator_copy[32];
@@ -214,6 +222,7 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
 
             // Perform replacement
             char *new_text = arena_repstr(arena, (char*)text_slice.data, replace_start, replace_length, replacement);
+            raise_zalupa("new_text: `%s`", new_text);
             *text_ptr = new_text;
             
             // Update text slice

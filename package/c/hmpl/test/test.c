@@ -4,6 +4,44 @@
 #include "hmpl.h"
 #include "hectic.h"
 
+// --------------------------------
+// -- Single key evaluation test --
+// --------------------------------
+
+void test_eval_single_level_key(Arena *arena) {
+    raise_notice("Testing single level key evaluation");
+    const char *context_text = arena_strdup(arena, "{\"name\": \"world\"}");
+    Json *context = json_parse(arena, &context_text);
+    if (!context) { raise_exception("Malformed json"); exit(1); }
+
+    char *result = eval_string(arena, context, "name");
+    raise_notice("Context: %s", json_to_string(arena, context));
+    raise_notice("Query: name");
+    raise_notice("Result: %s", result);
+    assert(result && strcmp(result, "world") == 0);
+}
+
+// --------------------------------
+// -- Nested key evaluation test --
+// --------------------------------
+
+void test_eval_nested_key(Arena *arena) {
+    raise_notice("Testing nested key evaluation");
+    const char *context_text = arena_strdup(arena, "{\"person\": {\"name\": \"Alice\"}}");
+    Json *context = json_parse(arena, &context_text);
+    if (!context) { raise_exception("Malformed json"); exit(1); }
+
+    char *result = eval_string(arena, context, "person.name");
+    raise_notice("Context: %s", json_to_string(arena, context));
+    raise_notice("Query: person.name");
+    raise_notice("Result: %s", result);
+    assert(result && strcmp(result, "Alice") == 0);
+}
+
+// -----------------------------
+// -- Interpolation tags test --
+// -----------------------------
+
 #define TEST_DATA_INTERPOLATION_CONTEXT        \
   "{\n"                                        \
   "  \"persona\": {\n"                         \
@@ -67,6 +105,25 @@
       "Home Phone: 555-1234\n"         \
       "Mobile Phone: 555-5678\n"
 
+void test_render_interpolation_tags(Arena *arena) {
+    raise_notice("Testing interpolation tags without prefix");
+    const char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_CONTEXT);
+    Json *context = json_parse(arena, &context_text);
+    if (!context) { raise_exception("Malformed json"); exit(1); }
+
+    char *text = arena_strdup(arena, TEST_DATA_INTERPOLATION_TEMPLATE); 
+    raise_notice("Template:\n%s", text);
+    raise_notice("Context: %s", json_to_string(arena, context));
+
+    hmpl_render_interpolation_tags(arena, &text, context, "");
+    raise_notice("Result:\n%s", text);
+    assert(strcmp(text, TEST_DATA_INTERPOLATION_RESULT) == 0);
+}
+
+// -----------------------------------------------------
+// -- Interpolation tags test with prefix `{{.name}}` --
+// -----------------------------------------------------
+
 #define TEST_DATA_INTERPOLATION_WITH_PREFIX_CONTEXT \
   TEST_DATA_INTERPOLATION_CONTEXT
 
@@ -91,6 +148,26 @@
 #define TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT \
   TEST_DATA_INTERPOLATION_RESULT
 
+
+void test_render_interpolation_tags_with_prefix(Arena *arena) {
+    raise_notice("Testing interpolation tags with prefix");
+    const char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_WITH_PREFIX_CONTEXT);
+    Json *context = json_parse(arena, &context_text);
+    if (!context) { raise_exception("Malformed json"); exit(1); }
+
+    char *text = arena_strdup(arena, TEST_DATA_INTERPOLATION_WITH_PREFIX_TEMPLATE); 
+    raise_notice("Template:\n%s", text);
+    raise_notice("Context: %s", json_to_string(arena, context));
+
+    hmpl_render_interpolation_tags(arena, &text, context, ".");
+    raise_notice("Result:\n%s", text);
+    assert(strcmp(text, TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT) == 0);
+}
+
+// ----------------------------------------------------------
+// -- Section tags test  `{{#element array}}...{{/array}}` --
+// ----------------------------------------------------------
+
 #define TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT   \
   "{"                                                \
   "  \"array\": ["                                   \
@@ -108,79 +185,6 @@
 #define TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT \
   "  value1  value2  value3"
 
-#define TEST_DATA_COMPLEX_SECTION_ITERATION_CONTEXT \
-  "{"                                               \
-  "  \"users\": ["                                  \
-  "    { \"name\": \"John\", \"age\": 30 },"       \
-  "    { \"name\": \"Jane\", \"age\": 25 }"        \
-  "  ]"                                             \
-  "}"
-
-#define TEST_DATA_COMPLEX_SECTION_ITERATION_TEMPLATE \
-  "{{#user users}}"                                \
-  "  Name: {{user.name}}, Age: {{user.age}}\n"     \
-  "{{/users}}"
-
-#define TEST_DATA_COMPLEX_SECTION_ITERATION_RESULT \
-  "  Name: John, Age: 30\n"                       \
-  "  Name: Jane, Age: 25\n"
-
-void test_eval_single_level_key(Arena *arena) {
-    raise_notice("Testing single level key evaluation");
-    const char *context_text = arena_strdup(arena, "{\"name\": \"world\"}");
-    Json *context = json_parse(arena, &context_text);
-    if (!context) { raise_exception("Malformed json"); exit(1); }
-
-    char *result = eval_string(arena, context, "name");
-    raise_notice("Context: %s", json_to_string(arena, context));
-    raise_notice("Query: name");
-    raise_notice("Result: %s", result);
-    assert(result && strcmp(result, "world") == 0);
-}
-
-void test_eval_nested_key(Arena *arena) {
-    raise_notice("Testing nested key evaluation");
-    const char *context_text = arena_strdup(arena, "{\"person\": {\"name\": \"Alice\"}}");
-    Json *context = json_parse(arena, &context_text);
-    if (!context) { raise_exception("Malformed json"); exit(1); }
-
-    char *result = eval_string(arena, context, "person.name");
-    raise_notice("Context: %s", json_to_string(arena, context));
-    raise_notice("Query: person.name");
-    raise_notice("Result: %s", result);
-    assert(result && strcmp(result, "Alice") == 0);
-}
-
-void test_render_interpolation_tags(Arena *arena) {
-    raise_notice("Testing interpolation tags without prefix");
-    const char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_CONTEXT);
-    Json *context = json_parse(arena, &context_text);
-    if (!context) { raise_exception("Malformed json"); exit(1); }
-
-    char *text = arena_strdup(arena, TEST_DATA_INTERPOLATION_TEMPLATE); 
-    raise_notice("Template:\n%s", text);
-    raise_notice("Context: %s", json_to_string(arena, context));
-
-    hmpl_render_interpolation_tags(arena, &text, context, "");
-    raise_notice("Result:\n%s", text);
-    assert(strcmp(text, TEST_DATA_INTERPOLATION_RESULT) == 0);
-}
-
-void test_render_interpolation_tags_with_prefix(Arena *arena) {
-    raise_notice("Testing interpolation tags with prefix");
-    const char *context_text = arena_strdup(arena, TEST_DATA_INTERPOLATION_WITH_PREFIX_CONTEXT);
-    Json *context = json_parse(arena, &context_text);
-    if (!context) { raise_exception("Malformed json"); exit(1); }
-
-    char *text = arena_strdup(arena, TEST_DATA_INTERPOLATION_WITH_PREFIX_TEMPLATE); 
-    raise_notice("Template:\n%s", text);
-    raise_notice("Context: %s", json_to_string(arena, context));
-
-    hmpl_render_interpolation_tags(arena, &text, context, ".");
-    raise_notice("Result:\n%s", text);
-    assert(strcmp(text, TEST_DATA_INTERPOLATION_WITH_PREFIX_RESULT) == 0);
-}
-
 void test_render_section_tags(Arena *arena) {
     raise_notice("Testing simple section tags");
     const char *context_text = arena_strdup(arena, TEST_DATA_SIMPLE_SECTION_ITERATION_CONTEXT);
@@ -196,6 +200,27 @@ void test_render_section_tags(Arena *arena) {
     assert(strcmp(text, TEST_DATA_SIMPLE_SECTION_ITERATION_RESULT) == 0);
 }
 
+// ------------------------------------------------------------
+// -- Section tags test  `{{user@users}}...{{#users}}` --
+// ------------------------------------------------------------
+
+#define TEST_DATA_COMPLEX_SECTION_ITERATION_CONTEXT \
+  "{"                                               \
+  "  \"users\": ["                                  \
+  "    { \"name\": \"John\", \"age\": 30 },"       \
+  "    { \"name\": \"Jane\", \"age\": 25 }"        \
+  "  ]"                                             \
+  "}"
+
+#define TEST_DATA_COMPLEX_SECTION_ITERATION_TEMPLATE \
+  "{{user@users}}"                                \
+  "  Name: {{user.name}}, Age: {{user.age}}\n"     \
+  "{{#users}}"
+
+#define TEST_DATA_COMPLEX_SECTION_ITERATION_RESULT \
+  "  Name: John, Age: 30\n"                       \
+  "  Name: Jane, Age: 25\n"
+
 void test_render_complex_section_tags(Arena *arena) {
     raise_notice("Testing complex section tags");
     const char *context_text = arena_strdup(arena, TEST_DATA_COMPLEX_SECTION_ITERATION_CONTEXT);
@@ -206,10 +231,14 @@ void test_render_complex_section_tags(Arena *arena) {
     raise_notice("Template:\n%s", text);
     raise_notice("Context: %s", json_to_string(arena, context));
 
-    hmpl_render_section_tags(arena, &text, context, "#", "/", " ");
+    hmpl_render_section_tags(arena, &text, context, "", "#", "@");
     raise_notice("Result:\n%s", text);
     assert(strcmp(text, TEST_DATA_COMPLEX_SECTION_ITERATION_RESULT) == 0);
 }
+
+// ------------------------
+// -- Main test function --
+// ------------------------
 
 int main(void) {
     init_logger();
