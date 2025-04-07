@@ -140,7 +140,7 @@
         shells = self.devShells.${system};
       in {
         c = pkgs.mkShell {
-          buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ hectic nvim-pager watch ]);
+          buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ c-hectic nvim-pager watch ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
         };
         default = pkgs.mkShell {

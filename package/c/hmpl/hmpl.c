@@ -1,7 +1,7 @@
 #include "hmpl.h"
 
 Json *eval_object(Arena *arena, const Json * const context, const char * const query) {
-  raise_debug("eval_object(%p, %s, %s)", arena, json_to_string(arena, context), query);
+  raise_debug("eval_object(%p, %s, %s)", arena, json_to_string(DISPOSABLE_ARENA, context), query);
   if (!context || !query) return NULL;
 
   const Json *res = context;
@@ -9,14 +9,14 @@ Json *eval_object(Arena *arena, const Json * const context, const char * const q
 
   while ((dot = strchr(key, '.')) != NULL) {
     *dot = '\0';
-    raise_debug("res: %s, key: %s, query: %s", json_to_string(arena, res), key, query);
+    raise_debug("eval_object: key: %s", key);
     res = json_get_object_item(res, key);
     if (!res)
       return NULL;
     key = dot + 1;
   }
 
-  raise_debug("res: %s, key: %s, query: %s", json_to_string(arena, res), key, query);
+  raise_debug("eval_object: final key: %s", key);
   return json_get_object_item(res, key);
 }
 
@@ -58,8 +58,8 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * 
           continue;
       }
       
-      // Вычисляем длину замены от начала {{[prefix] до конца }}
-      int replace_length = (end - start) + 2; // +2 для "}}"
+      // Calculate the replacement length from the beginning of {{[prefix] to the end }}
+      int replace_length = (end - start) + 2; // +2 for "}}"
       
       char *new_text = arena_repstr(arena, current_text,
         start_index,
@@ -72,6 +72,10 @@ void hmpl_render_interpolation_tags(Arena *arena, char **text_ptr, const Json * 
       *text_ptr = new_text;
       offset = start_index;
   }
+}
+
+void hmpl_render_interpolation_tags_opts(Arena *arena, char **text_ptr, const Json *context, const HmplInterpolationTagsOptions *options) {
+  hmpl_render_interpolation_tags(arena, text_ptr, context, options->prefix);
 }
 
 // {{item#array}}...{{/array}}
@@ -207,9 +211,15 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
                 char *prefix = arena_alloc(arena, element_name_length + 2);
                 snprintf(prefix, element_name_length + 2, "%s.", element_name);
                 
+                raise_debug("Processing element with prefix: %s", prefix);
+                raise_debug("Block before processing: %s", block);
 
                 hmpl_render_interpolation_tags(arena, &block, elem, prefix);
-                raise_trace("block after: %s", block);
+                raise_debug("Block after interpolation: %s", block);
+                
+                // Recursively process nested sections
+                hmpl_render_section_tags(arena, &block, elem, prefix_start, prefix_end, separator_pattern);
+                raise_debug("Block after section processing: %s", block);
                 
                 size_t block_len = strlen(block);
                 memcpy(replacement + replacement_offset, block, block_len);
@@ -239,19 +249,25 @@ void hmpl_render_section_tags(Arena *arena, char **text_ptr, Json *context, cons
     }
 }
 
-void hmpl_render_with_arena(Arena *arena, char **text, const Json * const context) {
+void hmpl_render_section_tags_opts(Arena *arena, char **text_ptr, const Json *context, const HmplSectionTagsOptions *options) {
+  // Create a copy of the context without const qualifier for compatibility with hmpl_render_section_tags
+  hmpl_render_section_tags(arena, text_ptr, (Json*)context, options->prefix_start, options->prefix_end, options->separator_pattern);
+}
+
+void hmpl_render_with_arena(Arena *arena, char **text, const Json * const context, const HmplOptions * const options) {
   if (context->type != JSON_OBJECT) {
     raise_exception("Malformed context: context is not json");
     exit(1);
   }
 
-  hmpl_render_interpolation_tags(arena, text, context, "");
+  hmpl_render_interpolation_tags_opts(arena, text, context, &options->interpolation_tags_options);
+  hmpl_render_section_tags_opts(arena, text, context, &options->section_tags_options);
 }
 
-void hmpl_render(char **text, const Json * const context) {
+void hmpl_render(char **text, const Json * const context, const HmplOptions * const options) {
   Arena arena = arena_init(MEM_MiB);
 
-  hmpl_render_with_arena(&arena, text, context);
+  hmpl_render_with_arena(&arena, text, context, options);
 
   arena_free(&arena);
 }
