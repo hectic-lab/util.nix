@@ -83,7 +83,6 @@ void test_slice_string() {
 }
 
 int main() {
-    set_output_color_mode(COLOR_MODE_DISABLE);
     logger_level(LOG_LEVEL_DEBUG);
 
     test_slice_create();
@@ -92,6 +91,6 @@ int main() {
     test_slice_edge_cases();
     test_slice_string();
     
-    printf("%s all tests passed.\n", __FILE__);
+    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }

@@ -26,7 +26,7 @@
 } while(0)
 
 int main(void) {
-    set_output_color_mode(COLOR_MODE_DISABLE);
+    logger_level(LOG_LEVEL_DEBUG);
 
     TEST_RAISE_GENERIC(raise_debug, LOG_LEVEL_DEBUG, "DEBUG");
     TEST_RAISE_GENERIC(raise_log,   LOG_LEVEL_LOG,   "LOG");
@@ -35,6 +35,6 @@ int main(void) {
     TEST_RAISE_GENERIC(raise_warn,  LOG_LEVEL_WARN, "WARN");
     TEST_RAISE_GENERIC(raise_exception,  LOG_LEVEL_EXCEPTION, "EXCEPTION");
 
-    printf("%s all tests passed.\n", __FILE__);
+    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }

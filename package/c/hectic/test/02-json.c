@@ -124,6 +124,8 @@ static void test_arena_reset_reuse(void) {
 }
 
 int main(void) {
+    logger_level(LOG_LEVEL_DEBUG);
+
     test_parse_json_object();
     test_parse_json_number();
     test_parse_json_string();
@@ -134,6 +136,6 @@ int main(void) {
     test_nested_json_object();
     test_arena_reset_reuse();
 
-    printf("%s all tests passed.\n", __FILE__);
+    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }
