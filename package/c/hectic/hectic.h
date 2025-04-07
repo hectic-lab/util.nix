@@ -32,8 +32,10 @@ typedef enum {
   COLOR_MODE_DISABLE
 } ColorMode;
 
-// Static color mode variable
-static ColorMode color_mode __attribute__((unused)) = COLOR_MODE_AUTO;
+// External color mode variable declaration
+extern ColorMode color_mode;
+
+const char* color_mode_to_string(ColorMode mode);
 
 // Function to set color mode
 void set_output_color_mode(ColorMode mode);
@@ -72,15 +74,59 @@ void set_output_color_mode(ColorMode mode);
 // -- Logger --
 // ------------
 
+/**
+ * Log levels following a consistent severity-based hierarchy.
+ * Each level includes specific guidance on when it should be used.
+ */
 typedef enum {
+  /**
+   * TRACE: Most detailed information for in-depth debugging
+   * Use for: Deep diagnostic details, function entry/exit, variable dumps
+   * Visibility: Development environments only, rarely used in production
+   */
   LOG_LEVEL_TRACE,
-  LOG_LEVEL_ZALUPA,
+  
+  /**
+   * DEBUG: Detailed information useful during development
+   * Use for: Development-time debugging, showing variable states, internal flows
+   * Visibility: Development and debugging environments, rarely in production
+   */
   LOG_LEVEL_DEBUG,
+  
+  /**
+   * LOG: General operational events
+   * Use for: Runtime events worth logging but not requiring attention
+   * Visibility: Always written to logs, useful for auditing/diagnostics
+   */
   LOG_LEVEL_LOG,
+  
+  /**
+   * INFO: Informational messages highlighting progress
+   * Use for: Normal but noteworthy events, state changes, startup/shutdown events
+   * Visibility: Visible to client applications if configured
+   */
   LOG_LEVEL_INFO,
+  
+  /**
+   * NOTICE: More important events than INFO, but not warnings
+   * Use for: Important state changes, significant operations, configuration changes
+   * Visibility: Displayed to client by default, meant to be seen
+   */
   LOG_LEVEL_NOTICE,
+  
+  /**
+   * WARN: Potential problems that don't prevent normal operation
+   * Use for: Unexpected behaviors, deprecated feature usage, recoverable errors
+   * Visibility: Alerts both client and server logs, needs attention
+   */
   LOG_LEVEL_WARN,
-  LOG_LEVEL_EXCEPTION,
+  
+  /**
+   * EXCEPTION: Serious errors requiring immediate attention
+   * Use for: Critical failures, data loss risks, business rule violations
+   * Visibility: Highest priority, often leads to operation termination
+   */
+  LOG_LEVEL_EXCEPTION
 } LogLevel;
 
 void logger_level_reset();
@@ -91,6 +137,17 @@ void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
 
+/**
+ * Core logging function that formats and outputs log messages.
+ * 
+ * @param level Severity level of the message
+ * @param file Source file where log was generated
+ * @param func Function where log was generated
+ * @param line Line number where log was generated
+ * @param format Printf-style format string
+ * @param ... Variable arguments for format string
+ * @return Timestamp string for the log message
+ */
 char* raise_message(LogLevel level, const char *file, const char *func, int line, const char *format, ...);
 
 #ifndef PRECOMPILED_LOG_LEVEL
@@ -139,11 +196,24 @@ char* raise_message(LogLevel level, const char *file, const char *func, int line
 #define raise_exception(...) raise_message(LOG_LEVEL_EXCEPTION, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
 #endif
 
-#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_ZALUPA
-#define raise_zalupa(...) ((void)0)
-#else
-#define raise_zalupa(...) raise_message(LOG_LEVEL_ZALUPA, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
-#endif
+// ----------
+// -- misc --
+// ----------
+
+#define MEM_b   1
+#define MEM_KiB 1024
+#define MEM_MiB (MEM_KiB * 1024)
+#define MEM_GiB (MEM_MiB * 1024)
+#define MEM_TiB (MEM_TiB * 1024)
+#define MEM_PiB (MEM_TiB * 1024)
+#define MEM_EiB (MEM_PiB * 1024)
+#define MEM_ZiB (MEM_EiB * 1024)
+#define MEM_YiB (MEM_ZiB * 1024)
+#define MEM_RiB (MEM_YiB * 1024)
+#define MEM_QiB (MEM_RiB * 1024)
+
+void substr_clone__(const char *file, const char *func, int line, const char * const src, char *dest, size_t from, size_t len);
+#define substr_clone(src, dest, from, len) substr_clone__(__FILE__, __func__, __LINE__, src, dest, from, len)
 
 // -----------
 // -- arena --
@@ -201,24 +271,17 @@ void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *
 #define arena_realloc_copy(arena, old_ptr, old_size, new_size) \
 	arena_realloc_copy__(__FILE__, __func__, __LINE__, arena, old_ptr, old_size, new_size)
 
-// ----------
-// -- misc --
-// ----------
 
-#define MEM_b   1
-#define MEM_KiB 1024
-#define MEM_MiB (MEM_KiB * 1024)
-#define MEM_GiB (MEM_MiB * 1024)
-#define MEM_TiB (MEM_TiB * 1024)
-#define MEM_PiB (MEM_TiB * 1024)
-#define MEM_EiB (MEM_PiB * 1024)
-#define MEM_ZiB (MEM_EiB * 1024)
-#define MEM_YiB (MEM_ZiB * 1024)
-#define MEM_RiB (MEM_YiB * 1024)
-#define MEM_QiB (MEM_RiB * 1024)
+static Arena disposable_arena __attribute__((unused)) = {0};
 
-void substr_clone__(const char *file, const char *func, int line, const char * const src, char *dest, size_t from, size_t len);
-#define substr_clone(src, dest, from, len) substr_clone__(__FILE__, __func__, __LINE__, src, dest, from, len)
+#define DISPOSABLE_ARENA __extension__ ({  \
+    if (disposable_arena.begin == NULL) {  \
+        disposable_arena = arena_init__(__FILE__, __func__, __LINE__, MEM_MiB); \
+    } else { \
+        arena_reset(&disposable_arena); \
+    } \
+    &disposable_arena; \
+})
 
 // ----------
 // -- Json --
@@ -309,6 +372,10 @@ int* arena_slice_copy__(const char *file, const char *func, int line, Arena *are
     }                                                               \
     buf;                                                            \
 })
+
+// ------------
+// -- Debug --
+// ------------
 
 // Utility functions for debug output of Slice and Json structures
 char* slice_to_debug_str(Arena *arena, Slice slice);

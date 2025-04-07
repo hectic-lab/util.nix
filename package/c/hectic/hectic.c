@@ -1,6 +1,25 @@
 #include "hectic.h"
 
+// Global color mode variable definition
+ColorMode color_mode = COLOR_MODE_AUTO;
+
+const char* color_mode_to_string(ColorMode mode) {
+    switch (mode) {
+        case COLOR_MODE_AUTO: return "AUTO";
+        case COLOR_MODE_FORCE: return "FORCE";
+        case COLOR_MODE_DISABLE: return "DISABLE";
+        default: return "UNKNOWN";
+    }
+}
+
 void set_output_color_mode(ColorMode mode) {
+    // Log the color mode change
+    const char* mode_name = color_mode_to_string(mode);
+    
+    // Using fprintf since this might be called before logging is initialized
+    raise_message(LOG_LEVEL_INFO, __FILE__, __func__, __LINE__, "CONFIG: Setting output color mode to %s", mode_name);
+    
+    // Set the mode
     color_mode = mode;
 }
 
@@ -11,7 +30,6 @@ void set_output_color_mode(ColorMode mode) {
 const char* log_level_to_string(LogLevel level) {
     switch (level) {
         case LOG_LEVEL_TRACE: return "TRACE";
-        case LOG_LEVEL_ZALUPA: return "ZALUPA";
         case LOG_LEVEL_DEBUG: return "DEBUG";
         case LOG_LEVEL_LOG:  return "LOG";
         case LOG_LEVEL_INFO:  return "INFO";
@@ -25,7 +43,6 @@ const char* log_level_to_string(LogLevel level) {
 const char* log_level_to_color(LogLevel level) {
     switch (level) {
         case LOG_LEVEL_TRACE: return OPTIONAL_COLOR(COLOR_GREEN);
-        case LOG_LEVEL_ZALUPA: return OPTIONAL_COLOR(COLOR_MAGENTA);
         case LOG_LEVEL_DEBUG: return OPTIONAL_COLOR(COLOR_BLUE);
         case LOG_LEVEL_LOG:  return OPTIONAL_COLOR(COLOR_CYAN);
         case LOG_LEVEL_INFO:  return OPTIONAL_COLOR(COLOR_GREEN);
@@ -41,8 +58,6 @@ LogLevel log_level_from_string(const char *level_str) {
     if (!level_str) return LOG_LEVEL_INFO;
     if (strcmp(level_str, "TRACE") == 0)
         return LOG_LEVEL_TRACE;
-    else if (strcmp(level_str, "ZALUPA") == 0)
-        return LOG_LEVEL_ZALUPA;
     else if (strcmp(level_str, "DEBUG") == 0)
         return LOG_LEVEL_DEBUG;
     else if (strcmp(level_str, "LOG") == 0)
@@ -70,7 +85,18 @@ void logger_level(LogLevel level) {
 }
 
 void init_logger(void) {
-    current_log_level = log_level_from_string(getenv("LOG_LEVEL"));
+    // Read log level from environment
+    const char* env_level = getenv("LOG_LEVEL");
+    current_log_level = log_level_from_string(env_level);
+    
+    // Log initialization with appropriate message
+    if (env_level) {
+        fprintf(stderr, "INIT: Logger initialized with level %s from environment\n", 
+                log_level_to_string(current_log_level));
+    } else {
+        fprintf(stderr, "INIT: Logger initialized with default level %s\n", 
+                log_level_to_string(current_log_level));
+    }
 }
 
 char* raise_message(
@@ -80,7 +106,6 @@ char* raise_message(
   int line,
   const char *format,
   ...) {
-    (void)func;
     if (level < current_log_level) {
         return NULL;
     }
@@ -91,8 +116,17 @@ char* raise_message(
     static char timeStr[20];
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tm_info);
 
-    fprintf(stderr, "%s %s%s%s %s:%d ", timeStr, log_level_to_color(level), log_level_to_string(level), OPTIONAL_COLOR(COLOR_RESET), file, line);
+    // Print timestamp, log level with color, location info
+    fprintf(stderr, "%s %s%s%s [%s:%s:%d] ", 
+            timeStr, 
+            log_level_to_color(level), 
+            log_level_to_string(level), 
+            OPTIONAL_COLOR(COLOR_RESET),
+            file,
+            func,
+            line);
 
+    // Print the actual message with variable arguments
     va_list args;
     va_start(args, format);
     vfprintf(stderr, format, args);
@@ -108,85 +142,221 @@ char* raise_message(
 // -----------
 
 Arena arena_init__(const char *file, const char *func, int line, size_t size) {
+    // Function entry logging
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, 
+        "INIT: Creating arena (size: %zu bytes)", size);
+    
     Arena arena;
     arena.begin = malloc(size);
+    
+    // Check for allocation failure
+    if (!arena.begin) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line,
+            "INIT: Failed to allocate memory for arena (requested: %zu bytes)", size);
+        exit(1);
+    }
+    
     memset(arena.begin, 0, size);
     arena.current = arena.begin;
     arena.capacity = size;
-    raise_message(LOG_LEVEL_DEBUG, file, func, line,
-	"Initialized arena at %p with capacity %zu", arena.begin, size);
+    
+    // Success logging at LOG level
+    raise_message(LOG_LEVEL_LOG, file, func, line,
+	"INIT: Arena initialized successfully (address: %p, capacity: %zu bytes)", arena.begin, size);
     return arena;
 }
 
 void* arena_alloc_or_null__(const char *file, const char *func, int line, Arena *arena, size_t size) {
-    raise_message(LOG_LEVEL_TRACE, file, func, line, "arena_alloc_or_null(%p, %zu)", arena, size);
+    // Function entry at TRACE level
+    raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                 "ALLOC: Requesting memory from arena (arena: %p, size: %zu bytes)", arena, size);
+    
     void *mem = NULL;
     if (arena->begin == 0) {
+        raise_message(LOG_LEVEL_DEBUG, file, func, line,
+                     "ALLOC: Arena not initialized, creating new arena");
         *arena = arena_init__(file, func, line, 1024); // ARENA_DEFAULT_SIZE assumed as 1024
     }
+    
     size_t current = (size_t)arena->current - (size_t)arena->begin;
     if (arena->capacity <= current || arena->capacity - current < size) {
-        raise_message(LOG_LEVEL_DEBUG, file, func, line,
-	    "Arena %p (capacity %zu) used %zu cannot allocate %zu bytes",
+        raise_message(LOG_LEVEL_WARN, file, func, line,
+	    "ALLOC: Insufficient memory in arena (address: %p, capacity: %zu bytes, used: %zu bytes, requested: %zu bytes)",
                                arena->begin, arena->capacity, current, size);
 	return NULL;
     } else {
         raise_message(LOG_LEVEL_DEBUG, file, func, line,
-	    "Arena %p (capacity %zu) used %zu will allocate %zu bytes",
+	    "ALLOC: Allocating from arena (address: %p, capacity: %zu bytes, used: %zu bytes, requested: %zu bytes)",
                                arena->begin, arena->capacity, current, size);
         mem = arena->current;
         arena->current = (char*)arena->current + size;
     }
-    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Allocated at %p", mem);
+    
+    // Success logging
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, 
+                 "ALLOC: Memory allocated successfully (address: %p, size: %zu bytes)", mem, size);
     return mem;
 }
 
 void* arena_alloc__(const char *file, const char *func, int line, Arena *arena, size_t size) {
+    // Function entry logging
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, 
+                 "ALLOC: Allocating memory (arena: %p, size: %zu bytes)", arena, size);
+    
     void *mem = arena_alloc_or_null__(file, func, line, arena, size);
     if (!mem) {
         raise_message(LOG_LEVEL_DEBUG, file, func, line, 
-	  "Arena out of memory when trying to allocate %zu bytes", size);
+	  "ALLOC: Allocation failed (arena: %p, requested: %zu bytes)", arena, size);
         raise_message(LOG_LEVEL_EXCEPTION, file, func, line, 
-	  "Arena out of memory");
+	  "ALLOC: Arena out of memory (requested: %zu bytes)", size);
         exit(1);
     }
+    
+    // Success logging
+    raise_message(LOG_LEVEL_LOG, file, func, line,
+                 "ALLOC: Memory allocated successfully (address: %p, size: %zu bytes)", mem, size);
     return mem;
 }
 
 void arena_reset__(const char *file, const char *func, int line, Arena *arena) {
-  arena->current = arena->begin;
+  // Function entry logging
   raise_message(LOG_LEVEL_DEBUG, file, func, line, 
-    "Arena %p reset", arena->begin);
+    "ALLOC: Resetting arena (address: %p)", arena);
+  
+  // Check for NULL arena
+  if (!arena) {
+    raise_message(LOG_LEVEL_WARN, file, func, line,
+      "ALLOC: Attempted to reset NULL arena");
+    return;
+  }
+  
+  // Reset the arena
+  arena->current = arena->begin;
+  
+  // Operation success logging
+  raise_message(LOG_LEVEL_LOG, file, func, line, 
+    "ALLOC: Arena reset successfully (address: %p, capacity: %zu bytes)", 
+    arena->begin, arena->capacity);
 }
 
 void arena_free__(const char *file, const char *func, int line, Arena *arena) {
+  // Function entry logging
   raise_message(LOG_LEVEL_DEBUG, file, func, line,
-    "Freeing arena at %p", arena->begin);
+    "FREE: Releasing arena memory (address: %p)", arena);
+  
+  // Check for NULL arena
+  if (!arena) {
+    raise_message(LOG_LEVEL_WARN, file, func, line,
+      "FREE: Attempted to free NULL arena");
+    return;
+  }
+  
+  // Check for NULL begin pointer
+  if (!arena->begin) {
+    raise_message(LOG_LEVEL_WARN, file, func, line,
+      "FREE: Attempted to free arena with NULL memory block");
+    return;
+  }
+  
+  // Calculate used memory for logging
+  size_t used = (size_t)arena->current - (size_t)arena->begin;
+  
+  // Free the memory
   free(arena->begin);
+  
+  // Success logging
+  raise_message(LOG_LEVEL_LOG, file, func, line,
+    "FREE: Arena released successfully (address: %p, capacity: %zu bytes, used: %zu bytes)",
+    arena->begin, arena->capacity, used);
+    
+  // Clear the pointers
+  arena->begin = NULL;
+  arena->current = NULL;
+  arena->capacity = 0;
 }
 
 char* arena_strdup__(const char *file, const char *func, int line, Arena *arena, const char *s) {
-    char *result;
-    if (s) {
-        size_t len = strlen(s) + 1;
-        result = (char*)arena_alloc__(file, func, line, arena, len);
-        memcpy(result, s, len);
-    } else {
-        result = NULL;
+    // Function entry logging
+    raise_message(LOG_LEVEL_TRACE, file, func, line,
+        "ALLOC: Duplicating string (arena: %p, source: %p, preview: %.20s%s)",
+        arena, s, s ? s : "", s && strlen(s) > 20 ? "..." : "");
+    
+    // Check for NULL string
+    if (!s) {
+        raise_message(LOG_LEVEL_DEBUG, file, func, line,
+            "ALLOC: Source string is NULL, returning NULL");
+        return NULL;
     }
+    
+    // Calculate string length and allocate memory
+    size_t len = strlen(s) + 1;
+    
+    // Success case
+    char *result = (char*)arena_alloc__(file, func, line, arena, len);
+    
+    // Copy the string
+    memcpy(result, s, len);
+    
+    // Success logging
+    raise_message(LOG_LEVEL_DEBUG, file, func, line,
+        "ALLOC: String duplicated successfully (result: %p, length: %zu bytes)", 
+        result, len);
+    
     return result;
 }
 
 char* arena_repstr__(const char *file, const char *func, int line, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep) {
-  raise_message(LOG_LEVEL_TRACE, file, func, line, "arena_repstr__(%p, %p, %zu, \"%s\")", src, start, len, rep);
+  // Function entry logging
+  raise_message(LOG_LEVEL_TRACE, file, func, line, 
+    "STRING: Replacing substring (source: %p, start: %zu, length: %zu, replacement: %.20s%s)", 
+    src, start, len, rep, strlen(rep) > 20 ? "..." : "");
+  
+  // Check inputs
+  if (!src) {
+    raise_message(LOG_LEVEL_WARN, file, func, line,
+      "STRING: Source string is NULL");
+    return NULL;
+  }
+  
+  if (!rep) {
+    raise_message(LOG_LEVEL_WARN, file, func, line,
+      "STRING: Replacement string is NULL");
+    return NULL;
+  }
+  
+  // Calculate lengths
   int src_len = strlen(src);
   int rep_len = strlen(rep);
+  
+  // Validate start and length
+  if (start > (size_t)src_len) {
+    raise_message(LOG_LEVEL_WARN, file, func, line,
+      "STRING: Start position %zu exceeds source length %d", start, src_len);
+    // Return a copy of the source string
+    return arena_strdup__(file, func, line, arena, src);
+  }
+  
+  if (start + len > (size_t)src_len) {
+    size_t old_len = len;
+    len = src_len - start;
+    raise_message(LOG_LEVEL_DEBUG, file, func, line,
+      "STRING: Adjusted length from %zu to %zu to fit source bounds", old_len, len);
+  }
+  
+  // Calculate new length and allocate memory
   int new_len = src_len - (int)len + rep_len;
   char *new_str = (char*)arena_alloc__(file, func, line, arena, new_len + 1);
+  
+  // Perform the replacement operation
   memcpy(new_str, src, start);
   memcpy(new_str + start, rep, rep_len);
   strcpy(new_str + start + rep_len, src + start + len);
+  
+  // Success logging
+  raise_message(LOG_LEVEL_DEBUG, file, func, line,
+    "STRING: Replacement complete (result: %p, new length: %d)", new_str, new_len);
+  
   return new_str;
 }
 
@@ -210,35 +380,65 @@ void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *
 // ----------
 
 void substr_clone__(const char *file, const char *func, int line, const char * const src, char *dest, size_t from, size_t len) {
-    // Log function entry with all parameters.
+    // Log function entry at TRACE level
     raise_message(LOG_LEVEL_TRACE, file, func, line,
-        "substr_cloning(src=\"%s\", src_ptr=%p, dest=%p, from=%zu, len=%zu)",
-        src, src, dest, from, len);
+        "Function called with src=%p, dest=%p, from=%zu, len=%zu",
+        src, dest, from, len);
+
+    if (!src || !dest) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line,
+            "Invalid NULL pointer: %s%s",
+            (!src ? "src " : ""),
+            (!dest ? "dest" : ""));
+        if (dest) dest[0] = '\0';
+        return;
+    }
 
     size_t srclen = strlen(src);
     if (from >= srclen) {
-        // Log warning with context when 'from' is out of range.
+        // Log warning with context when 'from' is out of range
         raise_message(LOG_LEVEL_WARN, file, func, line,
-            "Invalid 'from' index (%zu): exceeds source length (%zu)",
+            "Out of range: 'from' index (%zu) exceeds source length (%zu)",
             from, srclen);
         dest[0] = '\0';
         return;
     }
-    if (from + len > srclen)
-        len = srclen - from;
 
+    // Adjust length if needed
+    if (from + len > srclen) {
+        size_t old_len = len;
+        len = srclen - from;
+        raise_message(LOG_LEVEL_DEBUG, file, func, line,
+            "Adjusted length from %zu to %zu to fit source bounds",
+            old_len, len);
+    }
+
+    // Copy the substring
     strncpy(dest, src + from, len);
     dest[len] = '\0';
 
-    // Log success message with result.
+    // Log success at TRACE level
     raise_message(LOG_LEVEL_TRACE, file, func, line,
-        "Completed substr_cloning: result=\"%s\", copied_length=%zu",
-        dest, len);
+        "Successfully copied %zu bytes: \"%.*s\"",
+        len, (int)len, dest);
 }
 
 // ----------
 // -- Json --
 // ----------
+
+const char* json_type_to_string(JsonType type) {
+    switch (type) {
+        case JSON_NULL: return "NULL";
+        case JSON_BOOL: return "BOOL";
+        case JSON_NUMBER: return "NUMBER";
+        case JSON_STRING: return "STRING";
+        case JSON_ARRAY: return "ARRAY";
+        case JSON_OBJECT: return "OBJECT";
+        default: return "UNKNOWN";
+    }
+}
+
 
 /* Utility: Skip whitespace */
 static const char *skip_whitespace(const char *s) {
@@ -458,9 +658,40 @@ static Json *json_parse_value__(const char *file, const char *func, int line, co
 }
 
 Json *json_parse__(const char* file, const char* func, int line, Arena *arena, const char **s) {
+    // Function entry logging with DEBUG level
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, 
+        "PARSE: Starting JSON parsing (input: %p)", *s);
+    
+    // Check input parameters
+    if (!s || !*s) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line,
+            "PARSE: Invalid input parameters (NULL pointer provided for JSON parsing)");
+        return NULL;
+    }
+    
+    if (!arena) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line,
+            "PARSE: Invalid arena (NULL) provided for JSON parsing");
+        return NULL;
+    }
+    
+    // Show input preview for debugging with TRACE level
+    raise_message(LOG_LEVEL_TRACE, file, func, line,
+        "PARSE: Input preview: '%.20s%s'", *s, strlen(*s) > 20 ? "..." : "");
+    
+    // Process JSON value
     Json *result = json_parse_value__(file, func, line, s, arena);
-    if (!result)
-        raise_message(LOG_LEVEL_DEBUG, file, func, line, "json_parse failed at position: %p", *s);
+    
+    // Log parsing result
+    if (!result) {
+        raise_message(LOG_LEVEL_WARN, file, func, line, 
+            "PARSE: Failed to parse JSON at position %p (context: '%.10s')", 
+            *s, *s && strlen(*s) > 0 ? *s : "<empty>");
+    } else {
+        raise_message(LOG_LEVEL_LOG, file, func, line, 
+            "PARSE: JSON parsing completed successfully (type: %s)", json_type_to_string(result->type));
+    }
+    
     return result;
 }
 
@@ -472,68 +703,185 @@ char *json_to_string__(const char* file, const char* func, int line, Arena *aren
    When raw is non-zero and the item is a JSON_STRING, it is printed without quotes.
 */
 char *json_to_string_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw) {
-    char *out = arena_alloc__(file, func, line, arena, 1024);
-    if (!out) {
-        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Memory allocation failed in json_to_string_with_opts");
+    // Function entry with DEBUG level
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, 
+                  "FORMAT: Starting JSON conversion to string (item: %p, raw_mode: %s)", 
+                  item, raw == JSON_RAW ? "enabled" : "disabled");
+    
+    // Check input parameters
+    if (!item) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line, 
+                     "FORMAT: Invalid JSON object (NULL) provided for string conversion");
         return NULL;
     }
+    
+    if (!arena) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line,
+                     "FORMAT: Invalid arena (NULL) provided for string conversion");
+        return NULL;
+    }
+    
+    // Allocate memory for the string
+    char *out = arena_alloc__(file, func, line, arena, 1024);
+    if (!out) {
+        raise_message(LOG_LEVEL_EXCEPTION, file, func, line, 
+                     "FORMAT: Memory allocation failed during JSON string conversion");
+        return NULL;
+    }
+    
     char *ptr = out;
+    const char* type_name = "unknown";
+    
+    // Formatting based on type
     if (item->type == JSON_OBJECT) {
         ptr += sprintf(ptr, "{");
+        type_name = "object";
+        
         Json *child = item->child;
+        int child_count = 0;
+        
+        raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                      "FORMAT: Processing JSON object children");
+        
         while (child) {
             ptr += sprintf(ptr, "\"%s\":", child->key ? child->key : "");
             char *child_str = json_to_string_with_opts__(file, func, line, arena, child, raw);
-            ptr += sprintf(ptr, "%s", child_str);
-            if (child->next)
+            if (child_str) {
+                ptr += sprintf(ptr, "%s", child_str);
+            } else {
+                raise_message(LOG_LEVEL_WARN, file, func, line, 
+                              "FORMAT: Failed to stringify child element (key=%s)", 
+                              child->key ? child->key : "<null>");
+            }
+            
+            if (child->next) {
                 ptr += sprintf(ptr, ",");
+            }
             child = child->next;
+            child_count++;
         }
+        
         sprintf(ptr, "}");
+        raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                      "FORMAT: Object conversion complete with %d child elements", child_count);
     } else if (item->type == JSON_ARRAY) {
         ptr += sprintf(ptr, "[");
+        type_name = "array";
+        
         Json *child = item->child;
+        int child_count = 0;
+        
+        raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                      "FORMAT: Processing JSON array elements");
+        
         while (child) {
             char *child_str = json_to_string_with_opts__(file, func, line, arena, child, raw);
-            ptr += sprintf(ptr, "%s", child_str);
-            if (child->next)
+            if (child_str) {
+                ptr += sprintf(ptr, "%s", child_str);
+            } else {
+                raise_message(LOG_LEVEL_WARN, file, func, line, 
+                              "FORMAT: Failed to stringify array element at index %d", child_count);
+            }
+            
+            if (child->next) {
                 ptr += sprintf(ptr, ",");
+            }
             child = child->next;
+            child_count++;
         }
+        
         sprintf(ptr, "]");
+        raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                      "FORMAT: Array conversion complete with %d elements", child_count);
     } else if (item->type == JSON_STRING) {
-        if ((int)raw)
-            sprintf(ptr, "%s", item->JsonValue.string);
-        else
-            sprintf(ptr, "\"%s\"", item->JsonValue.string);
+        type_name = "string";
+        if ((int)raw) {
+            sprintf(ptr, "%s", item->JsonValue.string ? item->JsonValue.string : "");
+        } else {
+            sprintf(ptr, "\"%s\"", item->JsonValue.string ? item->JsonValue.string : "");
+        }
     } else if (item->type == JSON_NUMBER) {
+        type_name = "number";
         sprintf(ptr, "%g", item->JsonValue.number);
     } else if (item->type == JSON_BOOL) {
+        type_name = "boolean";
         sprintf(ptr, item->JsonValue.boolean ? "true" : "false");
     } else if (item->type == JSON_NULL) {
+        type_name = "null";
         sprintf(ptr, "null");
     }
-    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Converted JSON to string: %s", out);
+    
+    raise_message(LOG_LEVEL_LOG, file, func, line, 
+                  "FORMAT: JSON %s converted to string (length=%zu)", 
+                  type_name, strlen(out));
+    
     return out;
 }
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item__(const char* file, const char* func, int line, const Json * const object, const char * const key) {
-    raise_message(LOG_LEVEL_DEBUG, file, func, line, "json_get_object_item: Searching for key \"%s\"", key);
-    if (!object || object->type != JSON_OBJECT) {
-        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Invalid object passed to json_get_object_item");
+    raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                 "ACCESS: Searching for key \"%s\" in JSON object %p", 
+                 key ? key : "<null>", object);
+    
+    // Check input parameters
+    if (!object) {
+        raise_message(LOG_LEVEL_WARN, file, func, line, 
+                     "ACCESS: Invalid object (NULL) passed to json_get_object_item");
         return NULL;
     }
-    Json *child = object->child;
-    while (child) {
-        raise_message(LOG_LEVEL_DEBUG, file, func, line, "Comparing child key \"%s\" with \"%s\"", child->key, key);
-        if (child->key && strcmp(child->key, key) == 0) {
-            raise_message(LOG_LEVEL_DEBUG, file, func, line, "Key \"%s\" found", key);
-            return child;
-        }
-        child = child->next;
+    
+    if (!key) {
+        raise_message(LOG_LEVEL_WARN, file, func, line, 
+                     "ACCESS: Invalid key (NULL) passed to json_get_object_item");
+        return NULL;
     }
-    raise_message(LOG_LEVEL_DEBUG, file, func, line, "Key \"%s\" not found in object", key);
+    
+    if (object->type != JSON_OBJECT) {
+        raise_message(LOG_LEVEL_WARN, file, func, line, 
+                     "ACCESS: JSON value is not an object (actual type: %d)", object->type);
+        return NULL;
+    }
+    
+    // Count the total number of keys for debugging
+    int total_keys = 0;
+    Json *debug_scan = object->child;
+    while (debug_scan) {
+        total_keys++;
+        debug_scan = debug_scan->next;
+    }
+    
+    raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                 "ACCESS: Object has %d key-value pairs", total_keys);
+    
+    // Perform key search
+    Json *child = object->child;
+    int position = 0;
+    
+    while (child) {
+        if (child->key) {
+            raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                         "ACCESS: Comparing key \"%s\" with \"%s\" at position %d", 
+                         child->key, key, position);
+            
+            if (strcmp(child->key, key) == 0) {
+                raise_message(LOG_LEVEL_LOG, file, func, line, 
+                             "ACCESS: Found value for key \"%s\" (type: %s)", 
+                             key, json_type_to_string(child->type));
+                return child;
+            }
+        } else {
+            raise_message(LOG_LEVEL_TRACE, file, func, line, 
+                         "ACCESS: Skipping element at position %d with NULL key", position);
+        }
+        
+        child = child->next;
+        position++;
+    }
+    
+    raise_message(LOG_LEVEL_DEBUG, file, func, line, 
+                 "ACCESS: Key \"%s\" not found in object (checked %d items)", 
+                 key, position);
     return NULL;
 }
 
@@ -543,18 +891,54 @@ Json *json_get_object_item__(const char* file, const char* func, int line, const
 
 // Create a slice from an array with boundary check.
 Slice slice_create__(const char *file, const char *func, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
-    raise_message(LOG_LEVEL_TRACE, file, func, line, "slice_create(<optimized>, <optimized>, <optimized>, <optimized>, <optimized>)");
-    if (start + len > array_len)
+    // Function entry logging
+    raise_message(LOG_LEVEL_TRACE, file, func, line, 
+        "SLICE: Creating slice (source: %p, array_length: %zu, start: %zu, length: %zu, item_size: %zu)", 
+        array, array_len, start, len, isize);
+    
+    // Boundary check
+    if (start + len > array_len) {
+        raise_message(LOG_LEVEL_WARN, file, func, line,
+            "SLICE: Slice boundaries exceed array length (start: %zu, length: %zu, array_length: %zu)",
+            start, len, array_len);
         return (Slice){NULL, 0, isize};
-    return (Slice){ (char *)array + start * isize, len, isize };
+    }
+    
+    // Create valid slice
+    Slice result = (Slice){ (char *)array + start * isize, len, isize };
+    
+    // Success logging
+    raise_message(LOG_LEVEL_TRACE, file, func, line,
+        "SLICE: Slice created successfully (data: %p, length: %zu, item_size: %zu)",
+        result.data, result.len, result.isize);
+    
+    return result;
 }
 
 // Return a subslice from an existing slice.
 Slice slice_subslice__(const char *file, const char *func, int line, Slice s, size_t start, size_t len) {
-    raise_message(LOG_LEVEL_TRACE, file, func, line, "slice_subslice(<optimized>, <optimized>, <optimized>)");
-    if (start + len > s.len)
+    // Function entry logging
+    raise_message(LOG_LEVEL_TRACE, file, func, line, 
+        "SLICE: Creating subslice (source: %p, source_length: %zu, start: %zu, length: %zu)", 
+        s.data, s.len, start, len);
+    
+    // Boundary check
+    if (start + len > s.len) {
+        raise_message(LOG_LEVEL_WARN, file, func, line,
+            "SLICE: Subslice boundaries exceed source slice length (start: %zu, length: %zu, source_length: %zu)",
+            start, len, s.len);
         return (Slice){NULL, 0, s.isize};
-    return (Slice){(char*)s.data + start * s.isize, len, s.isize};
+    }
+    
+    // Create valid subslice
+    Slice result = (Slice){(char*)s.data + start * s.isize, len, s.isize};
+    
+    // Success logging
+    raise_message(LOG_LEVEL_TRACE, file, func, line,
+        "SLICE: Subslice created successfully (data: %p, length: %zu, item_size: %zu)",
+        result.data, result.len, result.isize);
+    
+    return result;
 }
 
 int* arena_slice_copy__(const char *file, const char *func, int line, Arena *arena, Slice s) {
@@ -570,14 +954,14 @@ int* arena_slice_copy__(const char *file, const char *func, int line, Arena *are
 // ------------
 
 char* slice_to_debug_str(Arena *arena, Slice slice) {
-  // Создадим полную информацию о структуре Slice
+  // Create complete information about the Slice structure
   char buffer_meta[128];
   snprintf(buffer_meta, sizeof(buffer_meta), "Slice{addr=%p, data=%p, len=%zu, isize=%zu, content=",
            (void*)&slice, slice.data, slice.len, slice.isize);
   
   size_t meta_len = strlen(buffer_meta);
   
-  // Для NULL-данных выведем простое сообщение
+  // For NULL data, output a simple message
   if (!slice.data) {
     char* result = arena_alloc(arena, meta_len + 6);
     strcpy(result, buffer_meta);
@@ -589,7 +973,7 @@ char* slice_to_debug_str(Arena *arena, Slice slice) {
   size_t buffer_size = meta_len + slice.len * 4 + 20; // Extra space for escaping and closing brace
   char* buffer = arena_alloc(arena, buffer_size);
   
-  // Копируем метаданные
+  // Copy metadata
   strcpy(buffer, buffer_meta);
   char* pos = buffer + meta_len;
   
@@ -625,7 +1009,7 @@ char* slice_to_debug_str(Arena *arena, Slice slice) {
   }
   
   *pos++ = '"';
-  *pos++ = '}'; // Закрывающая скобка для структуры
+  *pos++ = '}'; // Closing brace for the structure
   *pos = '\0';
 
   raise_trace("slice_to_debug_str: %s", buffer);
@@ -634,22 +1018,11 @@ char* slice_to_debug_str(Arena *arena, Slice slice) {
 }
 
 char* json_to_debug_str(Arena *arena, Json json) {
-  // Добавляем информацию о самой структуре JSON
+  // Add information about the JSON structure itself
   char meta_buffer[256];
-  const char* type_str = "";
-  
-  switch (json.type) {
-    case JSON_NULL: type_str = "NULL"; break;
-    case JSON_BOOL: type_str = "BOOL"; break;
-    case JSON_NUMBER: type_str = "NUMBER"; break;
-    case JSON_STRING: type_str = "STRING"; break;
-    case JSON_ARRAY: type_str = "ARRAY"; break;
-    case JSON_OBJECT: type_str = "OBJECT"; break;
-    default: type_str = "UNKNOWN";
-  }
   
   snprintf(meta_buffer, sizeof(meta_buffer), "Json{addr=%p, type=%s, key=%s, child=%p, next=%p, value=",
-           (void*)&json, type_str, json.key ? json.key : "NULL", (void*)json.child, (void*)json.next);
+           (void*)&json, json_type_to_string(json.type), json.key ? json.key : "NULL", (void*)json.child, (void*)json.next);
   
   size_t meta_len = strlen(meta_buffer);
   char value_buffer[256] = {0};
@@ -677,7 +1050,7 @@ char* json_to_debug_str(Arena *arena, Json json) {
     }
     
     case JSON_ARRAY: {
-      // Для массивов просто отметим количество элементов
+      // For arrays, simply note the number of elements
       size_t count = 0;
       Json *item = json.child;
       while (item) {
@@ -689,7 +1062,7 @@ char* json_to_debug_str(Arena *arena, Json json) {
     }
     
     case JSON_OBJECT: {
-      // Для объектов отметим количество пар ключ-значение
+      // For objects, note the number of key-value pairs
       size_t count = 0;
       Json *item = json.child;
       while (item) {
@@ -704,8 +1077,8 @@ char* json_to_debug_str(Arena *arena, Json json) {
       strcpy(value_buffer, "<UNKNOWN JSON TYPE>");
   }
   
-  // Создаем итоговую строку
-  size_t result_len = meta_len + strlen(value_buffer) + 2; // +2 для закрывающей скобки и нулевого символа
+  // Create final string
+  size_t result_len = meta_len + strlen(value_buffer) + 2; // +2 for closing brace and null character
   char* result = arena_alloc(arena, result_len);
   
   strcpy(result, meta_buffer);
