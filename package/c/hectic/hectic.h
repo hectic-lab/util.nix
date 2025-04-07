@@ -445,4 +445,72 @@ void logger_print_rules();
  */
 char* logger_rules_to_string(Arena *arena);
 
+// ---------------
+// -- Templater --
+// ---------------
+
+typedef enum {
+    TEMPLATE_NODE_TEXT,        // Plain text content
+    TEMPLATE_NODE_INTERPOLATE, // Variable interpolation
+    TEMPLATE_NODE_SECTION,     // Section (for loops)
+    TEMPLATE_NODE_INCLUDE,     // Include other templates
+    TEMPLATE_NODE_FUNCTION     // Function call (for future use)
+} TemplateNodeType;
+
+#define TEMPLATE_MAX_PREFIX_LEN 16
+
+typedef struct {
+    const char *open_brace;              // Default: "{%"
+    const char *close_brace;             // Default: "%}"
+    const char *null_handler;            // Default: "%%"
+    const char *section_prefix;          // default: "for "
+    const char *section_suffix;          // default: " in "
+    const char *section_optional_suffix; // default: " join "
+    const char *section_post_suffix;     // default: " do "
+    const char *interpolation_prefix;    // default: ""
+    const char *include_prefix;          // default: "include "
+    const char *function_prefix;         // default: "call "
+} TemplateConfig;
+
+typedef struct {
+  char *variable;
+  char *collection;
+  char *join;
+  struct TemplateNode *null_block;
+} TemplateSectionValue;
+
+typedef struct {
+  char *variable;
+  struct TemplateNode *null_block;
+} TemplateInterpolateValue;
+
+typedef struct {
+  char *name;
+  char *args;
+} TemplateFunctionValue;
+
+typedef struct {
+  char *name;
+} TemplateIncludeValue;
+
+typedef struct {
+  char *content;
+} TemplateTextValue;
+
+typedef union {
+  TemplateSectionValue section;
+  TemplateInterpolateValue interpolate;
+  TemplateFunctionValue function;
+  TemplateIncludeValue include;
+  TemplateTextValue text;
+} TemplateValue;
+
+// template node structure
+typedef struct TemplateNode {
+    TemplateNodeType type;
+    TemplateValue value;
+    struct TemplateNode *children;  // child nodes
+    struct TemplateNode *next;      // sibling nodes
+} TemplateNode;
+
 #endif // EPRINTF_H

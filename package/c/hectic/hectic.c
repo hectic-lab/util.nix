@@ -61,6 +61,8 @@ void set_output_color_mode(ColorMode mode) {
     color_mode = mode;
 }
 
+#define POSITION_INFO file, func, line
+
 // ------------
 // -- Logger --
 // ------------
@@ -497,6 +499,8 @@ static const char *skip_whitespace(const char *s) {
     return s;
 }
 
+static Json *json_parse_value__(const char *file, const char *func, int line, const char **s, Arena *arena);
+
 /* Parse a JSON string (does not handle full escaping) */
 static char *json_parse_string__(const char *file, const char *func, int line, const char **s_ptr, Arena *arena) {
     const char *s = *s_ptr;
@@ -541,9 +545,6 @@ static double json_parse_number__(const char *file, const char *func, int line, 
     raise_message(LOG_LEVEL_DEBUG, file, func, line, "Parsed number: %g", num);
     return num;
 }
-
-/* Forward declaration */
-static Json *json_parse_value__(const char *file, const char *func, int line, const char **s, Arena *arena);
 
 /* Parse a JSON array: [ value, value, ... ] */
 static Json *json_parse_array__(const char *file, const char *func, int line, const char **s, Arena *arena) {
@@ -1419,4 +1420,114 @@ char* logger_rules_to_string(Arena *arena) {
     }
     
     return buffer;
+}
+
+// ---------------
+// -- Templater --
+// ---------------
+
+// Look at package\c\hectic\docs\templater.md
+
+TemplateConfig *template_default_config__(const char *file, const char *func, int line, Arena *arena) {
+  TemplateConfig *config = arena_alloc__(file, func, line, arena, sizeof(TemplateConfig));
+  if (!config) return NULL;
+  
+  config->open_brace = "{%";
+  config->close_brace = "%}";
+  config->null_handler = "%%";
+  config->section_prefix = "for ";
+  config->section_suffix = " in ";
+  config->section_optional_suffix = " join ";
+  config->section_post_suffix = " do ";
+  config->interpolation_prefix = "";
+  config->include_prefix = "include ";
+  config->function_prefix = "call ";
+  
+  return config;
+}
+
+static TemplateNode *template_node_create__(const char *file, const char *func, int line, Arena *arena, TemplateNodeType type, TemplateValue *value) {
+  TemplateNode *node = arena_alloc__(file, func, line, arena, sizeof(TemplateNode));
+  if (!node) {
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "Failed to allocate node");
+  }
+
+  node->type = type;
+  node->value = *value;
+  node->children = NULL;
+  node->next = NULL;
+
+  return node;
+}
+
+#define CHECK_CONFIG_STR(field, name)                                      \
+do {                                                                       \
+  if (!(config->field)) {                                                  \
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "CONFIG: " name " is NULL");     \
+    return false;                                                          \
+  }                                                                        \
+  if (strlen(config->field) > TEMPLATE_MAX_PREFIX_LEN) {                   \
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "CONFIG: " name " is too long"); \
+    return false;                                                          \
+  }                                                                        \
+} while (0)
+
+bool template_validate_config__(const char *file, const char *func, int line, TemplateConfig *config) {
+  if (!config) {
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "Config is NULL");
+    return false;
+  }
+
+  CHECK_CONFIG_STR(open_brace, "Open brace");
+  CHECK_CONFIG_STR(close_brace, "Close brace");
+  CHECK_CONFIG_STR(null_handler, "Null handler");
+  CHECK_CONFIG_STR(section_prefix, "Section prefix");
+  CHECK_CONFIG_STR(section_suffix, "Section suffix");
+  CHECK_CONFIG_STR(section_optional_suffix, "Section optional suffix");
+  CHECK_CONFIG_STR(section_post_suffix, "Section post suffix");
+  CHECK_CONFIG_STR(interpolation_prefix, "Interpolation prefix");
+  CHECK_CONFIG_STR(include_prefix, "Include prefix");
+  CHECK_CONFIG_STR(function_prefix, "Function prefix");
+
+  return true;
+}
+
+TemplateNode *template_parse__(const char *file, const char *func, int line, Arena *arena, const char *template, TemplateConfig *config) {
+  if (!arena) {
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "Arena is NULL");
+  }
+  
+  if (!config) {
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "Config is NULL");
+  }
+  
+  if (!template) {
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "Template is NULL");
+  }
+
+  // Find the first open brace
+  const char *open_brace = strstr(template, config->open_brace);
+  if (!open_brace) {
+    raise_message(LOG_LEVEL_LOG, file, func, line, "No open brace found");
+    TemplateValue val = {.text = {.content = (char *)template}};
+    return template_node_create__(file, func, line, arena,
+      TEMPLATE_NODE_TEXT, &val);
+  }
+
+  // Deside tag type by prefix
+  const char *tag_prefix = open_brace + strlen(config->open_brace);
+  if (strncmp(tag_prefix, config->section_prefix, strlen(config->section_prefix)) == 0) {
+    // Section tag
+  } else if (strncmp(tag_prefix, config->interpolation_prefix, strlen(config->interpolation_prefix)) == 0) {
+    // Interpolation tag
+  } else if (strncmp(tag_prefix, config->include_prefix, strlen(config->include_prefix)) == 0) {
+    // Include tag
+  } else if (strncmp(tag_prefix, config->function_prefix, strlen(config->function_prefix)) == 0) {
+    // Function tag
+  } else {
+    raise_message(LOG_LEVEL_EXCEPTION, file, func, line, "Unknown tag prefix: %s", slice_create__(file, func, line, 1, (char *)tag_prefix, strlen(tag_prefix), 0, TEMPLATE_MAX_PREFIX_LEN));
+    return NULL;
+  }
+
+  return NULL;
 }
