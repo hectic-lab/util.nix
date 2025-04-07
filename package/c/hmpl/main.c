@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     text = arena_strdup(&arena, "");
   }
 
-  hmpl_render_with_arena(&arena, &text, context);
+  hmpl_render_with_arena(&arena, &text, context, &DEFAULT_OPTIONS);
   printf("%s", text);
 
   arena_free(&arena);

@@ -129,6 +129,19 @@ typedef enum {
   LOG_LEVEL_EXCEPTION
 } LogLevel;
 
+/**
+ * Structure for complex log level rule
+ * Allows specifying log levels per file, function, and line range
+ */
+typedef struct LogRule {
+    LogLevel level;           // Log level for this rule
+    char *file_pattern;       // File pattern to match (can be NULL)
+    char *function_pattern;   // Function pattern to match (can be NULL)
+    int line_start;           // Start line number (-1 for any)
+    int line_end;             // End line number (-1 for any)
+    struct LogRule *next;     // Next rule in the chain
+} LogRule;
+
 void logger_level_reset();
 
 void init_logger(void);
@@ -136,6 +149,39 @@ void init_logger(void);
 void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
+
+/**
+ * Set complex logging rules from a string
+ * Format: DEFAULT_LEVEL,<file>@<function>=LEVEL,<file>@<line_start>:<line_end>=LEVEL,...
+ * Example: "INFO,main.c@main=DEBUG,helper.c@10:50=TRACE"
+ *
+ * @param rules_str The rule string to parse
+ * @return 1 on success, 0 on failure
+ */
+int logger_parse_rules(const char *rules_str);
+
+/**
+ * Set complex logging rule programmatically
+ * 
+ * @param level Log level for this rule
+ * @param file_pattern File pattern to match (NULL for any file)
+ * @param function_pattern Function pattern to match (NULL for any function)
+ * @param line_start Start line number (-1 for any)
+ * @param line_end End line number (-1 for any)
+ * @return 1 on success, 0 on failure
+ */
+int logger_add_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
+                    int line_start, int line_end);
+
+/**
+ * Get the effective log level for a message based on complex rules
+ * 
+ * @param file Source file where log was generated
+ * @param func Function where log was generated
+ * @param line Line number where log was generated
+ * @return The effective log level for this context
+ */
+LogLevel logger_get_effective_level(const char *file, const char *func, int line);
 
 /**
  * Core logging function that formats and outputs log messages.
@@ -385,5 +431,18 @@ char* json_to_debug_str(Arena *arena, Json json);
 
 #define DEBUGSTR_Slice(arena, value) slice_to_debug_str(arena, value)
 #define DEBUGSTR_Json(arena, value)  json_to_debug_str(arena, value)
+
+/**
+ * Print all current logging rules to stderr for debugging
+ */
+void logger_print_rules();
+
+/**
+ * Dump all active logging rules into a string
+ * 
+ * @param arena Memory arena to allocate the string in
+ * @return String representation of all rules, or NULL on error
+ */
+char* logger_rules_to_string(Arena *arena);
 
 #endif // EPRINTF_H

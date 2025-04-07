@@ -1,7 +1,45 @@
 #include "hectic.h"
+#include <fnmatch.h>
+#include <string.h> // For strdup, strchr, etc.
+
+// On systems without strsep, provide a custom implementation
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+
+#ifndef HAVE_STRSEP
+char *strsep(char **stringp, const char *delim) {
+    char *start = *stringp;
+    char *p;
+
+    if (!start)
+        return NULL;
+
+    p = start;
+    while (*p && !strchr(delim, *p))
+        p++;
+
+    if (*p) {
+        *p++ = '\0';
+        *stringp = p;
+    } else {
+        *stringp = NULL;
+    }
+
+    return start;
+}
+#endif
+
+// Forward declarations
+void free_log_rules();
+const char* json_type_to_string(JsonType type);
 
 // Global color mode variable definition
 ColorMode color_mode = COLOR_MODE_AUTO;
+
+// Global logging variables
+LogLevel current_log_level = LOG_LEVEL_INFO;
+LogRule *log_rules = NULL; // Linked list of log rules
 
 const char* color_mode_to_string(ColorMode mode) {
     switch (mode) {
@@ -74,25 +112,35 @@ LogLevel log_level_from_string(const char *level_str) {
         return LOG_LEVEL_INFO;
 }
 
-LogLevel current_log_level = LOG_LEVEL_INFO;
-
 void logger_level_reset() {
     current_log_level = LOG_LEVEL_INFO;
+    free_log_rules();
 }
 
 void logger_level(LogLevel level) {
     current_log_level = level;
+    free_log_rules(); // Clear any complex rules
 }
 
 void init_logger(void) {
-    // Read log level from environment
+    // Read log level or rules from environment
     const char* env_level = getenv("LOG_LEVEL");
-    current_log_level = log_level_from_string(env_level);
     
-    // Log initialization with appropriate message
     if (env_level) {
-        fprintf(stderr, "INIT: Logger initialized with level %s from environment\n", 
-                log_level_to_string(current_log_level));
+        // Check if it's a complex rule format (contains '=' or ',')
+        if (strchr(env_level, '=') || strchr(env_level, ',')) {
+            if (logger_parse_rules(env_level)) {
+                fprintf(stderr, "INIT: Logger initialized with complex rules from environment\n");
+            } else {
+                fprintf(stderr, "INIT: Failed to parse complex log rules, using default level INFO\n");
+                current_log_level = LOG_LEVEL_INFO;
+            }
+        } else {
+            // Simple log level
+            current_log_level = log_level_from_string(env_level);
+            fprintf(stderr, "INIT: Logger initialized with level %s from environment\n", 
+                    log_level_to_string(current_log_level));
+        }
     } else {
         fprintf(stderr, "INIT: Logger initialized with default level %s\n", 
                 log_level_to_string(current_log_level));
@@ -106,7 +154,9 @@ char* raise_message(
   int line,
   const char *format,
   ...) {
-    if (level < current_log_level) {
+    // Check against the effective log level for this context
+    LogLevel effective_level = logger_get_effective_level(file, func, line);
+    if (level < effective_level) {
         return NULL;
     }
 
@@ -1086,4 +1136,287 @@ char* json_to_debug_str(Arena *arena, Json json) {
   strcat(result, "}");
   
   return result;
+}
+
+// Clean up existing log rules
+void free_log_rules() {
+    LogRule *rule = log_rules;
+    while (rule) {
+        LogRule *next = rule->next;
+        if (rule->file_pattern) free(rule->file_pattern);
+        if (rule->function_pattern) free(rule->function_pattern);
+        free(rule);
+        rule = next;
+    }
+    log_rules = NULL;
+}
+
+// Add a new log rule to the rule chain
+LogRule* add_log_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
+                      int line_start, int line_end) {
+    LogRule *rule = (LogRule*)malloc(sizeof(LogRule));
+    if (!rule) return NULL;
+    
+    rule->level = level;
+    rule->file_pattern = file_pattern ? strdup(file_pattern) : NULL;
+    rule->function_pattern = function_pattern ? strdup(function_pattern) : NULL;
+    rule->line_start = line_start;
+    rule->line_end = line_end;
+    rule->next = NULL;
+    
+    // Add to the end of the list
+    if (!log_rules) {
+        log_rules = rule;
+    } else {
+        LogRule *last = log_rules;
+        while (last->next) {
+            last = last->next;
+        }
+        last->next = rule;
+    }
+    
+    return rule;
+}
+
+// Parse a line range specification (start:end)
+void parse_line_range(const char *range_str, int *start, int *end) {
+    if (!range_str) {
+        *start = -1;
+        *end = -1;
+        return;
+    }
+    
+    char *endptr;
+    *start = strtol(range_str, &endptr, 10);
+    
+    if (*endptr == ':') {
+        *end = strtol(endptr + 1, NULL, 10);
+    } else {
+        *end = *start;
+    }
+    
+    if (*start <= 0) *start = -1;
+    if (*end <= 0) *end = -1;
+}
+
+// Parse a complex rule string and set up log rules
+int logger_parse_rules(const char *rules_str) {
+    if (!rules_str || !*rules_str) return 0;
+    
+    // Clean up existing rules
+    free_log_rules();
+    
+    // Make a copy of the rules string since we'll be modifying it
+    char *rules_copy = strdup(rules_str);
+    if (!rules_copy) return 0;
+    
+    // First rule sets the default level
+    char *next_rule = rules_copy;
+    char *token = strsep(&next_rule, ",");
+    current_log_level = log_level_from_string(token);
+    
+    // Process the remaining rules
+    while (next_rule && *next_rule) {
+        // Extract rule definition: pattern=level
+        char *rule_def = strsep(&next_rule, ",");
+        char *level_str = strchr(rule_def, '=');
+        
+        if (!level_str) continue; // Invalid rule
+        
+        *level_str = '\0'; // Split pattern and level
+        level_str++;
+        
+        // Parse the rule pattern
+        char *pattern = rule_def;
+        char *file_pattern = NULL;
+        char *function_pattern = NULL;
+        char *line_range = NULL;
+        
+        // Check for line range in file pattern
+        char *at_sign = strchr(pattern, '@');
+        if (at_sign) {
+            *at_sign = '\0';
+            file_pattern = pattern;
+            pattern = at_sign + 1;
+            
+            // Check for line range or another @ for function
+            char *colon = strchr(pattern, ':');
+            char *second_at = strchr(pattern, '@');
+            
+            if (second_at && (!colon || second_at < colon)) {
+                // Format: file@function@line_range
+                *second_at = '\0';
+                function_pattern = pattern;
+                line_range = second_at + 1;
+            } else if (colon) {
+                // Format: file@line_range
+                line_range = pattern;
+            } else {
+                // Format: file@function
+                function_pattern = pattern;
+            }
+        } else {
+            // Just file pattern
+            file_pattern = pattern;
+        }
+        
+        // If file pattern is empty, set to NULL
+        if (file_pattern && !*file_pattern) file_pattern = NULL;
+        
+        // If function pattern is empty, set to NULL
+        if (function_pattern && !*function_pattern) function_pattern = NULL;
+        
+        // Parse line range
+        int line_start = -1, line_end = -1;
+        parse_line_range(line_range, &line_start, &line_end);
+        
+        // Create a new rule
+        LogLevel level = log_level_from_string(level_str);
+        add_log_rule(level, file_pattern, function_pattern, line_start, line_end);
+    }
+    
+    free(rules_copy);
+    return 1;
+}
+
+// Check if a file matches a pattern
+static int match_file_pattern(const char *file, const char *pattern) {
+    if (!pattern) return 1; // NULL pattern matches any file
+    
+    // Extract the filename part without the path
+    const char *filename = strrchr(file, '/');
+    if (!filename) filename = file;
+    else filename++; // Skip the '/'
+    
+    return fnmatch(pattern, filename, 0) == 0 || fnmatch(pattern, file, 0) == 0;
+}
+
+// Check if a function matches a pattern
+static int match_function_pattern(const char *func, const char *pattern) {
+    if (!pattern) return 1; // NULL pattern matches any function
+    return fnmatch(pattern, func, 0) == 0;
+}
+
+// Get the effective log level for a specific context
+LogLevel logger_get_effective_level(const char *file, const char *func, int line) {
+    // If no rules are defined, use the global level
+    if (!log_rules) return current_log_level;
+    
+    // Default to the global log level
+    LogLevel effective_level = current_log_level;
+    
+    // Check each rule in order
+    for (LogRule *rule = log_rules; rule; rule = rule->next) {
+        int file_match = match_file_pattern(file, rule->file_pattern);
+        int function_match = match_function_pattern(func, rule->function_pattern);
+        int line_match = (rule->line_start == -1 || (line >= rule->line_start && 
+                         (rule->line_end == -1 || line <= rule->line_end)));
+        
+        // If all conditions match, use this rule's level
+        if (file_match && function_match && line_match) {
+            effective_level = rule->level;
+            // Don't break here - later rules can override earlier ones
+        }
+    }
+    
+    return effective_level;
+}
+
+// Add a new log rule programmatically
+int logger_add_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
+                    int line_start, int line_end) {
+    return add_log_rule(level, file_pattern, function_pattern, line_start, line_end) != NULL;
+}
+
+// Print all current logging rules to stderr
+void logger_print_rules() {
+    fprintf(stderr, "Current logging rules:\n");
+    fprintf(stderr, "  Default level: %s\n", log_level_to_string(current_log_level));
+    
+    int rule_count = 0;
+    for (LogRule *rule = log_rules; rule; rule = rule->next) {
+        fprintf(stderr, "  Rule %d: Level=%s, File=%s, Function=%s, Lines=%d:%d\n",
+                ++rule_count,
+                log_level_to_string(rule->level),
+                rule->file_pattern ? rule->file_pattern : "<any>",
+                rule->function_pattern ? rule->function_pattern : "<any>",
+                rule->line_start, rule->line_end);
+    }
+    
+    if (rule_count == 0) {
+        fprintf(stderr, "  No specific rules defined\n");
+    }
+}
+
+// Helper to format a rule as a string
+static void format_rule_to_buffer(char *buffer, size_t size, LogRule *rule) {
+    char line_range[32] = "";
+    
+    // Format line range if specified
+    if (rule->line_start > 0) {
+        if (rule->line_end > 0 && rule->line_end != rule->line_start) {
+            snprintf(line_range, sizeof(line_range), "%d:%d", rule->line_start, rule->line_end);
+        } else {
+            snprintf(line_range, sizeof(line_range), "%d", rule->line_start);
+        }
+    }
+    
+    // Format the complete rule
+    if (rule->file_pattern && rule->function_pattern && line_range[0]) {
+        // File + function + line range
+        snprintf(buffer, size, "%s@%s@%s=%s",
+                 rule->file_pattern, rule->function_pattern, line_range,
+                 log_level_to_string(rule->level));
+    } else if (rule->file_pattern && rule->function_pattern) {
+        // File + function
+        snprintf(buffer, size, "%s@%s=%s",
+                 rule->file_pattern, rule->function_pattern,
+                 log_level_to_string(rule->level));
+    } else if (rule->file_pattern && line_range[0]) {
+        // File + line range
+        snprintf(buffer, size, "%s@%s=%s",
+                 rule->file_pattern, line_range,
+                 log_level_to_string(rule->level));
+    } else if (rule->file_pattern) {
+        // Just file
+        snprintf(buffer, size, "%s=%s",
+                 rule->file_pattern,
+                 log_level_to_string(rule->level));
+    } else {
+        // Empty rule (shouldn't happen)
+        snprintf(buffer, size, "EMPTY=%s", log_level_to_string(rule->level));
+    }
+}
+
+// Format all rules into a string
+char* logger_rules_to_string(Arena *arena) {
+    if (!arena) return NULL;
+    
+    // Allocate a buffer in the arena (estimate size needed)
+    size_t estimated_size = 1024; // Start with 1KB
+    char *buffer = arena_alloc(arena, estimated_size);
+    if (!buffer) return NULL;
+    
+    // Initialize with default level
+    int pos = snprintf(buffer, estimated_size, "%s", log_level_to_string(current_log_level));
+    
+    // Add each rule
+    for (LogRule *rule = log_rules; rule; rule = rule->next) {
+        // Format the rule
+        char rule_str[256];
+        format_rule_to_buffer(rule_str, sizeof(rule_str), rule);
+        
+        // Check buffer space and add to result
+        if (pos + strlen(rule_str) + 2 < estimated_size) {
+            buffer[pos++] = ',';
+            strcpy(buffer + pos, rule_str);
+            pos += strlen(rule_str);
+        } else {
+            // Buffer too small, just stop
+            strcat(buffer, ",...");
+            break;
+        }
+    }
+    
+    return buffer;
 }
