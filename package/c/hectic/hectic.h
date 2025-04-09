@@ -275,8 +275,9 @@ typedef struct {
 
 Arena arena_init__(const char *file, const char *func, int line, size_t size);
 
-void* arena_alloc_or_null__(const char *file, const char *func, int line, Arena *arena, size_t size);
+void* arena_alloc_or_null__(const char *file, const char *func, int line, Arena *arena, size_t size, bool expand);
 
+// FIXME(yukkop): ptr % 8 == 0
 void* arena_alloc__(const char *file, const char *func, int line, Arena *arena, size_t size);
 
 void arena_reset__(const char *file, const char *func, int line, Arena *arena);
@@ -291,10 +292,12 @@ char* arena_repstr__(const char *file, const char *func, int line, Arena *arena,
 void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *arena,
                            void *old_ptr, size_t old_size, size_t new_size);
 
+char* arena_strncpy__(const char *file, const char *func, int line, Arena *arena, const char *start, size_t len);
+
 // NOTE(yukkop): This macro is used to define procedures so that `__LINE__` and `__FILE__`
 // in `raise_debug` reflect the location where the macro is called, not where it's defined.
 #define arena_alloc_or_null(arena, size) \
-        arena_alloc_or_null__(__FILE__, __func__, __LINE__, arena, size)
+        arena_alloc_or_null__(__FILE__, __func__, __LINE__, arena, size, false)
 
 #define arena_init(size) \
         arena_init__(__FILE__, __func__, __LINE__, size)
@@ -317,6 +320,8 @@ void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *
 #define arena_realloc_copy(arena, old_ptr, old_size, new_size) \
 	arena_realloc_copy__(__FILE__, __func__, __LINE__, arena, old_ptr, old_size, new_size)
 
+#define arena_strncpy(arena, src, len) \
+	arena_strncpy__(__FILE__, __func__, __LINE__, arena, src, len)
 
 static Arena disposable_arena __attribute__((unused)) = {0};
 
@@ -328,6 +333,28 @@ static Arena disposable_arena __attribute__((unused)) = {0};
     } \
     &disposable_arena; \
 })
+
+// ------------
+// -- Debug --
+// ------------
+
+#define DEBUGSTR(arena, type, value) DEBUGSTR_##type(arena, value)
+
+#define DEBUGSTR_Slice(arena, value) slice_to_debug_str(arena, value)
+#define DEBUGSTR_Json(arena, value)  json_to_debug_str(arena, value)
+
+/**
+ * Print all current logging rules to stderr for debugging
+ */
+void logger_print_rules();
+
+/**
+ * Dump all active logging rules into a string
+ * 
+ * @param arena Memory arena to allocate the string in
+ * @return String representation of all rules, or NULL on error
+ */
+char* logger_rules_to_string(Arena *arena);
 
 // ----------
 // -- Json --
@@ -372,6 +399,10 @@ char *json_to_string_with_opts__(const char* file, const char* func, int line, A
 /* Retrieve an object item by key (case-sensitive) */
 #define json_get_object_item(object, key) json_get_object_item__(__FILE__, __func__, __LINE__, object, key)
 Json *json_get_object_item__(const char* file, const char* func, int line, const Json * const object, const char * const key);
+
+char* json_to_debug_str__(const char* file, const char* func, int line, Arena *arena, Json json);
+
+#define json_to_debug_str(arena, json) json_to_debug_str__(__FILE__, __func__, __LINE__, arena, json)
 
 // -----------
 // -- Slice --
@@ -419,31 +450,9 @@ int* arena_slice_copy__(const char *file, const char *func, int line, Arena *are
     buf;                                                            \
 })
 
-// ------------
-// -- Debug --
-// ------------
+char* slice_to_debug_str__(const char* file, const char* func, int line, Arena *arena, Slice slice);
 
-// Utility functions for debug output of Slice and Json structures
-char* slice_to_debug_str(Arena *arena, Slice slice);
-char* json_to_debug_str(Arena *arena, Json json);
-
-#define DEBUGSTR(arena, type, value) DEBUGSTR_##type(arena, value)
-
-#define DEBUGSTR_Slice(arena, value) slice_to_debug_str(arena, value)
-#define DEBUGSTR_Json(arena, value)  json_to_debug_str(arena, value)
-
-/**
- * Print all current logging rules to stderr for debugging
- */
-void logger_print_rules();
-
-/**
- * Dump all active logging rules into a string
- * 
- * @param arena Memory arena to allocate the string in
- * @return String representation of all rules, or NULL on error
- */
-char* logger_rules_to_string(Arena *arena);
+#define slice_to_debug_str(arena, slice) slice_to_debug_str__(__FILE__, __func__, __LINE__, arena, slice)
 
 // ---------------
 // -- Templater --
@@ -454,43 +463,53 @@ typedef enum {
     TEMPLATE_NODE_INTERPOLATE, // Variable interpolation
     TEMPLATE_NODE_SECTION,     // Section (for loops)
     TEMPLATE_NODE_INCLUDE,     // Include other templates
-    TEMPLATE_NODE_FUNCTION     // Function call (for future use)
+    TEMPLATE_NODE_EXECUTE,     // Execute code
 } TemplateNodeType;
 
 #define TEMPLATE_MAX_PREFIX_LEN 16
 
 typedef struct {
-    const char *open_brace;              // Default: "{%"
-    const char *close_brace;             // Default: "%}"
-    const char *null_handler;            // Default: "%%"
-    const char *section_prefix;          // default: "for "
-    const char *section_suffix;          // default: " in "
-    const char *section_optional_suffix; // default: " join "
-    const char *section_post_suffix;     // default: " do "
-    const char *interpolation_prefix;    // default: ""
-    const char *include_prefix;          // default: "include "
-    const char *function_prefix;         // default: "call "
+  struct {
+    struct {
+      const char *open;      // Default: "{%"
+      const char *close;     // Default: "%}"
+    } Braces;
+    struct {
+      const char *control;   // default: "for "
+      const char *source;    // default: " in "
+      const char *begin;     // default: " do "
+    } Section;
+    struct {
+      const char *invoke;    // default: ""
+    } Interpolate;
+    struct {
+      const char *invoke;    // default: "include "
+    } Include;
+    struct {
+      const char *invoke;    // default: "exec "
+    } Execute;
+    const char *nesting;    // default: "->"
+  } Syntax;
 } TemplateConfig;
 
+typedef struct TemplateNode TemplateNode; // forward declaration
+
 typedef struct {
-  char *variable;
+  char *iterator;
   char *collection;
-  char *join;
-  struct TemplateNode *null_block;
+  TemplateNode *body;
 } TemplateSectionValue;
 
 typedef struct {
-  char *variable;
-  struct TemplateNode *null_block;
+  char *key;
 } TemplateInterpolateValue;
 
 typedef struct {
-  char *name;
-  char *args;
-} TemplateFunctionValue;
+  char *code;
+} TemplateExecuteValue;
 
 typedef struct {
-  char *name;
+  char *key;
 } TemplateIncludeValue;
 
 typedef struct {
@@ -500,17 +519,49 @@ typedef struct {
 typedef union {
   TemplateSectionValue section;
   TemplateInterpolateValue interpolate;
-  TemplateFunctionValue function;
+  TemplateExecuteValue execute;
   TemplateIncludeValue include;
   TemplateTextValue text;
 } TemplateValue;
 
-// template node structure
-typedef struct TemplateNode {
+typedef enum {
+  TEMPLATE_ERROR_NONE,
+  TEMPLATE_ERROR_UNKNOWN_TAG,
+  TEMPLATE_ERROR_NESTED_INTERPOLATION,
+  TEMPLATE_ERROR_NESTED_SECTION_ITERATOR,
+  TEMPLATE_ERROR_UNEXPECTED_SECTION_END,
+  TEMPLATE_ERROR_NESTED_INCLUDE,
+  TEMPLATE_ERROR_NESTED_EXECUTE,
+} TemplateErrorCode;
+
+typedef struct {
+  TemplateErrorCode code;
+  char *message;
+} TemplateError;
+
+struct TemplateNode {
+    TemplateError error;
     TemplateNodeType type;
     TemplateValue value;
-    struct TemplateNode *children;  // child nodes
-    struct TemplateNode *next;      // sibling nodes
-} TemplateNode;
+    TemplateNode *children;  // child nodes
+    TemplateNode *next;      // sibling nodes
+};
+
+typedef union {
+  TemplateError error;
+  TemplateNode node;
+} TemplateResult;
+
+TemplateResult *template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
+
+char *template_node_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const TemplateNode *node, int depth);
+
+TemplateConfig template_default_config__(const char *file, const char *func, int line);
+
+#define template_parse(arena, s, config) template_parse__(__FILE__, __func__, __LINE__, arena, s, config)
+
+#define template_node_to_debug_str(arena, node) template_node_to_debug_str__(__FILE__, __func__, __LINE__, arena, node, 0)
+
+#define template_default_config() template_default_config__(__FILE__, __func__, __LINE__)
 
 #endif // EPRINTF_H
