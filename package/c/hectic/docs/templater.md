@@ -16,10 +16,6 @@ The templating engine supports flexible customization of tag syntax parameters. 
   A non-empty string marking the end of a tag.  
   *Example:* `%}`
 
-- **Null Handler**  
-  A non-empty string used to specify alternative content when a value is null.  
-  *Example:* `%%`
-
 ---
 
 ## Section Tags
@@ -34,10 +30,6 @@ Parameters defining syntax for blocks controlling loops or nested structures.
   Delimiter between variables and collections.  
   *Example:* ` in ` | `#`
 
-- **Optional Suffix**  
-  Additional modifier, e.g., for joining collections.  
-  *Example:* ` join ` | `#`
-
 - **Post-Suffix**  
   Finalizes the section declaration block.  
   *Example:* `do ` | `:`
@@ -50,8 +42,6 @@ Parameters defining syntax for blocks controlling loops or nested structures.
   {% for inner_item in item.inner_items join '\n' do
     <p>some other text</p>
     {% inner_item %}
-  %%
-    <h1>Sorry, list is empty</h1>
   %}
   \n
 %}
@@ -77,8 +67,6 @@ Inserts variable values or expression results directly into templates.
 *Interpolation Example:*
 ```tpl
   {% interpolation_field %}
-  {% interpolation_field_null %% Sorry, empty %}
-  {% interpolation_field_null %% {% interpolation_field %} %}
 ```
 *Context Example:*
 ```json
@@ -138,11 +126,12 @@ Includes content from other templates.
 Enables calling functions with arguments.
 - **Prefix**  
   Denotes a function call.  
-  *Example:* `call` | *(Empty)*
+  *Example:* `exec` | *(Empty)*
 
 *Function Example:*
 ```tpl
-  {% call my_function(arg1, arg2, 'literal') %}
+  {% exec my_function(arg1, arg2, 'literal') %}
+  {% exec RETURN 'aaaaa' %}
 ```
 
 ## Notes
@@ -152,4 +141,3 @@ Enables calling functions with arguments.
 - **Missing Fields/Functions/Templates:** Configurable to either return an error or warning.
 - **Circular Includes:** Detect when possible.
 - **No Shadowing:** Variables defined in section tags must not conflict with context variable names, otherwise, return an error.
-

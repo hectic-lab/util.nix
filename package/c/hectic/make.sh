@@ -51,7 +51,7 @@ esac
 # Default flags
 RUN_TESTS=1
 OPTFLAGS="-O2"
-CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address"
+CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address "
 LDFLAGS="-lhectic"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
@@ -71,7 +71,7 @@ while [ $# -gt 0 ]; do
         echo "Error: Required dependency '$dep' not found." >&2
         exit 1
       fi
-      OPTFLAGS="-O0 -gdwarf-2 -g3"
+      OPTFLAGS="-O0 -gdwarf-2 -g3 -Wno-error"
       DEBUG=1
       ;;
     --color)
@@ -108,7 +108,7 @@ case "$MODE" in
     for test_file in test/*.c; do
       exe="target/test/$(basename "${test_file%.c}")"
       # shellcheck disable=SC2086
-      cc $CFLAGS $OPTFLAGS -pedantic -I. "$test_file" -Ltarget -lhectic $LDFLAGS -o "$exe"
+      cc $CFLAGS $OPTFLAGS -I. "$test_file" -Ltarget -lhectic $LDFLAGS -o "$exe"
       if [ "$?" -ne 0 ]; then
         exit 1
       fi

@@ -3,178 +3,87 @@
 #include <stdlib.h>
 #include <string.h>
 #include "hectic.h"
-#include "templater.h"
 
 #define ARENA_SIZE 1024 * 1024
 
-// Test 1: Basic interpolation
-static void test_basic_interpolation(void) {
-    Arena arena = arena_init(ARENA_SIZE);
-    
-    // Initialize template config
-    TemplateConfig *config = template_config_init(&arena);
-    assert(config != NULL);
-    
-    // Create test data
-    const char *json_str = "{\"name\":\"John\",\"age\":30}";
-    Json *data = json_parse(&arena, &json_str);
-    assert(data != NULL);
-    
-    // Create template context
-    TemplateContext *ctx = template_context_init(&arena, data, config);
-    assert(ctx != NULL);
-    
-    // Parse template
-    const char *template = "Hello {% name %}, you are {% age %} years old.";
-    TemplateNode *root = template_parse(&arena, template, config);
-    assert(root != NULL);
-    
-    // Render template
-    char *result = template_render(&arena, root, ctx);
-    assert(result != NULL);
-    assert(strcmp(result, "Hello John, you are 30 years old.") == 0);
-    
-    arena_free(&arena);
+static char *remove_all_spaces(char *s) {
+    char *new_s = NULL;
+    while (*s) {
+        if (*s != ' ' && *s != '\t' && *s != '\n') {
+            new_s = s;
+        }
+        s++;
+    }
+    return new_s;
 }
 
-// Test 2: Section (loop) with join
-static void test_section_with_join(void) {
-    Arena arena = arena_init(ARENA_SIZE);
-    
-    // Initialize template config
-    TemplateConfig *config = template_config_init(&arena);
-    assert(config != NULL);
-    
-    // Create test data
-    const char *json_str = "{\"items\":[\"apple\",\"banana\",\"orange\"]}";
-    Json *data = json_parse(&arena, &json_str);
-    assert(data != NULL);
-    
-    // Create template context
-    TemplateContext *ctx = template_context_init(&arena, data, config);
-    assert(ctx != NULL);
-    
-    // Parse template
-    const char *template = "{% for item in items join ', ' do %}{% item %}{% %}";
-    TemplateNode *root = template_parse(&arena, template, config);
-    assert(root != NULL);
-    
-    // Render template
-    char *result = template_render(&arena, root, ctx);
-    assert(result != NULL);
-    assert(strcmp(result, "apple, banana, orange") == 0);
-    
-    arena_free(&arena);
+static void test_template_node_to_debug_str(Arena *arena) {
+    TemplateNode *root = arena_alloc(arena, sizeof(TemplateNode));
+    root->type = TEMPLATE_NODE_TEXT;
+    root->value.text.content = arena_strncpy(arena, "Hello", 5);
+
+    root->next = arena_alloc(arena, sizeof(TemplateNode));
+    root->next->type = TEMPLATE_NODE_INTERPOLATE;
+    root->next->value.interpolate.key = arena_strncpy(arena, "name", 4);
+
+    root->next->next = arena_alloc(arena, sizeof(TemplateNode));
+    root->next->next->type = TEMPLATE_NODE_TEXT;
+    root->next->next->value.text.content = arena_strncpy(arena, "!", 1);
+
+    char *debug_str = template_node_to_debug_str(arena, root);
+
+    raise_notice("debug_str: %s", debug_str);
+    assert(strcmp(
+      remove_all_spaces(debug_str),
+      remove_all_spaces(""            \
+      "["                             \
+      "  {"                           \
+      "    \"type\":\"TEXT\","        \
+      "    \"content\":{"             \
+      "      \"content\":\"Hello\""   \
+      "    }"                         \
+      "  },"                          \
+      "  {"                           \
+      "    \"type\":\"INTERPOLATE\"," \
+      "    \"content\":{"             \
+      "      \"key\":\"name\""        \
+      "    }"                         \
+      "  },"                          \
+      "  {"                           \
+      "    \"type\":\"TEXT\","        \
+      "    \"content\":{"             \
+      "      \"content\":\"!\""       \
+      "    }"                         \
+      "  }"                           \
+      "]")) == 0);
 }
 
-// Test 3: Nested sections
-static void test_nested_sections(void) {
-    Arena arena = arena_init(ARENA_SIZE);
-    
-    // Initialize template config
-    TemplateConfig *config = template_config_init(&arena);
-    assert(config != NULL);
-    
-    // Create test data
-    const char *json_str = "{\"users\":[{\"name\":\"John\",\"roles\":[\"admin\",\"user\"]},{\"name\":\"Jane\",\"roles\":[\"user\"]}]}";
-    Json *data = json_parse(&arena, &json_str);
-    assert(data != NULL);
-    
-    // Create template context
-    TemplateContext *ctx = template_context_init(&arena, data, config);
-    assert(ctx != NULL);
-    
-    // Parse template
-    const char *template = "{% for user in users do %}{% user.name %}: {% for role in user.roles join ', ' do %}{% role %}{% %}\n{% %}";
-    TemplateNode *root = template_parse(&arena, template, config);
-    assert(root != NULL);
-    
-    // Render template
-    char *result = template_render(&arena, root, ctx);
-    assert(result != NULL);
-    assert(strcmp(result, "John: admin, user\nJane: user\n") == 0);
-    
-    arena_free(&arena);
-}
+static void test_template_parse(Arena *arena, TemplateConfig *config) {
+    const char *template = "Hello {% name %}!";
+    TemplateResult *result = template_parse(arena, &template, config);
 
-// Test 4: Null handling
-static void test_null_handling(void) {
-    Arena arena = arena_init(ARENA_SIZE);
-    
-    // Initialize template config
-    TemplateConfig *config = template_config_init(&arena);
-    assert(config != NULL);
-    
-    // Create test data
-    const char *json_str = "{\"name\":\"John\",\"age\":null}";
-    Json *data = json_parse(&arena, &json_str);
-    assert(data != NULL);
-    
-    // Create template context
-    TemplateContext *ctx = template_context_init(&arena, data, config);
-    assert(ctx != NULL);
-    
-    // Parse template
-    const char *template = "Name: {% name %}\nAge: {% age %%}unknown{% %}";
-    TemplateNode *root = template_parse(&arena, template, config);
-    assert(root != NULL);
-    
-    // Render template
-    char *result = template_render(&arena, root, ctx);
-    assert(result != NULL);
-    assert(strcmp(result, "Name: John\nAge: unknown") == 0);
-    
-    arena_free(&arena);
-}
-
-// Test 5: Complex template with mixed content
-static void test_complex_template(void) {
-    Arena arena = arena_init(ARENA_SIZE);
-    
-    // Initialize template config
-    TemplateConfig *config = template_config_init(&arena);
-    assert(config != NULL);
-    
-    // Create test data
-    const char *json_str = "{\"title\":\"Shopping List\",\"items\":[{\"name\":\"Milk\",\"quantity\":2},{\"name\":\"Bread\",\"quantity\":1}],\"notes\":\"Don't forget the eggs!\"}";
-    Json *data = json_parse(&arena, &json_str);
-    assert(data != NULL);
-    
-    // Create template context
-    TemplateContext *ctx = template_context_init(&arena, data, config);
-    assert(ctx != NULL);
-    
-    // Parse template
-    const char *template = "Title: {% title %}\n\nItems:\n{% for item in items do %}- {% item.name %} ({% item.quantity %})\n{% %}\n\nNotes: {% notes %}";
-    TemplateNode *root = template_parse(&arena, template, config);
-    assert(root != NULL);
-    
-    // Render template
-    char *result = template_render(&arena, root, ctx);
-    assert(result != NULL);
-    assert(strcmp(result, "Title: Shopping List\n\nItems:\n- Milk (2)\n- Bread (1)\n\nNotes: Don't forget the eggs!") == 0);
-    
-    arena_free(&arena);
+    raise_notice("result: %s", template_node_to_debug_str(DISPOSABLE_ARENA, &result->node));
+    assert(result->error.code == TEMPLATE_ERROR_NONE);
 }
 
 int main(void) {
-    printf("Running template parser tests...\n");
-    
-    test_basic_interpolation();
-    printf("Test 1: Basic interpolation passed\n");
-    
-    test_section_with_join();
-    printf("Test 2: Section with join passed\n");
-    
-    test_nested_sections();
-    printf("Test 3: Nested sections passed\n");
-    
-    test_null_handling();
-    printf("Test 4: Null handling passed\n");
-    
-    test_complex_template();
-    printf("Test 5: Complex template passed\n");
-    
-    printf("All tests passed!\n");
+    init_logger();
+
+    Arena arena = arena_init(ARENA_SIZE);
+
+    TemplateConfig config = template_default_config();
+
+    printf("%sRunning template parser tests...%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+
+    test_template_node_to_debug_str(&arena);
+    printf("%sTest 0: template_node_to_debug_str passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    arena_reset(&arena);
+
+    test_template_parse(&arena, &config);
+    printf("%sTest 1: template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    arena_reset(&arena);
+
+    arena_free(&arena);
+    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 } 

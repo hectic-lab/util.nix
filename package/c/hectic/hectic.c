@@ -1,6 +1,7 @@
 #include "hectic.h"
 #include <fnmatch.h>
-#include <string.h> // For strdup, strchr, etc.
+#include <string.h>
+#include <assert.h>
 
 // On systems without strsep, provide a custom implementation
 #ifndef _GNU_SOURCE
@@ -170,14 +171,16 @@ char* raise_message(
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tm_info);
 
     // Print timestamp, log level with color, location info
-    fprintf(stderr, "%s %s%s%s [%s:%s:%d] ", 
+    fprintf(stderr, "%s %s%s%s [%s:%s:%s%d%s] ", 
             timeStr, 
             log_level_to_color(level), 
             log_level_to_string(level), 
             OPTIONAL_COLOR(COLOR_RESET),
             file,
             func,
-            line);
+            OPTIONAL_COLOR(COLOR_GREEN),
+            line,
+            OPTIONAL_COLOR(COLOR_RESET));
 
     // Print the actual message with variable arguments
     va_list args;
@@ -219,35 +222,58 @@ Arena arena_init__(POSITION_INFO_DECLARATION, size_t size) {
     return arena;
 }
 
-void* arena_alloc_or_null__(POSITION_INFO_DECLARATION, Arena *arena, size_t size) {
-    // Function entry at TRACE level
+void* arena_alloc_or_null__(POSITION_INFO_DECLARATION, Arena *arena, size_t size, bool expand) {
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
-                 "ALLOC: Requesting memory from arena (arena: %p, size: %zu bytes)", arena, size);
-    
-    void *mem = NULL;
+        "ALLOC: Requesting memory from arena (arena: %p, size: %zu bytes)", arena, size);
+
     if (arena->begin == 0) {
         raise_message(LOG_LEVEL_DEBUG, POSITION_INFO,
-                     "ALLOC: Arena not initialized, creating new arena");
-        *arena = arena_init__(POSITION_INFO, 1024); // ARENA_DEFAULT_SIZE assumed as 1024
+            "ALLOC: Arena not initialized, creating new arena");
+        *arena = arena_init__(POSITION_INFO, 1024);
     }
-    
-    size_t current = (size_t)arena->current - (size_t)arena->begin;
-    if (arena->capacity <= current || arena->capacity - current < size) {
-        raise_message(LOG_LEVEL_WARN, POSITION_INFO,
-	    "ALLOC: Insufficient memory in arena (address: %p, capacity: %zu bytes, used: %zu bytes, requested: %zu bytes)",
-                               arena->begin, arena->capacity, current, size);
-	return NULL;
-    } else {
-        raise_message(LOG_LEVEL_DEBUG, POSITION_INFO,
-	    "ALLOC: Allocating from arena (address: %p, capacity: %zu bytes, used: %zu bytes, requested: %zu bytes)",
-                               arena->begin, arena->capacity, current, size);
-        mem = arena->current;
-        arena->current = (char*)arena->current + size;
+
+    // align size to 8
+    size = (size + 7) & ~((size_t)7);
+
+    size_t used = (size_t)arena->current - (size_t)arena->begin;
+    size_t available = arena->capacity - used;
+
+    if (available < size) {
+        if (expand) {
+            // FIXME(yukkop): All pointers to the arena will be invalidated
+            // We need to use a virtual memory allocator to avoid this issue
+            size_t new_capacity = arena->capacity * 2 + size;
+            raise_message(LOG_LEVEL_WARN, POSITION_INFO,
+                "ALLOC: Expanding arena (old: %zu, new: %zu)", arena->capacity, new_capacity);
+
+            void *new_mem = malloc(new_capacity);
+            if (!new_mem) {
+                raise_message(LOG_LEVEL_WARN, POSITION_INFO,
+                    "ALLOC: Failed to expand arena (requested: %zu bytes)", new_capacity);
+                return NULL;
+            }
+
+            memcpy(new_mem, arena->begin, used);
+            free(arena->begin);
+            arena->begin = new_mem;
+            arena->current = (char *)new_mem + used;
+            arena->capacity = new_capacity;
+
+            raise_message(LOG_LEVEL_WARN, POSITION_INFO,
+                "ALLOC: Arena expanded successfully (address: %p, capacity: %zu)", new_mem, new_capacity);
+        } else {
+            raise_message(LOG_LEVEL_WARN, POSITION_INFO,
+                "ALLOC: Insufficient memory in arena (address: %p, capacity: %zu bytes, used: %zu bytes, requested: %zu bytes)",
+                arena->begin, arena->capacity, used, size);
+            return NULL;
+        }
     }
-    
-    // Success logging
-    raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
-                 "ALLOC: Memory allocated successfully (address: %p, size: %zu bytes)", mem, size);
+
+    void *mem = arena->current;
+    arena->current = (char*)arena->current + size;
+
+    raise_message(LOG_LEVEL_DEBUG, POSITION_INFO,
+        "ALLOC: Memory allocated (address: %p, size: %zu)", mem, size);
     return mem;
 }
 
@@ -256,7 +282,7 @@ void* arena_alloc__(POSITION_INFO_DECLARATION, Arena *arena, size_t size) {
     raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
                  "ALLOC: Allocating memory (arena: %p, size: %zu bytes)", arena, size);
     
-    void *mem = arena_alloc_or_null__(POSITION_INFO, arena, size);
+    void *mem = arena_alloc_or_null__(POSITION_INFO, arena, size, true);
     if (!mem) {
         raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
 	  "ALLOC: Allocation failed (arena: %p, requested: %zu bytes)", arena, size);
@@ -358,6 +384,39 @@ char* arena_strdup__(POSITION_INFO_DECLARATION, Arena *arena, const char *s) {
     return result;
 }
 
+char* arena_strncpy__(POSITION_INFO_DECLARATION, Arena *arena, const char *start, size_t len) {
+    // Function entry logging
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO,
+        "ALLOC: Copying string (arena: %p, source: %p, length: %zu, preview: %.20s%s)",
+        arena, start, len, start ? start : "", start && strlen(start) > 20 ? "..." : "");
+    
+    // Check for NULL string
+    if (!start) {
+        raise_message(LOG_LEVEL_DEBUG, POSITION_INFO,
+            "ALLOC: Source string is NULL, returning NULL");
+        return NULL;
+    }
+    
+    // Allocate memory for the string plus null terminator
+    char *result = (char*)arena_alloc__(POSITION_INFO, arena, len + 1);
+    if (!result) {
+        raise_message(LOG_LEVEL_DEBUG, POSITION_INFO,
+            "ALLOC: Memory allocation failed");
+        return NULL;
+    }
+    
+    // Copy the string and ensure null termination
+    strncpy(result, start, len);
+    result[len] = '\0';
+    
+    // Success logging
+    raise_message(LOG_LEVEL_DEBUG, POSITION_INFO,
+        "ALLOC: String copied successfully (result: %p, length: %zu bytes)", 
+        result, len + 1);
+    
+    return result;
+}
+
 char* arena_repstr__(POSITION_INFO_DECLARATION, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep) {
   // Function entry logging
@@ -413,6 +472,7 @@ char* arena_repstr__(POSITION_INFO_DECLARATION, Arena *arena,
   return new_str;
 }
 
+// FIXME(yukkop): this is who
 void* arena_realloc_copy__(POSITION_INFO_DECLARATION, Arena *arena,
                            void *old_ptr, size_t old_size, size_t new_size) {
     void *new_ptr = NULL;
@@ -421,7 +481,7 @@ void* arena_realloc_copy__(POSITION_INFO_DECLARATION, Arena *arena,
     } else if (new_size <= old_size) {
         new_ptr = old_ptr;
     } else {
-        new_ptr = arena_alloc_or_null__(POSITION_INFO, arena, new_size);
+        new_ptr = arena_alloc_or_null__(POSITION_INFO, arena, new_size, true);
         if (new_ptr)
             memcpy(new_ptr, old_ptr, old_size);
     }
@@ -937,6 +997,71 @@ Json *json_get_object_item__(POSITION_INFO_DECLARATION, const Json * const objec
     return NULL;
 }
 
+char* slice_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Slice slice) {
+  // Create complete information about the Slice structure
+  char buffer_meta[128];
+  snprintf(buffer_meta, sizeof(buffer_meta), "Slice{addr=%p, data=%p, len=%zu, isize=%zu, content=",
+           (void*)&slice, slice.data, slice.len, slice.isize);
+  
+  size_t meta_len = strlen(buffer_meta);
+  
+  // For NULL data, output a simple message
+  if (!slice.data) {
+    char* result = arena_alloc(arena, meta_len + 6);
+    strcpy(result, buffer_meta);
+    strcat(result, "NULL}");
+    return result;
+  }
+  
+  // Allocate buffer with space for quotes, metadata and null terminator
+  size_t buffer_size = meta_len + slice.len * 4 + 20; // Extra space for escaping and closing brace
+  char* buffer = arena_alloc(arena, buffer_size);
+  
+  // Copy metadata
+  strcpy(buffer, buffer_meta);
+  char* pos = buffer + meta_len;
+  
+  *pos++ = '"';
+  
+  // Copy slice data with escaping
+  for (size_t i = 0; i < slice.len; i++) {
+    char c = ((char*)slice.data)[i];
+    if (c == '\0') {
+      *pos++ = '\\';
+      *pos++ = '0';
+    } else if (c == '\n') {
+      *pos++ = '\\';
+      *pos++ = 'n';
+    } else if (c == '\r') {
+      *pos++ = '\\';
+      *pos++ = 'r';
+    } else if (c == '\t') {
+      *pos++ = '\\';
+      *pos++ = 't';
+    } else if (c == '"') {
+      *pos++ = '\\';
+      *pos++ = '"';
+    } else if (c == '\\') {
+      *pos++ = '\\';
+      *pos++ = '\\';
+    } else if (c < 32 || c > 126) {
+      // Non-printable characters as hex
+      pos += sprintf(pos, "\\x%02x", (unsigned char)c);
+    } else {
+      *pos++ = c;
+    }
+  }
+  
+  *pos++ = '"';
+  *pos++ = '}'; // Closing brace for the structure
+  *pos = '\0';
+
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "slice_to_debug_str: %s", buffer);
+  
+  return buffer;
+}
+
+
 // -----------
 // -- slice --
 // -----------
@@ -1001,75 +1126,9 @@ int* arena_slice_copy__(POSITION_INFO_DECLARATION, Arena *arena, Slice s) {
     return copy;
 }
 
-// ------------
-// -- debug --
-// ------------
+char* json_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Json json) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "json_to_debug_str(<optimized>, <optimized>)");
 
-char* slice_to_debug_str(Arena *arena, Slice slice) {
-  // Create complete information about the Slice structure
-  char buffer_meta[128];
-  snprintf(buffer_meta, sizeof(buffer_meta), "Slice{addr=%p, data=%p, len=%zu, isize=%zu, content=",
-           (void*)&slice, slice.data, slice.len, slice.isize);
-  
-  size_t meta_len = strlen(buffer_meta);
-  
-  // For NULL data, output a simple message
-  if (!slice.data) {
-    char* result = arena_alloc(arena, meta_len + 6);
-    strcpy(result, buffer_meta);
-    strcat(result, "NULL}");
-    return result;
-  }
-  
-  // Allocate buffer with space for quotes, metadata and null terminator
-  size_t buffer_size = meta_len + slice.len * 4 + 20; // Extra space for escaping and closing brace
-  char* buffer = arena_alloc(arena, buffer_size);
-  
-  // Copy metadata
-  strcpy(buffer, buffer_meta);
-  char* pos = buffer + meta_len;
-  
-  *pos++ = '"';
-  
-  // Copy slice data with escaping
-  for (size_t i = 0; i < slice.len; i++) {
-    char c = ((char*)slice.data)[i];
-    if (c == '\0') {
-      *pos++ = '\\';
-      *pos++ = '0';
-    } else if (c == '\n') {
-      *pos++ = '\\';
-      *pos++ = 'n';
-    } else if (c == '\r') {
-      *pos++ = '\\';
-      *pos++ = 'r';
-    } else if (c == '\t') {
-      *pos++ = '\\';
-      *pos++ = 't';
-    } else if (c == '"') {
-      *pos++ = '\\';
-      *pos++ = '"';
-    } else if (c == '\\') {
-      *pos++ = '\\';
-      *pos++ = '\\';
-    } else if (c < 32 || c > 126) {
-      // Non-printable characters as hex
-      pos += sprintf(pos, "\\x%02x", (unsigned char)c);
-    } else {
-      *pos++ = c;
-    }
-  }
-  
-  *pos++ = '"';
-  *pos++ = '}'; // Closing brace for the structure
-  *pos = '\0';
-
-  raise_trace("slice_to_debug_str: %s", buffer);
-  
-  return buffer;
-}
-
-char* json_to_debug_str(Arena *arena, Json json) {
   // Add information about the JSON structure itself
   char meta_buffer[256];
   
@@ -1429,106 +1488,415 @@ char* logger_rules_to_string(Arena *arena) {
 
 // Look at package\c\hectic\docs\templater.md
 
-TemplateConfig *template_default_config__(POSITION_INFO_DECLARATION, Arena *arena) {
-  TemplateConfig *config = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateConfig));
-  if (!config) return NULL;
-  
-  config->open_brace = "{%";
-  config->close_brace = "%}";
-  config->null_handler = "%%";
-  config->section_prefix = "for ";
-  config->section_suffix = " in ";
-  config->section_optional_suffix = " join ";
-  config->section_post_suffix = " do ";
-  config->interpolation_prefix = "";
-  config->include_prefix = "include ";
-  config->function_prefix = "call ";
-  
+TemplateConfig template_default_config__(POSITION_INFO_DECLARATION) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "TEMPLATE: Default config");
+  TemplateConfig config;
+
+  config.Syntax.Braces.open = "{%";
+  config.Syntax.Braces.close = "%}";
+  config.Syntax.Section.control = "for ";
+  config.Syntax.Section.source = " in ";
+  config.Syntax.Section.begin = " do ";
+  config.Syntax.Interpolate.invoke = "";
+  config.Syntax.Include.invoke = "include ";
+  config.Syntax.Execute.invoke = "exec ";
+  config.Syntax.nesting = "->";
+
   return config;
-}
-
-static TemplateNode *template_node_create__(POSITION_INFO_DECLARATION, Arena *arena, TemplateNodeType type, TemplateValue *value) {
-  TemplateNode *node = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
-  if (!node) {
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "Failed to allocate node");
-  }
-
-  node->type = type;
-  node->value = *value;
-  node->children = NULL;
-  node->next = NULL;
-
-  return node;
 }
 
 #define CHECK_CONFIG_STR(field, name)                                      \
 do {                                                                       \
-  if (!(config->field)) {                                                  \
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "CONFIG: " name " is NULL");     \
+  if (config->Syntax.field == NULL) {                                                  \
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "VALIDATE: " name " is NULL");     \
     return false;                                                          \
   }                                                                        \
-  if (strlen(config->field) > TEMPLATE_MAX_PREFIX_LEN) {                   \
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "CONFIG: " name " is too long"); \
+  if (strlen(config->Syntax.field) > TEMPLATE_MAX_PREFIX_LEN) {                   \
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "VALIDATE: " name " is too long"); \
     return false;                                                          \
   }                                                                        \
 } while (0)
 
-bool template_validate_config__(POSITION_INFO_DECLARATION, TemplateConfig *config) {
+bool template_validate_config__(POSITION_INFO_DECLARATION, const TemplateConfig *config) {
+  raise_trace("VALIDATE: config %p", config);
   if (!config) {
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "Config is NULL");
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "VALIDATE: Config is NULL");
     return false;
   }
 
-  CHECK_CONFIG_STR(open_brace, "Open brace");
-  CHECK_CONFIG_STR(close_brace, "Close brace");
-  CHECK_CONFIG_STR(null_handler, "Null handler");
-  CHECK_CONFIG_STR(section_prefix, "Section prefix");
-  CHECK_CONFIG_STR(section_suffix, "Section suffix");
-  CHECK_CONFIG_STR(section_optional_suffix, "Section optional suffix");
-  CHECK_CONFIG_STR(section_post_suffix, "Section post suffix");
-  CHECK_CONFIG_STR(interpolation_prefix, "Interpolation prefix");
-  CHECK_CONFIG_STR(include_prefix, "Include prefix");
-  CHECK_CONFIG_STR(function_prefix, "Function prefix");
+  assert(config->Syntax.Braces.open != NULL);
+  assert(config->Syntax.Braces.close != NULL);
+  assert(config->Syntax.Section.control != NULL);
+  assert(config->Syntax.Section.source != NULL);
+  assert(config->Syntax.Section.begin != NULL);
+  assert(config->Syntax.Interpolate.invoke != NULL);
+  assert(config->Syntax.Include.invoke != NULL);
+  assert(config->Syntax.Execute.invoke != NULL);
+  assert(config->Syntax.nesting != NULL);
+
+  CHECK_CONFIG_STR(Braces.open, "Open brace");
+  CHECK_CONFIG_STR(Braces.close, "Close brace");
+  CHECK_CONFIG_STR(Section.control, "Section control");
+  CHECK_CONFIG_STR(Section.source, "Section source");
+  CHECK_CONFIG_STR(Section.begin, "Section begin");
+  CHECK_CONFIG_STR(Interpolate.invoke, "Interpolation invoke");
+  CHECK_CONFIG_STR(Include.invoke, "Include invoke");
+  CHECK_CONFIG_STR(Execute.invoke, "Execute invoke");
+  CHECK_CONFIG_STR(nesting, "Nesting");
 
   return true;
 }
 
-TemplateNode *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char *template, TemplateConfig *config) {
-  if (!arena) {
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "Arena is NULL");
-  }
-  
-  if (!config) {
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "Config is NULL");
-  }
-  
-  if (!template) {
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "Template is NULL");
+#undef CHECK_CONFIG_STR
+
+#define TEMPLATE_ASSERT_SYNTAX(pattern, message_arg, code_arg) \
+  if (strncmp(*s, pattern, strlen(pattern))) { \
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: " message_arg); \
+    result->error.code = code_arg; \
+    result->error.message = message_arg; \
+    return result; \
   }
 
-  // Find the first open brace
-  const char *open_brace = strstr(template, config->open_brace);
-  if (!open_brace) {
-    raise_message(LOG_LEVEL_LOG, POSITION_INFO, "No open brace found");
-    TemplateValue val = {.text = {.content = (char *)template}};
-    return template_node_create__(POSITION_INFO, arena,
-      TEMPLATE_NODE_TEXT, &val);
+TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config);
+
+TemplateResult *template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Interpolation");
+
+  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+
+  const char **s = s_ptr;
+
+  // Skip to the content of the interpolation
+  *s += strlen(config->Syntax.Braces.open);
+  *s = skip_whitespace(*s);
+  *s += strlen(config->Syntax.Interpolate.invoke);
+
+  *s = skip_whitespace(*s);
+  const char *key_start = *s;
+
+  while (isalnum(**s)) {
+    if (**s == ' ' || strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close))) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in interpolation", TEMPLATE_ERROR_NESTED_INTERPOLATION);
+
+    (*s)++;
   }
 
-  // Deside tag type by prefix
-  const char *tag_prefix = open_brace + strlen(config->open_brace);
-  if (strncmp(tag_prefix, config->section_prefix, strlen(config->section_prefix)) == 0) {
-    // Section tag
-  } else if (strncmp(tag_prefix, config->interpolation_prefix, strlen(config->interpolation_prefix)) == 0) {
-    // Interpolation tag
-  } else if (strncmp(tag_prefix, config->include_prefix, strlen(config->include_prefix)) == 0) {
-    // Include tag
-  } else if (strncmp(tag_prefix, config->function_prefix, strlen(config->function_prefix)) == 0) {
-    // Function tag
-  } else {
-    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "Unknown tag prefix: %s", slice_create__(POSITION_INFO, 1, (char *)tag_prefix, strlen(tag_prefix), 0, TEMPLATE_MAX_PREFIX_LEN));
+  size_t key_len = *s - key_start;
+  result->node.value.interpolate.key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
+
+  result->node.type = TEMPLATE_NODE_INTERPOLATE;
+
+  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+
+  return result;
+}
+
+TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Section");
+
+  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+  result->node.type = TEMPLATE_NODE_SECTION;
+
+  const char **s = s_ptr;
+
+  // Skip to the content of the section
+  *s += strlen(config->Syntax.Braces.open);
+  *s = skip_whitespace(*s);
+  *s += strlen(config->Syntax.Section.control);
+
+  // Find the iterator name
+  *s = skip_whitespace(*s);
+  const char *iterator_start = *s;
+
+  while (isalnum(**s)) {
+    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.source, strlen(config->Syntax.Section.source))) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in section element name", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
+
+    (*s)++;
+  }
+
+  size_t iterator_len = *s - iterator_start;
+  result->node.value.section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
+
+  // Find the collection name
+  *s = skip_whitespace(*s);
+  const char *collection_start = *s;
+  
+  while (isalnum(**s)) {
+    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.begin, strlen(config->Syntax.Section.begin))) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in section iterator", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
+
+    (*s)++;
+  }
+
+  size_t collection_len = *s - collection_start;
+  result->node.value.section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
+
+  // Parse the body
+  TemplateResult *body_result = template_parse__(POSITION_INFO, arena, s, config);
+  if (body_result->error.code != TEMPLATE_ERROR_NONE) {
+    return body_result;
+  }
+
+  result->node.value.section.body = &body_result->node;
+
+  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+
+  return result;
+}
+
+TemplateResult *template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Include");
+  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+  result->node.type = TEMPLATE_NODE_INCLUDE;
+
+  const char **s = s_ptr;
+
+  // Skip to the content of the include
+  *s += strlen(config->Syntax.Braces.open);
+  *s = skip_whitespace(*s);
+  *s += strlen(config->Syntax.Include.invoke);
+
+  *s = skip_whitespace(*s);
+  const char *include_start = *s;
+
+  while (isalnum(**s)) {
+    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close))) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in include", TEMPLATE_ERROR_NESTED_INCLUDE);
+
+    (*s)++;
+  }
+
+  size_t include_len = *s - include_start;
+  result->node.value.include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
+
+  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+
+  return result;
+}
+
+TemplateResult *template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Execute");
+
+  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+  result->node.type = TEMPLATE_NODE_EXECUTE;
+
+  const char **s = s_ptr;
+
+  *s += strlen(config->Syntax.Braces.open);
+  *s = skip_whitespace(*s);
+  *s += strlen(config->Syntax.Execute.invoke);
+
+  *s = skip_whitespace(*s);
+  const char *code_start = *s;
+
+  while (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close))) {
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in execute", TEMPLATE_ERROR_NESTED_EXECUTE);
+    (*s)++;
+  }
+
+  size_t code_len = *s - code_start;
+  result->node.value.execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
+
+  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+
+  return result;
+}
+
+TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config) {
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Iteration start");
+
+  if (!template_validate_config__(POSITION_INFO, config)) {
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Invalid config");
     return NULL;
   }
 
-  return NULL;
+  if (!arena) {
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Arena is NULL");
+    return NULL;
+  }
+
+  assert(config->Syntax.Braces.open != NULL);
+
+  const char *start = *s;
+
+  TemplateNode *root = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+  TemplateNode *current = root;
+
+  int open_brace_len = strlen(config->Syntax.Braces.open);
+
+  while (*s) {
+    // Find the first open brace
+    if (strncmp(*s, config->Syntax.Braces.open, open_brace_len) == 0) {
+      // Add text node if there is any text before the tag
+      if (start != *s) {
+        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Text node: %s", arena_strncpy__(POSITION_INFO, DISPOSABLE_ARENA, start, *s - start));
+        current->type = TEMPLATE_NODE_TEXT;
+        current->value.text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
+      }
+
+      // Deside tag type by prefix
+      TemplateResult *current_result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+      {
+        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Found tag");
+
+        const char *tag_prefix = *s + open_brace_len;
+        tag_prefix = skip_whitespace(tag_prefix);
+	    raise_trace("tag_prefix: %p", tag_prefix);
+        assert(tag_prefix != NULL);
+        assert(config->Syntax.Section.control != NULL);
+        assert(config->Syntax.Interpolate.invoke != NULL);
+        assert(config->Syntax.Include.invoke != NULL);
+        assert(config->Syntax.Execute.invoke != NULL);
+        assert(config->Syntax.nesting != NULL);
+
+        if (strncmp(tag_prefix, config->Syntax.Section.control, strlen(config->Syntax.Section.control)) == 0) {
+          raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Section tag");
+          current_result = template_parse_section__(POSITION_INFO, arena, s, config);
+        } else if (strncmp(tag_prefix, config->Syntax.Interpolate.invoke, strlen(config->Syntax.Interpolate.invoke)) == 0) {
+          raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Interpolation tag");
+          current_result = template_parse_interpolation__(POSITION_INFO, arena, s, config);
+        } else if (strncmp(tag_prefix, config->Syntax.Include.invoke, strlen(config->Syntax.Include.invoke)) == 0) {
+          raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Include tag");
+          current_result = template_parse_include__(POSITION_INFO, arena, s, config);
+        } else if (strncmp(tag_prefix, config->Syntax.Execute.invoke, strlen(config->Syntax.Execute.invoke)) == 0) {
+          raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Execute tag");
+          current_result = template_parse_execute__(POSITION_INFO, arena, s, config);
+        } else {
+          raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Unknown tag prefix: %s", slice_create__(POSITION_INFO, 1, (char *)tag_prefix, strlen(tag_prefix), 0, TEMPLATE_MAX_PREFIX_LEN));
+          
+          TemplateResult *error_result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+
+          error_result->error.code = TEMPLATE_ERROR_UNKNOWN_TAG;
+          error_result->error.message = "Unknown tag prefix";
+
+          return error_result;
+        }
+      }
+
+      if (current_result->error.code != TEMPLATE_ERROR_NONE) {
+        return current_result;
+      }
+
+      *current = current_result->node;
+      current->next = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+      current = current->next;
+    }
+
+    (*s)++;
+  }
+
+  // Add text node if there is any text after the last tag
+  if (start != *s) {
+    current->type = TEMPLATE_NODE_TEXT;
+    current->value.text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
+  }
+
+  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+  result->node = *root;
+
+  return result;
 }
+
+#undef TEMPLATE_ASSERT_SYNTAX
+
+#define TEMPLATE_NODE_MAX_DEBUG_DEPTH 20
+
+static char *template_node_type_to_string(TemplateNodeType type) {
+  switch (type) {
+    case TEMPLATE_NODE_SECTION: return "SECTION";
+    case TEMPLATE_NODE_INTERPOLATE: return "INTERPOLATE";
+    case TEMPLATE_NODE_EXECUTE: return "EXECUTE";
+    case TEMPLATE_NODE_INCLUDE: return "INCLUDE";
+    case TEMPLATE_NODE_TEXT: return "TEXT";
+    default: return "UNKNOWN";
+  }
+}
+
+char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const TemplateNode *node, int depth) {
+    if (!node) return arena_strncpy__(POSITION_INFO, arena, "", 0);
+
+    if (depth > TEMPLATE_NODE_MAX_DEBUG_DEPTH) {
+      return arena_strncpy__(POSITION_INFO, arena, "...", 3);
+    }
+
+    // Use a temporary buffer on the stack for building the string
+    char temp_buf[MEM_MiB];
+    size_t len = 0;
+    
+    #define APPEND(...) do { \
+        int written = snprintf(temp_buf + len, sizeof(temp_buf) - len, ##__VA_ARGS__); \
+        if (written < 0) return NULL; \
+        len += written; \
+    } while (0)
+
+    if (depth == 0) {
+      APPEND("[");
+    }
+
+    APPEND("{\"type\":\"%s\",", template_node_type_to_string(node->type));
+
+    switch (node->type) {
+        case TEMPLATE_NODE_SECTION:
+            APPEND("\"content\":{\"iterator\":\"%s\",\"collection\"=\"%s\"}",
+                node->value.section.iterator,
+                node->value.section.collection);
+            char *body_str = template_node_to_debug_str__(POSITION_INFO, arena, node->value.section.body, depth + 1);
+            if (body_str) {
+                APPEND(",\"body\":%s", body_str);
+            }
+            break;
+        case TEMPLATE_NODE_INTERPOLATE:
+            APPEND("\"content\":{\"key\":\"%s\"}", node->value.interpolate.key);
+            break;
+        case TEMPLATE_NODE_EXECUTE:
+            APPEND("\"content\":{\"code\":\"%s\"}", node->value.execute.code);
+            break;
+        case TEMPLATE_NODE_INCLUDE:
+            APPEND("\"content\":{\"key\":\"%s\"}", node->value.include.key);
+            break;
+        case TEMPLATE_NODE_TEXT:
+            APPEND("\"content\":{\"content\":\"%s\"}", node->value.text.content);
+            break;
+        default:
+            break;
+    }
+    APPEND("}");
+
+    if (node->error.code != TEMPLATE_ERROR_NONE) {
+        APPEND("\"error\":{\"code\":%d,\"message\":\"%s\"}", node->error.code, node->error.message);
+    }
+
+    if (node->children) {
+        APPEND("\"children\":[");
+        char *child_str = template_node_to_debug_str__(POSITION_INFO, arena, node->children, depth + 1);
+        if (child_str) {
+            APPEND(",%s", child_str);
+        }
+        APPEND("]");
+    }
+
+    if (node->next) {
+        char *next_str = template_node_to_debug_str__(POSITION_INFO, arena, node->next, depth + 1);
+        if (next_str) {
+            APPEND(",%s", next_str);
+        }
+    }
+
+    if (depth == 0) {
+      APPEND("]");
+    }
+
+    // Copy the final string to arena-allocated memory
+    char *result = arena_strncpy__(POSITION_INFO, arena, temp_buf, len);
+    return result;
+}
+
+// ---------
+// -- End --
+// ---------
+
+#undef POSITION_INFO_DECLARATION
+#undef POSITION_INFO
