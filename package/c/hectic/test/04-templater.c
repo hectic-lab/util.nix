@@ -62,8 +62,11 @@ static void test_template_parse(Arena *arena, TemplateConfig *config) {
     const char *template = "Hello {% name %}!";
     TemplateResult *result = template_parse(arena, &template, config);
 
-    raise_notice("result: %s", template_node_to_debug_str(DISPOSABLE_ARENA, &result->node));
-    assert(result->error.code == TEMPLATE_ERROR_NONE);
+    Arena *debug_arena = DISPOSABLE_ARENA;
+    const char *debug_str = template_node_to_debug_str(debug_arena, &result->Result.node);
+    raise_notice("debug_str: %s", debug_str);
+    raise_notice("result: %s", json_to_pretty_str(debug_arena, json_parse(debug_arena, &debug_str)));
+    assert(result->type == TEMPLATE_RESULT_NODE);
 }
 
 int main(void) {
