@@ -397,12 +397,17 @@ char *json_to_string__(const char* file, const char* func, int line, Arena *aren
 char *json_to_string_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw);
 
 /* Retrieve an object item by key (case-sensitive) */
-#define json_get_object_item(object, key) json_get_object_item__(__FILE__, __func__, __LINE__, object, key)
 Json *json_get_object_item__(const char* file, const char* func, int line, const Json * const object, const char * const key);
+
+#define json_get_object_item(object, key) json_get_object_item__(__FILE__, __func__, __LINE__, object, key)
 
 char* json_to_debug_str__(const char* file, const char* func, int line, Arena *arena, Json json);
 
 #define json_to_debug_str(arena, json) json_to_debug_str__(__FILE__, __func__, __LINE__, arena, json)
+
+char *json_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const Json * const item, int indent_level);
+
+#define json_to_pretty_str(arena, json) json_to_pretty_str__(__FILE__, __func__, __LINE__, arena, json, 0)
 
 // -----------
 // -- Slice --
@@ -547,9 +552,17 @@ struct TemplateNode {
     TemplateNode *next;      // sibling nodes
 };
 
-typedef union {
-  TemplateError error;
-  TemplateNode node;
+typedef enum {
+  TEMPLATE_RESULT_ERROR,
+  TEMPLATE_RESULT_NODE,
+} TemplateResultType;
+
+typedef struct {
+  TemplateResultType type;
+  union {
+    TemplateError error;
+    TemplateNode node;
+  } Result;
 } TemplateResult;
 
 TemplateResult *template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
