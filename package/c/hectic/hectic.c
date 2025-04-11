@@ -64,8 +64,8 @@ void set_output_color_mode(ColorMode mode) {
 
 #define POSITION_INFO_DECLARATION const char *file, const char *func, int line
 #define POSITION_INFO file, func, line
-#define COLORING_DECLARATION POSITION_INFO_DECLARATION Arena *arena
-
+#define CTX_DECLARATION POSITION_INFO_DECLARATION, Arena *arena
+#define CTX(lifetimed_arena) POSITION_INFO, arena = (lifetimed_arena)
 
 // ------------
 // -- Logger --
@@ -198,6 +198,88 @@ char* raise_message(
 // -- debug --
 // -----------
 
+PtrSet *ptrset_init(Arena *arena) {
+    PtrSet *set = arena_alloc(arena, sizeof(PtrSet));
+    set->data = arena_alloc(arena, 4 * sizeof(void*));
+    set->size = 0;
+    set->capacity = 4;
+    return set;
+}
+
+bool debug_ptrset_contains__(PtrSet *set, void *ptr) {
+    for (size_t i = 0; i < set->size; i++) {
+        if (set->data[i] == ptr)
+            return true;
+    }
+    return false;
+}
+
+void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, void *ptr) {
+    if (set->size == set->capacity) {
+        set->capacity = set->capacity ? set->capacity * 2 : 4;
+        set->data = arena_realloc__(CTX(arena), set->data, set->capacity, set->capacity * sizeof(void*));
+    }
+    set->data[set->size++] = ptr;
+}
+
+char *string_to_debug_str__(CTX_DECLARATION, const char *name, const char *string) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %p \"%s\"", name, string, string);
+}
+
+char *number_to_debug_str__(CTX_DECLARATION, const char *name, int number) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %d", name, number);
+}
+
+/* Private function */
+char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG JOIN: Joining %d strings", count);
+    int total_len = 1;
+
+    va_list args_copy;
+    va_copy(args_copy, args);
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG JOIN: Starting first pass");
+    for (int i = 0; i < count; i++) {
+        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "iter1");
+        char *s = va_arg(args_copy, char*);
+        int len = strlen(s);
+        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG JOIN: String %d: [%s] %p len: %d", i, s, s, len);
+        total_len += len;
+        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "iter2");
+    }
+    va_end(args_copy);
+
+    char *joined = arena_alloc__(CTX(arena), total_len);
+    joined[0] = '\0';
+
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG JOIN: concatenating strings");
+    va_copy(args_copy, args);
+    for (int i = 0; i < count; i++) {
+        char *s = va_arg(args_copy, char*);
+        strcat(joined, s);
+        if (i < count - 1) {
+            strcat(joined, ", ");
+        }
+    }
+    va_end(args_copy);
+
+    return joined;
+}
+
+char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name, void *ptr, int count, ...) {
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG STR: type: %s, name: %s, ptr: %p, count: %d", type, name, ptr, count);
+    char *result;
+    if ((ptr) == NULL) {
+        result = arena_strdup_fmt__(CTX(arena), "%s %s = NULL", type, name);
+    } else {
+        va_list args;
+        va_start(args, count);
+        char *joined = debug_join_debug_strings_v(CTX(arena), count, args);
+        va_end(args);
+        result = arena_strdup_fmt__(CTX(arena), "%s %s = {%s} %p", type, name, joined, ptr);
+    }
+    return result;
+}
+
 // ------------
 // -- arena --
 // ------------
@@ -287,7 +369,7 @@ void* arena_alloc__(POSITION_INFO_DECLARATION, Arena *arena, size_t size) {
     raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
                  "ARENA ALLOC: Allocating memory (arena: %p, size: %zu bytes)", arena, size);
     
-    void *mem = arena_alloc_or_null__(POSITION_INFO, arena, size, true);
+    void *mem = arena_alloc_or_null__(POSITION_INFO, arena, size, false);
     if (!mem) {
         raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
       "ARENA ALLOC: Allocation failed (arena: %p, requested: %zu bytes)", arena, size);
@@ -300,6 +382,26 @@ void* arena_alloc__(POSITION_INFO_DECLARATION, Arena *arena, size_t size) {
     raise_message(LOG_LEVEL_LOG, POSITION_INFO,
                  "ARENA ALLOC: Memory allocated successfully (address: %p, size: %zu bytes)", mem, size);
     return mem;
+}
+
+/*
+ * Reallocates a memory block and copies the contents of the old block to the new one.
+ * NOTE(yukkop): We need to provide the old size to avoid copying more than needed.
+ */
+void* arena_realloc__(POSITION_INFO_DECLARATION, Arena *arena,
+                           void *ptr, size_t size, size_t new_size) {
+    void *new_ptr = NULL;
+    if (ptr == NULL) {
+        new_ptr = arena_alloc__(POSITION_INFO, arena, new_size);
+    } else if (new_size <= size) {
+        new_ptr = ptr;
+    } else {
+        // FIXME(yukkop): Must tries to expand the arena before allocating new memory
+        new_ptr = arena_alloc_or_null__(POSITION_INFO, arena, new_size, false);
+        if (new_ptr)
+            memcpy(new_ptr, ptr, size);
+    }
+    return new_ptr;
 }
 
 void arena_reset__(POSITION_INFO_DECLARATION, Arena *arena) {
@@ -501,22 +603,6 @@ char* arena_repstr__(POSITION_INFO_DECLARATION, Arena *arena,
     "ARENA REPSTR: Replacement complete (result: %p, new length: %d)", new_str, new_len);
   
   return new_str;
-}
-
-// FIXME(yukkop): this is who
-void* arena_realloc_copy__(POSITION_INFO_DECLARATION, Arena *arena,
-                           void *old_ptr, size_t old_size, size_t new_size) {
-    void *new_ptr = NULL;
-    if (old_ptr == NULL) {
-        new_ptr = arena_alloc__(POSITION_INFO, arena, new_size);
-    } else if (new_size <= old_size) {
-        new_ptr = old_ptr;
-    } else {
-        new_ptr = arena_alloc_or_null__(POSITION_INFO, arena, new_size, true);
-        if (new_ptr)
-            memcpy(new_ptr, old_ptr, old_size);
-    }
-    return new_ptr;
 }
 
 // ----------

@@ -290,8 +290,8 @@ char* arena_strdup_fmt__(const char *file, const char *func, int line, Arena *ar
 char* arena_repstr__(const char *file, const char *func, int line, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep);
 
-void* arena_realloc_copy__(const char *file, const char *func, int line, Arena *arena,
-                           void *old_ptr, size_t old_size, size_t new_size);
+void* arena_realloc__(const char *file, const char *func, int line, Arena *arena,
+                           void *ptr, size_t size, size_t new_size);
 
 char* arena_strncpy__(const char *file, const char *func, int line, Arena *arena, const char *start, size_t len);
 
@@ -321,8 +321,8 @@ char* arena_strncpy__(const char *file, const char *func, int line, Arena *arena
 #define arena_repstr(arena, src, start, len, rep) \
 	arena_repstr__(__FILE__, __func__, __LINE__, arena, src, start, len, rep)
 
-#define arena_realloc_copy(arena, old_ptr, old_size, new_size) \
-	arena_realloc_copy__(__FILE__, __func__, __LINE__, arena, old_ptr, old_size, new_size)
+#define arena_realloc(arena, ptr, size, new_size) \
+	arena_realloc__(__FILE__, __func__, __LINE__, arena, ptr, size, new_size)
 
 #define arena_strncpy(arena, src, len) \
 	arena_strncpy__(__FILE__, __func__, __LINE__, arena, src, len)
@@ -342,6 +342,20 @@ static Arena disposable_arena __attribute__((unused)) = {0};
 // -- Debug --
 // ------------
 
+/*
+ * Set of pointers to track visited objects
+ * Used to detect cycles in debug strings
+ */
+typedef struct PtrSet {
+    void **data;
+    size_t size;
+    size_t capacity;
+} PtrSet;
+
+PtrSet *ptrset_init(Arena *arena);
+bool debug_ptrset_contains__(PtrSet *set, void *ptr);
+void debug_ptrset_add__(const char *file, const char *func, int line, Arena *arena, PtrSet *set, void *ptr);
+
 #define DEBUGSTR(arena, type, value) DEBUGSTR_##type(arena, value)
 
 #define DEBUGSTR_Slice(arena, value) slice_to_debug_str(arena, value)
@@ -359,6 +373,31 @@ void logger_print_rules();
  * @return String representation of all rules, or NULL on error
  */
 char* logger_rules_to_string(Arena *arena);
+
+char *string_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, const char *string);
+
+char *number_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, int number);
+
+char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, void *ptr, int count, ...);
+
+#define STRING_TO_DEBUG_STR(arena, name, string) \
+    string_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, string)
+#define NUMBER_TO_DEBUG_STR(arena, name, number) \
+    number_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, number)
+#define STRUCT_TO_DEBUG_STR(arena, type, name, self, count, ...) \
+    struct_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, self, count, ##__VA_ARGS__)
+
+bool debug_ptrset_contains(PtrSet *set, void *ptr);
+
+#define debug_check_cycle__(file, func, line, arena, type, name, self, visited) __extension__ ({ \
+    if (debug_ptrset_contains__(visited, self))                                            \
+        return struct_to_debug_str__(file, func, line, arena,                              \
+            #type, name, self, 1, "cycle detected");                                  \
+    debug_ptrset_add__(file, func, line, arena, visited, self);                            \
+})
+
+#define DEBUG_CHECK_CYCLE(arena, type, name, self, visited) \
+    debug_check_cycle__(__FILE__, __func__, __LINE__, arena, type, name, self, visited)
 
 // ----------
 // -- Json --

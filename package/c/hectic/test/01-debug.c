@@ -19,58 +19,19 @@ struct TestStruct2 {
     TestStruct *other;
 };
 
+#define test_struct_to_debug_str(arena, name, self) test_struct_to_debug_str__(arena, name, self, ptrset_init(arena))
 
-typedef struct PtrSet {
-    void **data;
-    size_t size;
-    size_t capacity;
-} PtrSet;
-
-static bool debug_ptrset_contains(PtrSet *set, void *ptr) {
-    for (size_t i = 0; i < set->size; i++) {
-        if (set->data[i] == ptr)
-            return true;
-    }
-    return false;
-}
-
-static void debug_ptrset_add(PtrSet *set, void *ptr) {
-    if (set->size == set->capacity) {
-        set->capacity = set->capacity ? set->capacity * 2 : 4;
-        set->data = realloc(set->data, set->capacity * sizeof(void*));
-    }
-    set->data[set->size++] = ptr;
-}
-
-
-#define STRING_TO_DEBUG_STR(arena, name, string) \
-	arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s = %p \"%s\"", name, string, string)
-
-#define NUMBER_TO_DEBUG_STR(arena, name, number) \
-	arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s = %d", name, number)
-
-#define STRUCT_TO_DEBUG_STR(arena, type, name, ptr, ...) __extension__ ({ \
-  char *result; \
-  if ((ptr) == NULL) { \
-    result = arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = NULL", #type, name); \
-  } else { \
-    char* fields = arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s, %s, %s", __VA_ARGS__); \
-    result = arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = {%s} %p", #type, name, fields, ptr); \
-  } \
-  result; \
-})
-
-#define test_struct_to_debug_str(arena, name, self) test_struct_to_debug_str__(arena, name, self)
-
-char *test_struct_to_debug_str__(Arena *arena, char *name, TestStruct *self) {
+char *test_struct_to_debug_str__(Arena *arena, char *name, TestStruct *self, PtrSet *visited) {
     if (name == NULL) {
         name = "$1";
     }
 
-    char *result = STRUCT_TO_DEBUG_STR(arena, TestStruct, name, self, 
+    DEBUG_CHECK_CYCLE(arena, TestStruct, name, self, visited);
+
+    char *result = STRUCT_TO_DEBUG_STR(arena, TestStruct, name, self, 3, 
       NUMBER_TO_DEBUG_STR(arena, "a", self->a),
       NUMBER_TO_DEBUG_STR(arena, "b", self->b),
-      test_struct_to_debug_str__(arena, "next", self->next)
+      test_struct_to_debug_str__(arena, "next", self->next, visited)
     );
     return result;
 }
@@ -91,6 +52,7 @@ int main(void) {
     init_logger();
 
     TestStruct test_struct = {.a = 1, .b = 2, .next = NULL};
+    test_struct.next = &test_struct;
     raise_notice("%s", test_struct_to_debug_str(DISPOSABLE_ARENA, "test_struct", &test_struct));
 
     printf("%sAll tests passed %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
