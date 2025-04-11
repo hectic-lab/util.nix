@@ -285,6 +285,7 @@ void arena_reset__(const char *file, const char *func, int line, Arena *arena);
 void arena_free__(const char *file, const char *func, int line, Arena *arena);
 
 char* arena_strdup__(const char *file, const char *func, int line, Arena *arena, const char *s);
+char* arena_strdup_fmt__(const char *file, const char *func, int line, Arena *arena, const char *fmt, ...);
 
 char* arena_repstr__(const char *file, const char *func, int line, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep);
@@ -313,6 +314,9 @@ char* arena_strncpy__(const char *file, const char *func, int line, Arena *arena
 
 #define arena_strdup(arena, s) \
 	arena_strdup__(__FILE__, __func__, __LINE__, arena, s)
+
+#define arena_strdup_fmt(arena, ...) \
+	arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, ##__VA_ARGS__)
 
 #define arena_repstr(arena, src, start, len, rep) \
 	arena_repstr__(__FILE__, __func__, __LINE__, arena, src, start, len, rep)

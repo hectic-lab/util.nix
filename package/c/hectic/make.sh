@@ -1,5 +1,5 @@
 #!/bin/sh
-# Usage: make.sh [build|check] [--norun] [--debug] [--color]
+# Usage: make.sh [build|check[test1 test2 ...]] [--norun] [--debug] [--color]
 # Options:
 #   build         Build the library and app (default if no mode is provided).
 #   watch         Build the library and app and watch for changes.
@@ -8,6 +8,7 @@
 #   --debug       Build with -O0 (debug mode).
 #   --color       Pass -fdiagnostics-color=always to compiler.
 #   help, --help  Show this help message.
+#   test1 test2   (check only) Run specific tests by name (without .c extension)
 
 check_dependencies() {
   for dep in cc ar; do
@@ -29,13 +30,14 @@ check_dependencies
 
 print_help() {
   cat <<EOF
-Usage: $0 [build|check] [--norun] [--debug] [--color]
+Usage: $0 [build|check[test1 test2 ...]] [--norun] [--debug] [--color]
   build         Build the library and app (default).
   watch         Build the library and app and watch for changes.
   check         Build tests; runs them unless --norun is specified.
   --norun       (check only) Build tests but do not run them.
   --debug       Build with debug flags (-O0).
   --color       Force colored compiler diagnostics.
+  test1 test2   (check only) Run specific tests by name (without .c extension)
   help, --help  Display this help message.
 EOF
 }
@@ -51,14 +53,11 @@ esac
 # Default flags
 RUN_TESTS=1
 OPTFLAGS="-O2"
-CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address "
+CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address -fanalyzer"
 LDFLAGS="-lhectic"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
 DEBUG=0
-
-MODE="${1:-build}"
-shift
 
 # Process options
 while [ $# -gt 0 ]; do
@@ -76,16 +75,16 @@ while [ $# -gt 0 ]; do
       ;;
     --color)
       COLOR_FLAG="-fdiagnostics-color=always"
-
       ;;
     *)
-      echo "Unknown option: $1"
-      print_help
-      exit 1
+      break
       ;;
   esac
   shift
 done
+
+MODE="${1:-build}"
+shift
 
 if [ -n "$COLOR_FLAG" ]; then
   CFLAGS="$CFLAGS $COLOR_FLAG"
@@ -104,19 +103,46 @@ case "$MODE" in
     ;;
   check)
     mkdir -p target/test
-    export LOG_LEVEL=TRACE
+    
+    # Get list of tests to run
+    TESTS_TO_RUN=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --norun|--debug|--color)
+          shift
+          ;;
+        *)
+          TESTS_TO_RUN+=("$1")
+          shift
+          ;;
+      esac
+    done
+
+    # If no specific tests provided, run all
+    if [ ${#TESTS_TO_RUN[@]} -eq 0 ]; then
+      TESTS_TO_RUN=("all")
+    fi
+
     for test_file in test/*.c; do
-      exe="target/test/$(basename "${test_file%.c}")"
+      test_name=$(basename "${test_file%.c}")
+      
+      # Skip if specific tests are requested and this isn't one of them
+      if [ "${TESTS_TO_RUN[0]}" != "all" ] && ! [[ " ${TESTS_TO_RUN[*]} " =~ " ${test_name} " ]]; then
+        continue
+      fi
+
+      exe="target/test/$test_name"
+      echo "Building test: $test_name"
       # shellcheck disable=SC2086
       cc $CFLAGS $OPTFLAGS -I. "$test_file" -Ltarget -lhectic $LDFLAGS -o "$exe"
       if [ "$?" -ne 0 ]; then
         exit 1
       fi
       if [ "$RUN_TESTS" -eq 1 ]; then
-	      if [ "$DEBUG" -eq 1 ]; then
-          gdb -tui "$exe"
-	      fi
-        "$exe"
+        if [ "$DEBUG" -eq 1 ]; then
+          env LOG_LEVEL="$LOG_LEVEL" gdb -tui "$exe"
+        fi
+        env LOG_LEVEL="$LOG_LEVEL" "$exe"
       fi
     done
     ;;

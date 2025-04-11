@@ -124,7 +124,7 @@ static void test_arena_reset_reuse(void) {
 }
 
 int main(void) {
-    logger_level(LOG_LEVEL_DEBUG);
+    init_logger();
 
     test_parse_json_object();
     test_parse_json_number();

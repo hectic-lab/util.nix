@@ -83,7 +83,7 @@ void test_slice_string() {
 }
 
 int main() {
-    logger_level(LOG_LEVEL_DEBUG);
+    init_logger();
 
     test_slice_create();
     test_slice_subslice();
