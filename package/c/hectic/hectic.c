@@ -40,7 +40,7 @@ ColorMode color_mode = COLOR_MODE_AUTO;
 
 // Global logging variables
 LogLevel current_log_level = LOG_LEVEL_INFO;
-LogRule *log_rules = NULL; // Linked list of log rules
+LogRule *log_rules = NULL;
 
 const char* color_mode_to_string(ColorMode mode) {
     switch (mode) {
@@ -64,6 +64,8 @@ void set_output_color_mode(ColorMode mode) {
 
 #define POSITION_INFO_DECLARATION const char *file, const char *func, int line
 #define POSITION_INFO file, func, line
+#define COLORING_DECLARATION POSITION_INFO_DECLARATION Arena *arena
+
 
 // ------------
 // -- Logger --
@@ -127,7 +129,6 @@ void logger_level(LogLevel level) {
 }
 
 void init_logger(void) {
-    // Read log level or rules from environment
     const char* env_level = getenv("LOG_LEVEL");
     
     if (env_level) {
@@ -194,8 +195,12 @@ char* raise_message(
 }
 
 // -----------
-// -- arena --
+// -- debug --
 // -----------
+
+// ------------
+// -- arena --
+// ------------
 
 Arena arena_init__(POSITION_INFO_DECLARATION, size_t size) {
     // Function entry logging
@@ -354,6 +359,9 @@ void arena_free__(POSITION_INFO_DECLARATION, Arena *arena) {
   arena->capacity = 0;
 }
 
+/* 
+ * Duplicates a string and returns a pointer to the new string.
+*/
 char* arena_strdup__(POSITION_INFO_DECLARATION, Arena *arena, const char *s) {
     // Function entry logging
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO,
@@ -382,6 +390,26 @@ char* arena_strdup__(POSITION_INFO_DECLARATION, Arena *arena, const char *s) {
         result, len);
     
     return result;
+}
+
+/*
+ * Duplicates a string and returns a pointer to the new string.
+ * The string is formatted using the provided format string and arguments.
+ */
+char* arena_strdup_fmt__(POSITION_INFO_DECLARATION, Arena *arena, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+
+    if (len < 0) return NULL;
+
+    char *temp = arena_alloc__(POSITION_INFO, DISPOSABLE_ARENA, len + 1);
+    va_start(args, fmt);
+    vsnprintf(temp, len + 1, fmt, args);
+    va_end(args);
+
+    return arena_strdup__(POSITION_INFO, arena, temp);
 }
 
 char* arena_strncpy__(POSITION_INFO_DECLARATION, Arena *arena, const char *start, size_t len) {
@@ -417,6 +445,9 @@ char* arena_strncpy__(POSITION_INFO_DECLARATION, Arena *arena, const char *start
     return result;
 }
 
+/*
+ * Replaces a substring in a string with a new string.
+ */
 char* arena_repstr__(POSITION_INFO_DECLARATION, Arena *arena,
                              const char *src, size_t start, size_t len, const char *rep) {
   // Function entry logging
@@ -1117,70 +1148,6 @@ Json *json_get_object_item__(POSITION_INFO_DECLARATION, const Json * const objec
     return NULL;
 }
 
-// -----------
-// -- slice --
-// -----------
-
-// Create a slice from an array with boundary check.
-Slice slice_create__(POSITION_INFO_DECLARATION, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
-    // Function entry logging
-    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
-        "SLICE: Creating slice (source: %p, array_length: %zu, start: %zu, length: %zu, item_size: %zu)", 
-        array, array_len, start, len, isize);
-    
-    // Boundary check
-    if (start + len > array_len) {
-        raise_message(LOG_LEVEL_WARN, POSITION_INFO,
-            "SLICE: Slice boundaries exceed array length (start: %zu, length: %zu, array_length: %zu)",
-            start, len, array_len);
-        return (Slice){NULL, 0, isize};
-    }
-    
-    // Create valid slice
-    Slice result = (Slice){ (char *)array + start * isize, len, isize };
-    
-    // Success logging
-    raise_message(LOG_LEVEL_TRACE, POSITION_INFO,
-        "SLICE: Slice created successfully (data: %p, length: %zu, item_size: %zu)",
-        result.data, result.len, result.isize);
-    
-    return result;
-}
-
-// Return a subslice from an existing slice.
-Slice slice_subslice__(POSITION_INFO_DECLARATION, Slice s, size_t start, size_t len) {
-    // Function entry logging
-    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
-        "SLICE: Creating subslice (source: %p, source_length: %zu, start: %zu, length: %zu)", 
-        s.data, s.len, start, len);
-    
-    // Boundary check
-    if (start + len > s.len) {
-        raise_message(LOG_LEVEL_WARN, POSITION_INFO,
-            "SLICE: Subslice boundaries exceed source slice length (start: %zu, length: %zu, source_length: %zu)",
-            start, len, s.len);
-        return (Slice){NULL, 0, s.isize};
-    }
-    
-    // Create valid subslice
-    Slice result = (Slice){(char*)s.data + start * s.isize, len, s.isize};
-    
-    // Success logging
-    raise_message(LOG_LEVEL_TRACE, POSITION_INFO,
-        "SLICE: Subslice created successfully (data: %p, length: %zu, item_size: %zu)",
-        result.data, result.len, result.isize);
-    
-    return result;
-}
-
-int* arena_slice_copy__(POSITION_INFO_DECLARATION, Arena *arena, Slice s) {
-    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "arena_slice_copy(<optimized>, <optimized>)");
-    int *copy = (void*) arena_alloc__(POSITION_INFO, arena, s.len * sizeof(int));
-    if (copy)
-        memcpy(copy, s.data, s.len * s.isize);
-    return copy;
-}
-
 char* json_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Json json) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "json_to_debug_str(<optimized>, <optimized>)");
 
@@ -1252,6 +1219,139 @@ char* json_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Json json) {
   
   return result;
 }
+
+// -----------
+// -- slice --
+// -----------
+
+// Create a slice from an array with boundary check.
+Slice slice_create__(POSITION_INFO_DECLARATION, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
+    // Function entry logging
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
+        "SLICE: Creating slice (source: %p, array_length: %zu, start: %zu, length: %zu, item_size: %zu)", 
+        array, array_len, start, len, isize);
+    
+    // Boundary check
+    if (start + len > array_len) {
+        raise_message(LOG_LEVEL_WARN, POSITION_INFO,
+            "SLICE: Slice boundaries exceed array length (start: %zu, length: %zu, array_length: %zu)",
+            start, len, array_len);
+        return (Slice){NULL, 0, isize};
+    }
+    
+    // Create valid slice
+    Slice result = (Slice){ (char *)array + start * isize, len, isize };
+    
+    // Success logging
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO,
+        "SLICE: Slice created successfully (data: %p, length: %zu, item_size: %zu)",
+        result.data, result.len, result.isize);
+    
+    return result;
+}
+
+// Return a subslice from an existing slice.
+Slice slice_subslice__(POSITION_INFO_DECLARATION, Slice s, size_t start, size_t len) {
+    // Function entry logging
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
+        "SLICE: Creating subslice (source: %p, source_length: %zu, start: %zu, length: %zu)", 
+        s.data, s.len, start, len);
+    
+    // Boundary check
+    if (start + len > s.len) {
+        raise_message(LOG_LEVEL_WARN, POSITION_INFO,
+            "SLICE: Subslice boundaries exceed source slice length (start: %zu, length: %zu, source_length: %zu)",
+            start, len, s.len);
+        return (Slice){NULL, 0, s.isize};
+    }
+    
+    // Create valid subslice
+    Slice result = (Slice){(char*)s.data + start * s.isize, len, s.isize};
+    
+    // Success logging
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO,
+        "SLICE: Subslice created successfully (data: %p, length: %zu, item_size: %zu)",
+        result.data, result.len, result.isize);
+    
+    return result;
+}
+
+int* arena_slice_copy__(POSITION_INFO_DECLARATION, Arena *arena, Slice s) {
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "arena_slice_copy(<optimized>, <optimized>)");
+    int *copy = (void*) arena_alloc__(POSITION_INFO, arena, s.len * sizeof(int));
+    if (copy)
+        memcpy(copy, s.data, s.len * s.isize);
+    return copy;
+}
+
+char* slice_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Slice slice) {
+  // Create complete information about the Slice structure
+  char buffer_meta[128];
+  snprintf(buffer_meta, sizeof(buffer_meta), "Slice{addr=%p, data=%p, len=%zu, isize=%zu, content=",
+           (void*)&slice, slice.data, slice.len, slice.isize);
+  
+  size_t meta_len = strlen(buffer_meta);
+  
+  // For NULL data, output a simple message
+  if (!slice.data) {
+    char* result = arena_alloc(arena, meta_len + 6);
+    strcpy(result, buffer_meta);
+    strcat(result, "NULL}");
+    return result;
+  }
+  
+  // Allocate buffer with space for quotes, metadata and null terminator
+  size_t buffer_size = meta_len + slice.len * 4 + 20; // Extra space for escaping and closing brace
+  char* buffer = arena_alloc(arena, buffer_size);
+  
+  // Copy metadata
+  strcpy(buffer, buffer_meta);
+  char* pos = buffer + meta_len;
+  
+  *pos++ = '"';
+  
+  // Copy slice data with escaping
+  for (size_t i = 0; i < slice.len; i++) {
+    char c = ((char*)slice.data)[i];
+    if (c == '\0') {
+      *pos++ = '\\';
+      *pos++ = '0';
+    } else if (c == '\n') {
+      *pos++ = '\\';
+      *pos++ = 'n';
+    } else if (c == '\r') {
+      *pos++ = '\\';
+      *pos++ = 'r';
+    } else if (c == '\t') {
+      *pos++ = '\\';
+      *pos++ = 't';
+    } else if (c == '"') {
+      *pos++ = '\\';
+      *pos++ = '"';
+    } else if (c == '\\') {
+      *pos++ = '\\';
+      *pos++ = '\\';
+    } else if (c < 32 || c > 126) {
+      // Non-printable characters as hex
+      pos += sprintf(pos, "\\x%02x", (unsigned char)c);
+    } else {
+      *pos++ = c;
+    }
+  }
+  
+  *pos++ = '"';
+  *pos++ = '}'; // Closing brace for the structure
+  *pos = '\0';
+
+  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "slice_to_debug_str: %s", buffer);
+  
+  return buffer;
+}
+
+
+// ------------------
+// -- logger rules --
+// ------------------
 
 // Clean up existing log rules
 void free_log_rules() {
@@ -1535,71 +1635,6 @@ char* logger_rules_to_string(Arena *arena) {
     
     return buffer;
 }
-
-char* slice_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Slice slice) {
-  // Create complete information about the Slice structure
-  char buffer_meta[128];
-  snprintf(buffer_meta, sizeof(buffer_meta), "Slice{addr=%p, data=%p, len=%zu, isize=%zu, content=",
-           (void*)&slice, slice.data, slice.len, slice.isize);
-  
-  size_t meta_len = strlen(buffer_meta);
-  
-  // For NULL data, output a simple message
-  if (!slice.data) {
-    char* result = arena_alloc(arena, meta_len + 6);
-    strcpy(result, buffer_meta);
-    strcat(result, "NULL}");
-    return result;
-  }
-  
-  // Allocate buffer with space for quotes, metadata and null terminator
-  size_t buffer_size = meta_len + slice.len * 4 + 20; // Extra space for escaping and closing brace
-  char* buffer = arena_alloc(arena, buffer_size);
-  
-  // Copy metadata
-  strcpy(buffer, buffer_meta);
-  char* pos = buffer + meta_len;
-  
-  *pos++ = '"';
-  
-  // Copy slice data with escaping
-  for (size_t i = 0; i < slice.len; i++) {
-    char c = ((char*)slice.data)[i];
-    if (c == '\0') {
-      *pos++ = '\\';
-      *pos++ = '0';
-    } else if (c == '\n') {
-      *pos++ = '\\';
-      *pos++ = 'n';
-    } else if (c == '\r') {
-      *pos++ = '\\';
-      *pos++ = 'r';
-    } else if (c == '\t') {
-      *pos++ = '\\';
-      *pos++ = 't';
-    } else if (c == '"') {
-      *pos++ = '\\';
-      *pos++ = '"';
-    } else if (c == '\\') {
-      *pos++ = '\\';
-      *pos++ = '\\';
-    } else if (c < 32 || c > 126) {
-      // Non-printable characters as hex
-      pos += sprintf(pos, "\\x%02x", (unsigned char)c);
-    } else {
-      *pos++ = c;
-    }
-  }
-  
-  *pos++ = '"';
-  *pos++ = '}'; // Closing brace for the structure
-  *pos = '\0';
-
-  raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "slice_to_debug_str: %s", buffer);
-  
-  return buffer;
-}
-
 
 // ---------------
 // -- Templater --

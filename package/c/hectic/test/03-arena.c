@@ -91,7 +91,7 @@ void test_arena_overwrite_detection() {
 }
 
 int main() {
-  logger_level(LOG_LEVEL_DEBUG);
+  init_logger();
 
   test_arena_init();
   test_arena_alloc();

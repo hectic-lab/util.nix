@@ -26,7 +26,7 @@
 } while(0)
 
 int main(void) {
-    logger_level(LOG_LEVEL_DEBUG);
+    printf("Running %s\n", __FILE__);
 
     TEST_RAISE_GENERIC(raise_debug, LOG_LEVEL_DEBUG, "DEBUG");
     TEST_RAISE_GENERIC(raise_log,   LOG_LEVEL_LOG,   "LOG");
