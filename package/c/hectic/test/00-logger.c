@@ -20,13 +20,13 @@
     stderr = orig_stderr;                                                           \
     fclose(temp);                                                                   \
     char expected_buffer[256];                                                      \
-    sprintf(expected_buffer, "%s " LEVEL_STR " " __FILE__ ":%d message\n", time_str, __LINE__); \
-    printf("DEBUG: [%s] [%s]\n", result_buffer, expected_buffer);                   \
+    const char* func = __func__;                                                   \
+    sprintf(expected_buffer, "%s " LEVEL_STR " " __FILE__ ":%s:%d message\n", time_str, func, __LINE__); \
     assert(strcmp(result_buffer, expected_buffer) == 0);                            \
 } while(0)
 
 int main(void) {
-    printf("Running %s\n", __FILE__);
+    printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
 
     TEST_RAISE_GENERIC(raise_debug, LOG_LEVEL_DEBUG, "DEBUG");
     TEST_RAISE_GENERIC(raise_log,   LOG_LEVEL_LOG,   "LOG");
@@ -35,6 +35,6 @@ int main(void) {
     TEST_RAISE_GENERIC(raise_warn,  LOG_LEVEL_WARN, "WARN");
     TEST_RAISE_GENERIC(raise_exception,  LOG_LEVEL_EXCEPTION, "EXCEPTION");
 
-    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
+    printf("%sall tests passed.%s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }

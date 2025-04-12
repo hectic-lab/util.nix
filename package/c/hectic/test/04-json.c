@@ -124,6 +124,7 @@ static void test_arena_reset_reuse(void) {
 }
 
 int main(void) {
+    printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
     init_logger();
 
     test_parse_json_object();
@@ -136,6 +137,6 @@ int main(void) {
     test_nested_json_object();
     test_arena_reset_reuse();
 
-    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
+    printf("%sall tests passed.%s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }

@@ -70,6 +70,7 @@ static void test_template_node_to_debug_str(Arena *arena) {
 //}
 
 int main(void) {
+    printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
     init_logger();
 
     Arena arena = arena_init(ARENA_SIZE);
@@ -87,6 +88,6 @@ int main(void) {
     //arena_reset(&arena);
 
     arena_free(&arena);
-    printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
+    printf("%sall tests passed.%s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 } 
