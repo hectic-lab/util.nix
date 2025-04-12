@@ -55,6 +55,20 @@ void set_output_color_mode(ColorMode mode);
 
 #define OPTIONAL_COLOR(color) (USE_COLOR() ? color : "")
 
+typedef enum {
+  RESULT_ERROR,
+  RESULT_SOME,
+} ResultType;
+
+#define RESULT(name, error_type, result_type) \
+    typedef struct {                          \
+        ResultType type;                      \
+        union {                               \
+            error_type error;                \
+            result_type some;              \
+        } Result;                             \
+    } name##Result
+
 // ------------ 
 // -- Errors --
 // ------------ 
@@ -378,14 +392,30 @@ char* logger_rules_to_string(Arena *arena);
 
 char *string_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, const char *string);
 
-char *number_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, int number);
+char *int_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, int number);
+
+char *float_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, double number);
+
+char *size_t_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, size_t number);
+
+char *ptr_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, void *ptr);
+
+char *char_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, char c);
 
 char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, void *ptr, int count, ...);
 
 #define STRING_TO_DEBUG_STR(arena, name, string) \
     string_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, string)
-#define NUMBER_TO_DEBUG_STR(arena, name, number) \
-    number_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, number)
+#define INT_TO_DEBUG_STR(arena, name, number) \
+    int_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, number)
+#define FLOAT_TO_DEBUG_STR(arena, name, number) \
+    float_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, number)
+#define SIZE_T_TO_DEBUG_STR(arena, name, number) \
+    size_t_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, number)
+#define PTR_TO_DEBUG_STR(arena, name, ptr) \
+    ptr_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, ptr)
+#define CHAR_TO_DEBUG_STR(arena, name, c) \
+    char_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, c)
 
 bool debug_ptrset_contains(PtrSet *set, void *ptr);
 
@@ -600,18 +630,7 @@ struct TemplateNode {
     TemplateNode *next;      // sibling nodes
 };
 
-typedef enum {
-  TEMPLATE_RESULT_ERROR,
-  TEMPLATE_RESULT_NODE,
-} TemplateResultType;
-
-typedef struct {
-  TemplateResultType type;
-  union {
-    TemplateError error;
-    TemplateNode node;
-  } Result;
-} TemplateResult;
+RESULT(Template, TemplateError, TemplateNode);
 
 TemplateResult *template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
 
