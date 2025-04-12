@@ -1,0 +1,16 @@
+#include "hectic.h"
+#include <assert.h>
+
+int main(void) {
+    printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
+    init_logger();
+
+    Arena arena = arena_init(MEM_MiB);
+
+    char *rules = arena_alloc(&arena, MEM_KiB);
+    strcpy(rules, "trace:file:test.c:100-150");
+
+    arena_free(&arena);
+    printf("%sAll tests passed %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
+    return 0;
+}

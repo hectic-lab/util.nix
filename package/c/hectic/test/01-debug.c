@@ -25,8 +25,8 @@ char *struct_to_debug_str(Arena *arena, char *name, Struct *self, PtrSet *visite
 
     char *result = arena_alloc(arena, MEM_KiB);
     STRUCT_TO_DEBUG_STR(arena, result, Struct, name, self, visited, 3, 
-      NUMBER_TO_DEBUG_STR(arena, "a", self->a),
-      NUMBER_TO_DEBUG_STR(arena, "b", self->b),
+      INT_TO_DEBUG_STR(arena, "a", self->a),
+      INT_TO_DEBUG_STR(arena, "b", self->b),
       struct_to_debug_str(arena, "next", self->next, visited)
     );
     return result;
@@ -37,8 +37,8 @@ char *struct2_to_debug_str(Arena *arena, char *name, Struct2 *self, PtrSet *visi
 
     char *result = arena_alloc(arena, MEM_KiB);
     STRUCT_TO_DEBUG_STR(arena, result, Struct2, name, self, visited, 5, 
-      NUMBER_TO_DEBUG_STR(arena, "a", self->a),
-      NUMBER_TO_DEBUG_STR(arena, "f", self->f),
+      INT_TO_DEBUG_STR(arena, "a", self->a),
+      FLOAT_TO_DEBUG_STR(arena, "f", self->f),
       STRING_TO_DEBUG_STR(arena, "c", self->c),
       struct_to_debug_str(arena, "other", self->other, visited),
       struct2_to_debug_str(arena, "left", self->left, visited)
@@ -74,7 +74,7 @@ void test_struct2_to_debug_str(Arena *arena) {
     char *result = struct2_to_debug_str(arena, "struct2", &test_struct2, visited);
     raise_notice("result: %s", result);
     char *check = arena_alloc(arena, MEM_KiB);
-    sprintf(check, "Struct2 struct2 = {a = 1, f = 3, c = %p \"hello\", Struct other = {a = 1, b = 2, Struct next = {cycle detected} %p} %p, Struct2 left = NULL} %p", (void*)test_struct2.c,(void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
+    sprintf(check, "Struct2 struct2 = {a = 1, f = 3.140000, c = %p \"hello\", Struct other = {a = 1, b = 2, Struct next = {cycle detected} %p} %p, Struct2 left = NULL} %p", (void*)test_struct2.c,(void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
     raise_notice("check: %s", check);
     assert(strcmp(result, check) == 0);
 }

@@ -226,9 +226,26 @@ char *string_to_debug_str__(CTX_DECLARATION, const char *name, const char *strin
     return arena_strdup_fmt__(CTX(arena), "%s = %p \"%s\"", name, string, string);
 }
 
-char *number_to_debug_str__(CTX_DECLARATION, const char *name, int number) {
+char *int_to_debug_str__(CTX_DECLARATION, const char *name, int number) {
     return arena_strdup_fmt__(CTX(arena), "%s = %d", name, number);
 }
+
+char *float_to_debug_str__(CTX_DECLARATION, const char *name, double number) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %f", name, number);
+}
+
+char *size_t_to_debug_str__(CTX_DECLARATION, const char *name, size_t number) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %zu", name, number);
+}
+
+char *ptr_to_debug_str__(CTX_DECLARATION, const char *name, void *ptr) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %p", name, ptr);
+}
+
+char *char_to_debug_str__(CTX_DECLARATION, const char *name, char c) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %c", name, c);
+}
+
 
 /* Private function */
 char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
@@ -1718,6 +1735,19 @@ char* logger_rules_to_string(Arena *arena) {
     return buffer;
 }
 
+char *log_rules_to_debug_str__(CTX_DECLARATION, char *name, LogRule *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, LogRule, name, self, visited, 6,
+      string_to_debug_str__(POSITION_INFO, arena, "level", log_level_to_string(self->level)),
+      string_to_debug_str__(POSITION_INFO, arena, "file_pattern", self->file_pattern),
+      string_to_debug_str__(POSITION_INFO, arena, "function_pattern", self->function_pattern),
+      int_to_debug_str__(POSITION_INFO, arena, "line_start", self->line_start),
+      int_to_debug_str__(POSITION_INFO, arena, "line_end", self->line_end),
+      log_rules_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
+    );
+    return result;
+}
+
 // ---------------
 // -- Templater --
 // ---------------
@@ -1760,16 +1790,6 @@ bool template_validate_config__(POSITION_INFO_DECLARATION, const TemplateConfig 
     return false;
   }
 
-  assert(config->Syntax.Braces.open != NULL);
-  assert(config->Syntax.Braces.close != NULL);
-  assert(config->Syntax.Section.control != NULL);
-  assert(config->Syntax.Section.source != NULL);
-  assert(config->Syntax.Section.begin != NULL);
-  assert(config->Syntax.Interpolate.invoke != NULL);
-  assert(config->Syntax.Include.invoke != NULL);
-  assert(config->Syntax.Execute.invoke != NULL);
-  assert(config->Syntax.nesting != NULL);
-
   CHECK_CONFIG_STR(Braces.open, "Open brace");
   CHECK_CONFIG_STR(Braces.close, "Close brace");
   CHECK_CONFIG_STR(Section.control, "Section control");
@@ -1788,7 +1808,7 @@ bool template_validate_config__(POSITION_INFO_DECLARATION, const TemplateConfig 
 #define TEMPLATE_ASSERT_SYNTAX(pattern, message_arg, code_arg) \
   if (strncmp(*s, pattern, strlen(pattern))) { \
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: " message_arg); \
-    result->type = TEMPLATE_RESULT_ERROR; \
+    result->type = RESULT_ERROR; \
     result->Result.error.code = code_arg; \
     result->Result.error.message = message_arg; \
     return result; \
@@ -1819,10 +1839,10 @@ TemplateResult *template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena 
   }
 
   size_t key_len = *s - key_start;
-  result->Result.node.value.interpolate.key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
+  result->Result.some.value.interpolate.key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
 
-  result->type = TEMPLATE_RESULT_NODE;
-  result->Result.node.type = TEMPLATE_NODE_INTERPOLATE;
+  result->type = RESULT_SOME;
+  result->Result.some.type = TEMPLATE_NODE_INTERPOLATE;
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
@@ -1833,8 +1853,8 @@ TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Section");
 
   TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = TEMPLATE_RESULT_NODE;
-  result->Result.node.type = TEMPLATE_NODE_SECTION;
+  result->type = RESULT_SOME;
+  result->Result.some.type = TEMPLATE_NODE_SECTION;
 
   const char **s = s_ptr;
 
@@ -1856,7 +1876,7 @@ TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t iterator_len = *s - iterator_start;
-  result->Result.node.value.section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
+  result->Result.some.value.section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
 
   // Find the collection name
   *s = skip_whitespace(*s);
@@ -1871,15 +1891,15 @@ TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t collection_len = *s - collection_start;
-  result->Result.node.value.section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
+  result->Result.some.value.section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
 
   // Parse the body
   TemplateResult *body_result = template_parse__(POSITION_INFO, arena, s, config);
-  if (body_result->type == TEMPLATE_RESULT_ERROR) {
+  if (body_result->type == RESULT_ERROR) {
     return body_result;
   }
 
-  result->Result.node.value.section.body = &body_result->Result.node;
+  result->Result.some.value.section.body = &body_result->Result.some;
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
@@ -1889,8 +1909,8 @@ TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena
 TemplateResult *template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Include");
   TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = TEMPLATE_RESULT_NODE;
-  result->Result.node.type = TEMPLATE_NODE_INCLUDE;
+  result->type = RESULT_SOME;
+  result->Result.some.type = TEMPLATE_NODE_INCLUDE;
 
   const char **s = s_ptr;
 
@@ -1910,7 +1930,7 @@ TemplateResult *template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t include_len = *s - include_start;
-  result->Result.node.value.include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
+  result->Result.some.value.include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
@@ -1921,8 +1941,8 @@ TemplateResult *template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Execute");
 
   TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = TEMPLATE_RESULT_NODE;
-  result->Result.node.type = TEMPLATE_NODE_EXECUTE;
+  result->type = RESULT_SOME;
+  result->Result.some.type = TEMPLATE_NODE_EXECUTE;
 
   const char **s = s_ptr;
 
@@ -1939,7 +1959,7 @@ TemplateResult *template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t code_len = *s - code_start;
-  result->Result.node.value.execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
+  result->Result.some.value.execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
@@ -2002,7 +2022,7 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
           
           TemplateResult *error_result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
 
-          error_result->type = TEMPLATE_RESULT_ERROR;
+          error_result->type = RESULT_ERROR;
           error_result->Result.error.code = TEMPLATE_ERROR_UNKNOWN_TAG;
           error_result->Result.error.message = "Unknown tag prefix";
 
@@ -2010,11 +2030,11 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
         }
       }
 
-      if (current_result->type == TEMPLATE_RESULT_ERROR) {
+      if (current_result->type == RESULT_ERROR) {
         return current_result;
       }
 
-      *current = current_result->Result.node;
+      *current = current_result->Result.some;
       current->next = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
       current = current->next;
     }
@@ -2029,8 +2049,8 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
   }
 
   TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = TEMPLATE_RESULT_NODE;
-  result->Result.node = *root;
+  result->type = RESULT_SOME;
+  result->Result.some = *root;
 
   return result;
 }
