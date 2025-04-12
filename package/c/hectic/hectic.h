@@ -60,14 +60,27 @@ typedef enum {
   RESULT_SOME,
 } ResultType;
 
-#define RESULT(name, error_type, result_type) \
+#define RESULT(name, result_type, error_type) \
     typedef struct {                          \
         ResultType type;                      \
         union {                               \
-            error_type error;                \
-            result_type some;              \
+            struct {                          \
+              error_type code;                \
+              char *message;                  \
+            } Error;                          \
+            result_type some;                 \
         } Result;                             \
     } name##Result
+
+#define IS_RESULT_ERROR(result) (result->type == RESULT_ERROR)
+#define IS_RESULT_SOME(result) (result->type == RESULT_SOME)
+
+#define TRY(result) if (IS_RESULT_ERROR(result)) { return result; }
+
+#define RESULT_ERROR_CODE(result) (result->Result.error.code)
+#define RESULT_ERROR_MESSAGE(result) (result->Result.error.message)
+
+#define RESULT_SOME_VALUE(result) (result->Result.some)
 
 // ------------ 
 // -- Errors --
@@ -88,54 +101,54 @@ typedef enum {
 // -- Logger --
 // ------------
 
-/**
+/*
  * Log levels following a consistent severity-based hierarchy.
  * Each level includes specific guidance on when it should be used.
  */
 typedef enum {
-  /**
+  /*
    * TRACE: Most detailed information for in-depth debugging
    * Use for: Deep diagnostic details, function entry/exit, variable dumps
    * Visibility: Development environments only, rarely used in production
    */
   LOG_LEVEL_TRACE,
   
-  /**
+  /*
    * DEBUG: Detailed information useful during development
    * Use for: Development-time debugging, showing variable states, internal flows
    * Visibility: Development and debugging environments, rarely in production
    */
   LOG_LEVEL_DEBUG,
   
-  /**
+  /*
    * LOG: General operational events
    * Use for: Runtime events worth logging but not requiring attention
    * Visibility: Always written to logs, useful for auditing/diagnostics
    */
   LOG_LEVEL_LOG,
   
-  /**
+  /*
    * INFO: Informational messages highlighting progress
    * Use for: Normal but noteworthy events, state changes, startup/shutdown events
    * Visibility: Visible to client applications if configured
    */
   LOG_LEVEL_INFO,
   
-  /**
+  /*
    * NOTICE: More important events than INFO, but not warnings
    * Use for: Important state changes, significant operations, configuration changes
    * Visibility: Displayed to client by default, meant to be seen
    */
   LOG_LEVEL_NOTICE,
   
-  /**
+  /*
    * WARN: Potential problems that don't prevent normal operation
    * Use for: Unexpected behaviors, deprecated feature usage, recoverable errors
    * Visibility: Alerts both client and server logs, needs attention
    */
   LOG_LEVEL_WARN,
   
-  /**
+  /*
    * EXCEPTION: Serious errors requiring immediate attention
    * Use for: Critical failures, data loss risks, business rule violations
    * Visibility: Highest priority, often leads to operation termination
@@ -143,7 +156,7 @@ typedef enum {
   LOG_LEVEL_EXCEPTION
 } LogLevel;
 
-/**
+/*
  * Structure for complex log level rule
  * Allows specifying log levels per file, function, and line range
  */
@@ -164,7 +177,13 @@ void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
 
-/**
+typedef enum {
+  PLACEHOLDER_ERROR,
+} LogRuleParseError;
+
+RESULT(LogParse, LogRule, LogRuleParseError);
+
+/*
  * Set complex logging rules from a string
  * Format: DEFAULT_LEVEL,<file>@<function>=LEVEL,<file>@<line_start>:<line_end>=LEVEL,...
  * Example: "INFO,main.c@main=DEBUG,helper.c@10:50=TRACE"
@@ -174,7 +193,7 @@ LogLevel log_level_from_string(const char *level_str);
  */
 int logger_parse_rules(const char *rules_str);
 
-/**
+/*
  * Set complex logging rule programmatically
  * 
  * @param level Log level for this rule
@@ -187,7 +206,7 @@ int logger_parse_rules(const char *rules_str);
 int logger_add_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
                     int line_start, int line_end);
 
-/**
+/*
  * Get the effective log level for a message based on complex rules
  * 
  * @param file Source file where log was generated
@@ -361,7 +380,7 @@ static Arena disposable_arena __attribute__((unused)) = {0};
  * Used to detect cycles in debug strings
  */
 typedef struct PtrSet {
-    void **data;
+    void const **data;
     size_t size;
     size_t capacity;
 } PtrSet;
@@ -369,20 +388,20 @@ typedef struct PtrSet {
 PtrSet *ptrset_init__(const char *file, const char *func, int line, Arena *arena);
 #define ptrset_init(arena) ptrset_init__(__FILE__, __func__, __LINE__, arena)
 
-bool debug_ptrset_contains__(PtrSet *set, void *ptr);
-void debug_ptrset_add__(const char *file, const char *func, int line, Arena *arena, PtrSet *set, void *ptr);
+bool debug_ptrset_contains__(PtrSet *set, const void *ptr);
+void debug_ptrset_add__(const char *file, const char *func, int line, Arena *arena, PtrSet *set, const void *ptr);
 
 #define DEBUGSTR(arena, type, value) DEBUGSTR_##type(arena, value)
 
 #define DEBUGSTR_Slice(arena, value) slice_to_debug_str(arena, value)
 #define DEBUGSTR_Json(arena, value)  json_to_debug_str(arena, value)
 
-/**
+/*
  * Print all current logging rules to stderr for debugging
  */
 void logger_print_rules();
 
-/**
+/*
  * Dump all active logging rules into a string
  * 
  * @param arena Memory arena to allocate the string in
@@ -402,7 +421,7 @@ char *ptr_to_debug_str__(const char *file, const char *func, int line, Arena *ar
 
 char *char_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, char c);
 
-char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, void *ptr, int count, ...);
+char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, int count, ...);
 
 #define STRING_TO_DEBUG_STR(arena, name, string) \
     string_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, string)
@@ -617,31 +636,26 @@ typedef enum {
   TEMPLATE_ERROR_NESTED_EXECUTE,
 } TemplateErrorCode;
 
-typedef struct {
-  TemplateErrorCode code;
-  char *message;
-} TemplateError;
-
 struct TemplateNode {
-    TemplateError error;
     TemplateNodeType type;
     TemplateValue value;
     TemplateNode *children;  // child nodes
     TemplateNode *next;      // sibling nodes
 };
 
-RESULT(Template, TemplateError, TemplateNode);
+RESULT(Template, TemplateNode, TemplateErrorCode);
 
 TemplateResult *template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
 
-char *template_node_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const TemplateNode *node, int depth);
-
 TemplateConfig template_default_config__(const char *file, const char *func, int line);
+
+char *template_node_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited);
 
 #define template_parse(arena, s, config) template_parse__(__FILE__, __func__, __LINE__, arena, s, config)
 
-#define template_node_to_debug_str(arena, node) template_node_to_debug_str__(__FILE__, __func__, __LINE__, arena, node, 0)
-
 #define template_default_config() template_default_config__(__FILE__, __func__, __LINE__)
+
+#define TEMPLATE_NODE_TO_DEBUG_STR(arena, name, node) \
+    template_node_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, node, ptrset_init(arena))
 
 #endif // EPRINTF_H
