@@ -352,7 +352,9 @@ typedef struct PtrSet {
     size_t capacity;
 } PtrSet;
 
-PtrSet *ptrset_init(Arena *arena);
+PtrSet *ptrset_init__(const char *file, const char *func, int line, Arena *arena);
+#define ptrset_init(arena) ptrset_init__(__FILE__, __func__, __LINE__, arena)
+
 bool debug_ptrset_contains__(PtrSet *set, void *ptr);
 void debug_ptrset_add__(const char *file, const char *func, int line, Arena *arena, PtrSet *set, void *ptr);
 
@@ -384,20 +386,23 @@ char *struct_to_debug_str__(const char *file, const char *func, int line, Arena 
     string_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, string)
 #define NUMBER_TO_DEBUG_STR(arena, name, number) \
     number_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, number)
-#define STRUCT_TO_DEBUG_STR(arena, type, name, self, count, ...) \
-    struct_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, self, count, ##__VA_ARGS__)
 
 bool debug_ptrset_contains(PtrSet *set, void *ptr);
 
-#define debug_check_cycle__(file, func, line, arena, type, name, self, visited) __extension__ ({ \
-    if (debug_ptrset_contains__(visited, self))                                            \
-        return struct_to_debug_str__(file, func, line, arena,                              \
-            #type, name, self, 1, "cycle detected");                                  \
-    debug_ptrset_add__(file, func, line, arena, visited, self);                            \
-})
-
-#define DEBUG_CHECK_CYCLE(arena, type, name, self, visited) \
-    debug_check_cycle__(__FILE__, __func__, __LINE__, arena, type, name, self, visited)
+#define STRUCT_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, count, ...) do { \
+    if (!name) \
+        name = "$1"; \
+    \
+    if (debug_ptrset_contains__(visited, ptr)) \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = {cycle detected} %p", #type, name, ptr); \
+    \
+    if (!ptr) \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = NULL", #type, name); \
+    \
+    debug_ptrset_add__(__FILE__, __func__, __LINE__, arena, visited, ptr); \
+    \
+    buffer = struct_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, ptr, count, ##__VA_ARGS__); \
+} while (0)
 
 // ----------
 // -- Json --
