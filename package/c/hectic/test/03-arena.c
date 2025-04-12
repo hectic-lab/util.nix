@@ -91,6 +91,7 @@ void test_arena_overwrite_detection() {
 }
 
 int main() {
+  printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
   init_logger();
 
   test_arena_init();
@@ -101,5 +102,7 @@ int main() {
   test_arena_strdup();
   test_arena_repstr();
   test_arena_overwrite_detection();
-  printf("%s%s all tests passed.%s\n", OPTIONAL_COLOR(COLOR_GREEN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
+
+  printf("%sall tests passed.%s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
+  return 0;
 }

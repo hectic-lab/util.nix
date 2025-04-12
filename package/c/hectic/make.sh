@@ -143,6 +143,10 @@ case "$MODE" in
           env LOG_LEVEL="$LOG_LEVEL" gdb -tui "$exe"
         fi
         env LOG_LEVEL="$LOG_LEVEL" "$exe"
+
+        if [ $? -ne 0 ]; then
+          exit 1
+        fi
       fi
     done
     ;;

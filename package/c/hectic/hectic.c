@@ -172,7 +172,7 @@ char* raise_message(
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tm_info);
 
     // Print timestamp, log level with color, location info
-    fprintf(stderr, "%s %s%s%s [%s:%s:%s%d%s] ", 
+    fprintf(stderr, "%s %s%s%s %s:%s:%s%d%s ", 
             timeStr, 
             log_level_to_color(level), 
             log_level_to_string(level), 
