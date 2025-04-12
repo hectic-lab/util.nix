@@ -30,7 +30,7 @@ static void test_template_node_to_debug_str(Arena *arena) {
     root->next->next->type = TEMPLATE_NODE_TEXT;
     root->next->next->value.text.content = arena_strncpy(arena, "!", 1);
 
-    char *debug_str = template_node_to_debug_str(arena, root);
+    char *debug_str = TEMPLATE_NODE_TO_DEBUG_STR(arena, "root", root);
 
     raise_notice("debug_str: %s", debug_str);
     //assert(strcmp(

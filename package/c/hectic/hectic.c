@@ -206,7 +206,7 @@ PtrSet *ptrset_init__(POSITION_INFO_DECLARATION, Arena *arena) {
     return set;
 }
 
-bool debug_ptrset_contains__(PtrSet *set, void *ptr) {
+bool debug_ptrset_contains__(PtrSet *set, const void *ptr) {
     for (size_t i = 0; i < set->size; i++) {
         if (set->data[i] == ptr)
             return true;
@@ -214,7 +214,7 @@ bool debug_ptrset_contains__(PtrSet *set, void *ptr) {
     return false;
 }
 
-void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, void *ptr) {
+void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr) {
     if (set->size == set->capacity) {
         set->capacity = set->capacity ? set->capacity * 2 : 4;
         set->data = arena_realloc__(CTX(arena), set->data, set->capacity, set->capacity * sizeof(void*));
@@ -282,7 +282,7 @@ char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
     return joined;
 }
 
-char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name, void *ptr, int count, ...) {
+char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name, const void *ptr, int count, ...) {
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG STR: type: %s, name: %s, ptr: %p, count: %d", type, name, ptr, count);
 
     va_list args;
@@ -1809,8 +1809,8 @@ bool template_validate_config__(POSITION_INFO_DECLARATION, const TemplateConfig 
   if (strncmp(*s, pattern, strlen(pattern))) { \
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: " message_arg); \
     result->type = RESULT_ERROR; \
-    result->Result.error.code = code_arg; \
-    result->Result.error.message = message_arg; \
+    result->Result.Error.code = code_arg; \
+    result->Result.Error.message = message_arg; \
     return result; \
   }
 
@@ -2023,8 +2023,8 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
           TemplateResult *error_result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
 
           error_result->type = RESULT_ERROR;
-          error_result->Result.error.code = TEMPLATE_ERROR_UNKNOWN_TAG;
-          error_result->Result.error.message = "Unknown tag prefix";
+          error_result->Result.Error.code = TEMPLATE_ERROR_UNKNOWN_TAG;
+          error_result->Result.Error.message = "Unknown tag prefix";
 
           return error_result;
         }
@@ -2059,7 +2059,7 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
 
 #define TEMPLATE_NODE_MAX_DEBUG_DEPTH 20
 
-static const char *template_error_code_to_string(TemplateErrorCode code) {
+const char *template_error_code_to_string(TemplateErrorCode code) {
   switch (code) {
     case TEMPLATE_ERROR_NONE: return "NONE";
     case TEMPLATE_ERROR_UNKNOWN_TAG: return "UNKNOWN_TAG";
@@ -2075,7 +2075,7 @@ static const char *template_error_code_to_string(TemplateErrorCode code) {
   }
 }
 
-static char *template_node_type_to_string(TemplateNodeType type) {
+char *template_node_type_to_string(TemplateNodeType type) {
   switch (type) {
     case TEMPLATE_NODE_SECTION: return "SECTION";
     case TEMPLATE_NODE_INTERPOLATE: return "INTERPOLATE";
@@ -2089,83 +2089,90 @@ static char *template_node_type_to_string(TemplateNodeType type) {
   }
 }
 
-char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const TemplateNode *node, int depth) {
-    if (!node) return arena_strncpy__(POSITION_INFO, arena, "", 0);
+//char *log_rules_to_debug_str__(CTX_DECLARATION, char *name, LogRule *self, PtrSet *visited) {
+//    char *result = arena_alloc(arena, MEM_KiB);
+//    STRUCT_TO_DEBUG_STR(arena, result, LogRule, name, self, visited, 6,
+//      string_to_debug_str__(POSITION_INFO, arena, "level", log_level_to_string(self->level)),
+//      string_to_debug_str__(POSITION_INFO, arena, "file_pattern", self->file_pattern),
+//      string_to_debug_str__(POSITION_INFO, arena, "function_pattern", self->function_pattern),
+//      int_to_debug_str__(POSITION_INFO, arena, "line_start", self->line_start),
+//      int_to_debug_str__(POSITION_INFO, arena, "line_end", self->line_end),
+//      log_rules_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
+//    );
+//    return result;
+//}
 
-    if (depth > TEMPLATE_NODE_MAX_DEBUG_DEPTH) {
-      return arena_strncpy__(POSITION_INFO, arena, "...", 3);
-    }
+char *template_section_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateSectionValue *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateSectionValue, name, self, visited, 3,
+      string_to_debug_str__(POSITION_INFO, arena, "iterator", self->iterator),
+      string_to_debug_str__(POSITION_INFO, arena, "collection", self->collection),
+      template_node_to_debug_str__(POSITION_INFO, arena, "body", self->body, visited)
+    );
+    return result;
+}
 
-    // Use a temporary buffer on the stack for building the string
-    char temp_buf[MEM_MiB];
-    size_t len = 0;
-    
-    #define APPEND(...) do { \
-        int written = snprintf(temp_buf + len, sizeof(temp_buf) - len, ##__VA_ARGS__); \
-        if (written < 0) return NULL; \
-        len += written; \
-    } while (0)
+char *template_interpolate_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateInterpolateValue *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateInterpolateValue, name, self, visited, 1,
+      string_to_debug_str__(POSITION_INFO, arena, "key", self->key)
+    );
+    return result;
+}
 
-    if (depth == 0) {
-      APPEND("[");
-    }
+char *template_execute_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateExecuteValue *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateExecuteValue, name, self, visited, 1,
+      string_to_debug_str__(POSITION_INFO, arena, "code", self->code)
+    );
+    return result;
+}
 
-    APPEND("{\"type\":\"%s\",", template_node_type_to_string(node->type));
+char *template_include_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateIncludeValue *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateIncludeValue, name, self, visited, 1,
+      string_to_debug_str__(POSITION_INFO, arena, "key", self->key)
+    );
+    return result;
+}
 
-    switch (node->type) {
-        case TEMPLATE_NODE_SECTION:
-            APPEND("\"content\":{\"iterator\":\"%s\",\"collection\"=\"%s\"}",
-                node->value.section.iterator,
-                node->value.section.collection);
-            char *body_str = template_node_to_debug_str__(POSITION_INFO, arena, node->value.section.body, depth + 1);
-            if (body_str) {
-                APPEND(",\"body\":%s", body_str);
-            }
-            break;
-        case TEMPLATE_NODE_INTERPOLATE:
-            APPEND("\"content\":{\"key\":\"%s\"}", node->value.interpolate.key);
-            break;
-        case TEMPLATE_NODE_EXECUTE:
-            APPEND("\"content\":{\"code\":\"%s\"}", node->value.execute.code);
-            break;
-        case TEMPLATE_NODE_INCLUDE:
-            APPEND("\"content\":{\"key\":\"%s\"}", node->value.include.key);
-            break;
-        case TEMPLATE_NODE_TEXT:
-            APPEND("\"content\":{\"content\":\"%s\"}", node->value.text.content);
-            break;
-        default:
-            break;
-    }
+char *template_text_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateTextValue *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateTextValue, name, self, visited, 1,
+      string_to_debug_str__(POSITION_INFO, arena, "content", self->content)
+    );
+    return result;
+}
 
-    if (node->error.code != TEMPLATE_ERROR_NONE) {
-        APPEND(",\"error\":{\"code\":\"%s\",\"message\":\"%s\"}", template_error_code_to_string(node->error.code), node->error.message);
-    }
+char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateValue *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
 
-    if (node->children) {
-        APPEND(",\"children\":[");
-        char *child_str = template_node_to_debug_str__(POSITION_INFO, arena, node->children, depth + 1);
-        if (child_str) {
-            APPEND(",%s", child_str);
-        }
-        APPEND("]");
-    }
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateValue, name, self, visited, 5,
+      template_section_value_to_debug_str__(POSITION_INFO, arena, "section", &self->section, visited),
+      template_interpolate_value_to_debug_str__(POSITION_INFO, arena, "interpolate", &self->interpolate, visited),
+      template_execute_value_to_debug_str__(POSITION_INFO, arena, "execute", &self->execute, visited),
+      template_include_value_to_debug_str__(POSITION_INFO, arena, "include", &self->include, visited),
+      template_text_value_to_debug_str__(POSITION_INFO, arena, "text", &self->text, visited)
+    );
+    return result;
+}
 
-    APPEND("}");
 
-    if (node->next) {
-        char *next_str = template_node_to_debug_str__(POSITION_INFO, arena, node->next, depth + 1);
-        if (next_str) {
-            APPEND(",%s", next_str);
-        }
-    }
+//struct TemplateNode {
+//    TemplateNodeType type;
+//    TemplateValue value;
+//    TemplateNode *children;  // child nodes
+//    TemplateNode *next;      // sibling nodes
+//};
 
-    if (depth == 0) {
-      APPEND("]");
-    }
-
-    // Copy the final string to arena-allocated memory
-    char *result = arena_strncpy__(POSITION_INFO, arena, temp_buf, len);
+char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited) {
+    char *result = arena_alloc(arena, MEM_KiB);
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateNode, name, self, visited, 4,
+      string_to_debug_str__(POSITION_INFO, arena, "type", template_node_type_to_string(self->type)),
+      template_value_to_debug_str__(POSITION_INFO, arena, "value", &self->value, visited),
+      template_node_to_debug_str__(POSITION_INFO, arena, "children", self->children, visited),
+      template_node_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
+    );
     return result;
 }
 
