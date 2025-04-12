@@ -198,9 +198,9 @@ char* raise_message(
 // -- debug --
 // -----------
 
-PtrSet *ptrset_init(Arena *arena) {
-    PtrSet *set = arena_alloc(arena, sizeof(PtrSet));
-    set->data = arena_alloc(arena, 4 * sizeof(void*));
+PtrSet *ptrset_init__(POSITION_INFO_DECLARATION, Arena *arena) {
+    PtrSet *set = arena_alloc__(POSITION_INFO, arena, sizeof(PtrSet));
+    set->data = arena_alloc__(POSITION_INFO, arena, 4 * sizeof(void*));
     set->size = 0;
     set->capacity = 4;
     return set;
@@ -267,17 +267,13 @@ char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
 
 char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name, void *ptr, int count, ...) {
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG STR: type: %s, name: %s, ptr: %p, count: %d", type, name, ptr, count);
-    char *result;
-    if ((ptr) == NULL) {
-        result = arena_strdup_fmt__(CTX(arena), "%s %s = NULL", type, name);
-    } else {
-        va_list args;
-        va_start(args, count);
-        char *joined = debug_join_debug_strings_v(CTX(arena), count, args);
-        va_end(args);
-        result = arena_strdup_fmt__(CTX(arena), "%s %s = {%s} %p", type, name, joined, ptr);
-    }
-    return result;
+
+    va_list args;
+    va_start(args, count);
+    char *joined = debug_join_debug_strings_v(CTX(arena), count, args);
+    va_end(args);
+
+    return arena_strdup_fmt__(CTX(arena), "%s %s = {%s} %p", type, name, joined, ptr);
 }
 
 // ------------
