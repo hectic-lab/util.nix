@@ -81,7 +81,8 @@ void test_struct2_to_debug_str(Arena *arena) {
 
 int main(void) {
     printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
-    init_logger();
+    debug_color_mode = COLOR_MODE_DISABLE;
+    logger_init();
 
     Arena arena = arena_init(MEM_MiB);
 
@@ -92,6 +93,7 @@ int main(void) {
     test_struct2_to_debug_str(&arena);
 
     arena_free(&arena);
+    logger_free();
     printf("%sAll tests passed %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }

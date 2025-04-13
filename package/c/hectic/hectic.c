@@ -32,15 +32,16 @@ char *strsep(char **stringp, const char *delim) {
 #endif
 
 // Forward declarations
-void free_log_rules();
 const char* json_type_to_string(JsonType type);
 
 // Global color mode variable definition
 ColorMode color_mode = COLOR_MODE_AUTO;
+ColorMode debug_color_mode = COLOR_MODE_AUTO;
 
 // Global logging variables
 LogLevel current_log_level = LOG_LEVEL_INFO;
 LogRule *log_rules = NULL;
+Arena *log_rules_arena = NULL;
 
 const char* color_mode_to_string(ColorMode mode) {
     switch (mode) {
@@ -66,6 +67,40 @@ void set_output_color_mode(ColorMode mode) {
 #define POSITION_INFO file, func, line
 #define CTX_DECLARATION POSITION_INFO_DECLARATION, Arena *arena
 #define CTX(lifetimed_arena) POSITION_INFO, arena = (lifetimed_arena)
+
+// -----------
+// -- Error --
+// -----------
+
+const char* error_code_to_string(HecticErrorCode code) {
+    switch (code) {
+        case HECTIC_ERROR_NONE: return "NONE";
+        case TEMPLATE_ERROR_NONE: return "NONE";
+        case TEMPLATE_ERROR_UNKNOWN_TAG: return "UNKNOWN_TAG";
+        case TEMPLATE_ERROR_NESTED_INTERPOLATION: return "NESTED_INTERPOLATION";
+        case TEMPLATE_ERROR_NESTED_SECTION_ITERATOR: return "NESTED_SECTION_ITERATOR";
+        case TEMPLATE_ERROR_UNEXPECTED_SECTION_END: return "UNEXPECTED_SECTION_END";
+        case TEMPLATE_ERROR_NESTED_INCLUDE: return "NESTED_INCLUDE";
+        case TEMPLATE_ERROR_NESTED_EXECUTE: return "NESTED_EXECUTE";
+        case TEMPLATE_ERROR_INVALID_CONFIG: return "INVALID_CONFIG";
+        case TEMPLATE_ERROR_OUT_OF_MEMORY: return "OUT_OF_MEMORY";
+        case LOGGER_ERROR_INVALID_RULES_STRING: return "INVALID_RULES_STRING";
+        case LOGGER_ERROR_OUT_OF_MEMORY: return "OUT_OF_MEMORY";
+        default: return "UNKNOWN";
+    }
+}
+
+// ------------
+// -- Result --
+// ------------
+
+char *result_type_to_string(ResultType type) {
+    switch (type) {
+        case RESULT_ERROR: return "ERROR";
+        case RESULT_SOME: return "SOME";
+        default: return "UNKNOWN";
+    }
+}
 
 // ------------
 // -- Logger --
@@ -120,28 +155,41 @@ LogLevel log_level_from_string(const char *level_str) {
 
 void logger_level_reset() {
     current_log_level = LOG_LEVEL_INFO;
-    free_log_rules();
+    logger_free();
 }
 
 void logger_level(LogLevel level) {
     current_log_level = level;
-    free_log_rules(); // Clear any complex rules
+    logger_free();
 }
 
-void init_logger(void) {
+// NOTE(yukkop): This function not uses POSITION_INFO because it's not have a user error. All possible errors are realization errors.
+void logger_init(void) {
+    log_rules_arena = malloc(sizeof(Arena));
+    if (!log_rules_arena) {
+        fprintf(stderr, "INIT: Failed to allocate memory for logger arena\n");
+        exit(1);
+    }
+    
+    *log_rules_arena = arena_init__(__FILE__, __func__, __LINE__, 1024);
     const char* env_level = getenv("LOG_LEVEL");
+    printf("INIT: env_level: %s\n", env_level);
     
     if (env_level) {
         // Check if it's a complex rule format (contains '=' or ',')
         if (strchr(env_level, '=') || strchr(env_level, ',')) {
-            if (logger_parse_rules(env_level)) {
-                fprintf(stderr, "INIT: Logger initialized with complex rules from environment\n");
-            } else {
+            printf("INIT: env_level is complex\n");
+            LogRuleResult parse_result = logger_parse_rules__(__FILE__, __func__, __LINE__, log_rules_arena, env_level);
+            if (IS_RESULT_ERROR(parse_result)) {
                 fprintf(stderr, "INIT: Failed to parse complex log rules, using default level INFO\n");
                 current_log_level = LOG_LEVEL_INFO;
+                log_rules = arena_alloc__(__FILE__, __func__, __LINE__, log_rules_arena, sizeof(LogRule));
+                *log_rules = RESULT_SOME_VALUE(parse_result);
+            } else {
+                fprintf(stderr, "INIT: Logger initialized with complex rules from environment\n");
             }
         } else {
-            // Simple log level
+            printf("INIT: env_level is simple\n");
             current_log_level = log_level_from_string(env_level);
             fprintf(stderr, "INIT: Logger initialized with level %s from environment\n", 
                     log_level_to_string(current_log_level));
@@ -149,6 +197,15 @@ void init_logger(void) {
     } else {
         fprintf(stderr, "INIT: Logger initialized with default level %s\n", 
                 log_level_to_string(current_log_level));
+    }
+}
+
+void logger_free(void) {
+    log_rules = NULL;
+    if (log_rules_arena) {
+        arena_free__(__FILE__, __func__, __LINE__, log_rules_arena);
+        free(log_rules_arena);
+        log_rules_arena = NULL;
     }
 }
 
@@ -207,6 +264,7 @@ PtrSet *ptrset_init__(POSITION_INFO_DECLARATION, Arena *arena) {
 }
 
 bool debug_ptrset_contains__(PtrSet *set, const void *ptr) {
+    if (!set) return false;
     for (size_t i = 0; i < set->size; i++) {
         if (set->data[i] == ptr)
             return true;
@@ -215,6 +273,7 @@ bool debug_ptrset_contains__(PtrSet *set, const void *ptr) {
 }
 
 void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr) {
+    if (!set) return;
     if (set->size == set->capacity) {
         set->capacity = set->capacity ? set->capacity * 2 : 4;
         set->data = arena_realloc__(CTX(arena), set->data, set->capacity, set->capacity * sizeof(void*));
@@ -222,8 +281,15 @@ void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr) {
     set->data[set->size++] = ptr;
 }
 
+char *enum_to_debug_str__(CTX_DECLARATION, const char *name, size_t enum_value, const char *enum_str) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %s%s%s %zu ", name, DEBUG_COLOR(COLOR_CYAN), enum_str, DEBUG_COLOR(COLOR_RESET), enum_value);
+}
+
 char *string_to_debug_str__(CTX_DECLARATION, const char *name, const char *string) {
-    return arena_strdup_fmt__(CTX(arena), "%s = %p \"%s\"", name, string, string);
+    if (!string) {
+        return arena_strdup_fmt__(CTX(arena), "%s = NULL", name);
+    }
+    return arena_strdup_fmt__(CTX(arena), "%s = %s%p%s \"%s\"", name, DEBUG_COLOR(COLOR_CYAN), string, DEBUG_COLOR(COLOR_RESET), string);
 }
 
 char *int_to_debug_str__(CTX_DECLARATION, const char *name, int number) {
@@ -239,6 +305,9 @@ char *size_t_to_debug_str__(CTX_DECLARATION, const char *name, size_t number) {
 }
 
 char *ptr_to_debug_str__(CTX_DECLARATION, const char *name, void *ptr) {
+    if (!ptr) {
+        return arena_strdup_fmt__(CTX(arena), "%s = NULL", name);
+    }
     return arena_strdup_fmt__(CTX(arena), "%s = %p", name, ptr);
 }
 
@@ -256,12 +325,10 @@ char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
     va_copy(args_copy, args);
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG JOIN: Starting first pass");
     for (int i = 0; i < count; i++) {
-        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "iter1");
         char *s = va_arg(args_copy, char*);
         int len = strlen(s);
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG JOIN: String %d: [%s] %p len: %d", i, s, s, len);
         total_len += len;
-        raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "iter2");
     }
     va_end(args_copy);
 
@@ -290,7 +357,7 @@ char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name,
     char *joined = debug_join_debug_strings_v(CTX(arena), count, args);
     va_end(args);
 
-    return arena_strdup_fmt__(CTX(arena), "%s %s = {%s} %p", type, name, joined, ptr);
+    return arena_strdup_fmt__(CTX(arena), "%s %s = {%s} %s%p%s", type, name, joined, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
 }
 
 // ------------
@@ -1447,49 +1514,21 @@ char* slice_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Slice slice)
   return buffer;
 }
 
-
-// ------------------
-// -- logger rules --
-// ------------------
-
-// Clean up existing log rules
-void free_log_rules() {
-    LogRule *rule = log_rules;
-    while (rule) {
-        LogRule *next = rule->next;
-        if (rule->file_pattern) free(rule->file_pattern);
-        if (rule->function_pattern) free(rule->function_pattern);
-        free(rule);
-        rule = next;
-    }
-    log_rules = NULL;
-}
-
-// Add a new log rule to the rule chain
-LogRule* add_log_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
-                      int line_start, int line_end) {
-    LogRule *rule = (LogRule*)malloc(sizeof(LogRule));
-    if (!rule) return NULL;
+/*
+ * Construct a new log rule
+ */
+LogRuleResult log_rule_init(Arena *arena, LogLevel level, const char *file_pattern, const char *function_pattern, int line_start, int line_end) {
+    LogRule *rule = arena_alloc__(__FILE__, __func__, __LINE__, arena, sizeof(LogRule));
+    if (!rule) return RESULT_ERROR(LogRuleResult, LOGGER_ERROR_OUT_OF_MEMORY, "Out of memory");
     
     rule->level = level;
-    rule->file_pattern = file_pattern ? strdup(file_pattern) : NULL;
-    rule->function_pattern = function_pattern ? strdup(function_pattern) : NULL;
+    rule->file_pattern = file_pattern ? arena_strdup__(__FILE__, __func__, __LINE__, arena, file_pattern) : NULL;
+    rule->function_pattern = function_pattern ? arena_strdup__(__FILE__, __func__, __LINE__, arena, function_pattern) : NULL;
     rule->line_start = line_start;
     rule->line_end = line_end;
     rule->next = NULL;
     
-    // Add to the end of the list
-    if (!log_rules) {
-        log_rules = rule;
-    } else {
-        LogRule *last = log_rules;
-        while (last->next) {
-            last = last->next;
-        }
-        last->next = rule;
-    }
-    
-    return rule;
+    return RESULT_SOME(LogRuleResult, *rule);
 }
 
 // Parse a line range specification (start:end)
@@ -1514,15 +1553,16 @@ void parse_line_range(const char *range_str, int *start, int *end) {
 }
 
 // Parse a complex rule string and set up log rules
-int logger_parse_rules(const char *rules_str) {
-    if (!rules_str || !*rules_str) return 0;
-    
-    // Clean up existing rules
-    free_log_rules();
+LogRuleResult logger_parse_rules__(CTX_DECLARATION, const char *rules_str) {
+    if (!rules_str || !*rules_str) return RESULT_ERROR(LogRuleResult, LOGGER_ERROR_INVALID_RULES_STRING, "Invalid rules string");
     
     // Make a copy of the rules string since we'll be modifying it
-    char *rules_copy = strdup(rules_str);
-    if (!rules_copy) return 0;
+    char *rules_copy = arena_strdup__(CTX(arena), rules_str);
+    if (!rules_copy) return RESULT_ERROR(LogRuleResult, LOGGER_ERROR_OUT_OF_MEMORY, "Out of memory");
+
+    // Initialize the rules list
+    LogRule *rules = NULL;
+    LogRule **current = &rules;
     
     // First rule sets the default level
     char *next_rule = rules_copy;
@@ -1586,11 +1626,25 @@ int logger_parse_rules(const char *rules_str) {
         
         // Create a new rule
         LogLevel level = log_level_from_string(level_str);
-        add_log_rule(level, file_pattern, function_pattern, line_start, line_end);
+        LogRuleResult rule_result = log_rule_init(arena, level, file_pattern, function_pattern, line_start, line_end);
+        
+        if (IS_RESULT_ERROR(rule_result)) {
+            free(rules_copy);
+            return rule_result;
+        }
+        
+        // Add the rule to the list
+        *current = arena_alloc__(CTX(arena), sizeof(LogRule));
+        if (!*current) {
+            free(rules_copy);
+            return RESULT_ERROR(LogRuleResult, LOGGER_ERROR_OUT_OF_MEMORY, "Out of memory");
+        }
+        
+        **current = RESULT_SOME_VALUE(rule_result);
+        current = &(*current)->next;
     }
     
-    free(rules_copy);
-    return 1;
+    return RESULT_SOME(LogRuleResult, *rules);
 }
 
 // Check if a file matches a pattern
@@ -1637,9 +1691,21 @@ LogLevel logger_get_effective_level(const char *file, const char *func, int line
 }
 
 // Add a new log rule programmatically
-int logger_add_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
-                    int line_start, int line_end) {
-    return add_log_rule(level, file_pattern, function_pattern, line_start, line_end) != NULL;
+HecticError logger_add_rule(Arena *arena, LogRule *rules, LogLevel level, const char *file_pattern, const char *function_pattern, int line_start, int line_end) {
+    LogRuleResult init_result = log_rule_init(arena, level, file_pattern, function_pattern, line_start, line_end);
+    if (IS_RESULT_ERROR(init_result)) {
+        return RESULT_ERROR_VALUE(init_result);
+    }
+    if (!rules) {
+        *rules = RESULT_SOME_VALUE(init_result);
+    } else {
+        LogRule *last = rules;
+        while (last->next) {
+            last = last->next;
+        }
+        *last->next = RESULT_SOME_VALUE(init_result);
+    }
+    return (HecticError){ .code = HECTIC_ERROR_NONE, .message = NULL };
 }
 
 // Print all current logging rules to stderr
@@ -1662,83 +1728,10 @@ void logger_print_rules() {
     }
 }
 
-// Helper to format a rule as a string
-static void format_rule_to_buffer(char *buffer, size_t size, LogRule *rule) {
-    char line_range[32] = "";
-    
-    // Format line range if specified
-    if (rule->line_start > 0) {
-        if (rule->line_end > 0 && rule->line_end != rule->line_start) {
-            snprintf(line_range, sizeof(line_range), "%d:%d", rule->line_start, rule->line_end);
-        } else {
-            snprintf(line_range, sizeof(line_range), "%d", rule->line_start);
-        }
-    }
-    
-    // Format the complete rule
-    if (rule->file_pattern && rule->function_pattern && line_range[0]) {
-        // File + function + line range
-        snprintf(buffer, size, "%s@%s@%s=%s",
-                 rule->file_pattern, rule->function_pattern, line_range,
-                 log_level_to_string(rule->level));
-    } else if (rule->file_pattern && rule->function_pattern) {
-        // File + function
-        snprintf(buffer, size, "%s@%s=%s",
-                 rule->file_pattern, rule->function_pattern,
-                 log_level_to_string(rule->level));
-    } else if (rule->file_pattern && line_range[0]) {
-        // File + line range
-        snprintf(buffer, size, "%s@%s=%s",
-                 rule->file_pattern, line_range,
-                 log_level_to_string(rule->level));
-    } else if (rule->file_pattern) {
-        // Just file
-        snprintf(buffer, size, "%s=%s",
-                 rule->file_pattern,
-                 log_level_to_string(rule->level));
-    } else {
-        // Empty rule (shouldn't happen)
-        snprintf(buffer, size, "EMPTY=%s", log_level_to_string(rule->level));
-    }
-}
-
-// Format all rules into a string
-char* logger_rules_to_string(Arena *arena) {
-    if (!arena) return NULL;
-    
-    // Allocate a buffer in the arena (estimate size needed)
-    size_t estimated_size = 1024; // Start with 1KB
-    char *buffer = arena_alloc(arena, estimated_size);
-    if (!buffer) return NULL;
-    
-    // Initialize with default level
-    int pos = snprintf(buffer, estimated_size, "%s", log_level_to_string(current_log_level));
-    
-    // Add each rule
-    for (LogRule *rule = log_rules; rule; rule = rule->next) {
-        // Format the rule
-        char rule_str[256];
-        format_rule_to_buffer(rule_str, sizeof(rule_str), rule);
-        
-        // Check buffer space and add to result
-        if (pos + strlen(rule_str) + 2 < estimated_size) {
-            buffer[pos++] = ',';
-            strcpy(buffer + pos, rule_str);
-            pos += strlen(rule_str);
-        } else {
-            // Buffer too small, just stop
-            strcat(buffer, ",...");
-            break;
-        }
-    }
-    
-    return buffer;
-}
-
 char *log_rules_to_debug_str__(CTX_DECLARATION, char *name, LogRule *self, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);
     STRUCT_TO_DEBUG_STR(arena, result, LogRule, name, self, visited, 6,
-      string_to_debug_str__(POSITION_INFO, arena, "level", log_level_to_string(self->level)),
+      enum_to_debug_str__(POSITION_INFO, arena, "level", self->level, log_level_to_string(self->level)),
       string_to_debug_str__(POSITION_INFO, arena, "file_pattern", self->file_pattern),
       string_to_debug_str__(POSITION_INFO, arena, "function_pattern", self->function_pattern),
       int_to_debug_str__(POSITION_INFO, arena, "line_start", self->line_start),
@@ -1808,18 +1801,15 @@ bool template_validate_config__(POSITION_INFO_DECLARATION, const TemplateConfig 
 #define TEMPLATE_ASSERT_SYNTAX(pattern, message_arg, code_arg) \
   if (strncmp(*s, pattern, strlen(pattern))) { \
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: " message_arg); \
-    result->type = RESULT_ERROR; \
-    result->Result.Error.code = code_arg; \
-    result->Result.Error.message = message_arg; \
-    return result; \
+    return RESULT_ERROR(TemplateResult, code_arg, message_arg); \
   }
 
-TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config);
+TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config);
 
-TemplateResult *template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+TemplateResult template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Interpolation");
 
-  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+  TemplateResult result;
 
   const char **s = s_ptr;
 
@@ -1839,22 +1829,22 @@ TemplateResult *template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena 
   }
 
   size_t key_len = *s - key_start;
-  result->Result.some.value.interpolate.key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
+  result.type = RESULT_SOME;
 
-  result->type = RESULT_SOME;
-  result->Result.some.type = TEMPLATE_NODE_INTERPOLATE;
+  result.Result.some.value.interpolate.key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
+  result.Result.some.type = TEMPLATE_NODE_INTERPOLATE;
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
   return result;
 }
 
-TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+TemplateResult template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Section");
 
-  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = RESULT_SOME;
-  result->Result.some.type = TEMPLATE_NODE_SECTION;
+  TemplateResult result;
+  result.type = RESULT_SOME;
+  result.Result.some.type = TEMPLATE_NODE_SECTION;
 
   const char **s = s_ptr;
 
@@ -1876,7 +1866,7 @@ TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t iterator_len = *s - iterator_start;
-  result->Result.some.value.section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
+  result.Result.some.value.section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
 
   // Find the collection name
   *s = skip_whitespace(*s);
@@ -1891,26 +1881,26 @@ TemplateResult *template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t collection_len = *s - collection_start;
-  result->Result.some.value.section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
+  result.Result.some.value.section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
 
   // Parse the body
-  TemplateResult *body_result = template_parse__(POSITION_INFO, arena, s, config);
-  if (body_result->type == RESULT_ERROR) {
+  TemplateResult body_result = template_parse__(POSITION_INFO, arena, s, config);
+  if (body_result.type == RESULT_ERROR) {
     return body_result;
   }
 
-  result->Result.some.value.section.body = &body_result->Result.some;
+  result.Result.some.value.section.body = &body_result.Result.some;
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
   return result;
 }
 
-TemplateResult *template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+TemplateResult template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Include");
-  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = RESULT_SOME;
-  result->Result.some.type = TEMPLATE_NODE_INCLUDE;
+  TemplateResult result;
+  result.type = RESULT_SOME;
+  result.Result.some.type = TEMPLATE_NODE_INCLUDE;
 
   const char **s = s_ptr;
 
@@ -1930,19 +1920,19 @@ TemplateResult *template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t include_len = *s - include_start;
-  result->Result.some.value.include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
+  result.Result.some.value.include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
   return result;
 }
 
-TemplateResult *template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
+TemplateResult template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Execute");
 
-  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = RESULT_SOME;
-  result->Result.some.type = TEMPLATE_NODE_EXECUTE;
+  TemplateResult result;
+  result.type = RESULT_SOME;
+  result.Result.some.type = TEMPLATE_NODE_EXECUTE;
 
   const char **s = s_ptr;
 
@@ -1959,24 +1949,24 @@ TemplateResult *template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena
   }
 
   size_t code_len = *s - code_start;
-  result->Result.some.value.execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
+  result.Result.some.value.execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
 
   *s_ptr = *s + strlen(config->Syntax.Braces.close);
 
   return result;
 }
 
-TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config) {
+TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Iteration start");
 
   if (!template_validate_config__(POSITION_INFO, config)) {
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Invalid config");
-    return NULL;
+    return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_INVALID_CONFIG, "Invalid config");
   }
 
   if (!arena) {
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Arena is NULL");
-    return NULL;
+    return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_OUT_OF_MEMORY, "Out of memory");
   }
 
   const char *start = *s;
@@ -1997,7 +1987,7 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
       }
 
       // Deside tag type by prefix
-      TemplateResult *current_result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
+      TemplateResult current_result;
       {
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Found tag");
 
@@ -2019,22 +2009,14 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
           current_result = template_parse_execute__(POSITION_INFO, arena, s, config);
         } else {
           raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Unknown tag prefix: %s", slice_create__(POSITION_INFO, 1, (char *)tag_prefix, strlen(tag_prefix), 0, TEMPLATE_MAX_PREFIX_LEN));
-          
-          TemplateResult *error_result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
 
-          error_result->type = RESULT_ERROR;
-          error_result->Result.Error.code = TEMPLATE_ERROR_UNKNOWN_TAG;
-          error_result->Result.Error.message = "Unknown tag prefix";
-
-          return error_result;
+          return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_UNKNOWN_TAG, "Unknown tag prefix");
         }
+
+        TRY(current_result);
       }
 
-      if (current_result->type == RESULT_ERROR) {
-        return current_result;
-      }
-
-      *current = current_result->Result.some;
+      *current = current_result.Result.some;
       current->next = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
       current = current->next;
     }
@@ -2048,32 +2030,12 @@ TemplateResult *template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const 
     current->value.text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
   }
 
-  TemplateResult *result = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateResult));
-  result->type = RESULT_SOME;
-  result->Result.some = *root;
-
-  return result;
+  return RESULT_SOME(TemplateResult, *root);
 }
 
 #undef TEMPLATE_ASSERT_SYNTAX
 
 #define TEMPLATE_NODE_MAX_DEBUG_DEPTH 20
-
-const char *template_error_code_to_string(TemplateErrorCode code) {
-  switch (code) {
-    case TEMPLATE_ERROR_NONE: return "NONE";
-    case TEMPLATE_ERROR_UNKNOWN_TAG: return "UNKNOWN_TAG";
-    case TEMPLATE_ERROR_NESTED_INTERPOLATION: return "NESTED_INTERPOLATION";
-    case TEMPLATE_ERROR_UNEXPECTED_SECTION_END: return "UNEXPECTED_SECTION_END";
-    case TEMPLATE_ERROR_NESTED_SECTION_ITERATOR: return "NESTED_SECTION_ITERATOR";
-    case TEMPLATE_ERROR_NESTED_INCLUDE: return "NESTED_INCLUDE";
-    case TEMPLATE_ERROR_NESTED_EXECUTE: return "NESTED_EXECUTE";
-    default: { 
-        raise_exception("HECTICLIB ERROR: Unknown template error code: %d", code);
-        return "UNKNOWN";
-    };
-  }
-}
 
 char *template_node_type_to_string(TemplateNodeType type) {
   switch (type) {
@@ -2088,19 +2050,6 @@ char *template_node_type_to_string(TemplateNodeType type) {
     };
   }
 }
-
-//char *log_rules_to_debug_str__(CTX_DECLARATION, char *name, LogRule *self, PtrSet *visited) {
-//    char *result = arena_alloc(arena, MEM_KiB);
-//    STRUCT_TO_DEBUG_STR(arena, result, LogRule, name, self, visited, 6,
-//      string_to_debug_str__(POSITION_INFO, arena, "level", log_level_to_string(self->level)),
-//      string_to_debug_str__(POSITION_INFO, arena, "file_pattern", self->file_pattern),
-//      string_to_debug_str__(POSITION_INFO, arena, "function_pattern", self->function_pattern),
-//      int_to_debug_str__(POSITION_INFO, arena, "line_start", self->line_start),
-//      int_to_debug_str__(POSITION_INFO, arena, "line_end", self->line_end),
-//      log_rules_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
-//    );
-//    return result;
-//}
 
 char *template_section_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateSectionValue *self, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);

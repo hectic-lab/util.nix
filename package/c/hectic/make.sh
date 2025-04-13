@@ -84,7 +84,7 @@ while [ $# -gt 0 ]; do
 done
 
 MODE="${1:-build}"
-shift > /dev/null
+shift 2> /dev/null
 
 if [ -n "$COLOR_FLAG" ]; then
   CFLAGS="$CFLAGS $COLOR_FLAG"
@@ -118,12 +118,19 @@ case "$MODE" in
       esac
     done
 
+    # Check if any requested test doesn't exist
+    for test in "${TESTS_TO_RUN[@]}"; do
+        if [ ! -f "test/${test}.c" ]; then
+            echo "Error: Test '${test}' not found in test directory"
+            exit 1
+        fi
+    done
+
     echo "TESTS_TO_RUN: ${TESTS_TO_RUN[@]}"
     for test_file in test/*.c; do
       test_name=$(basename "${test_file%.c}")
       
       # Skip if specific tests are requested and this isn't one of them
-      # TODO: error on unknown test file
       if [ ${#TESTS_TO_RUN[@]} -ne 0 ] && ! [[ " ${TESTS_TO_RUN[*]} " =~ " ${test_name} " ]]; then
         continue
       fi

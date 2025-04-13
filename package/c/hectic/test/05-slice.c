@@ -84,14 +84,15 @@ void test_slice_string() {
 
 int main() {
     printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
-    init_logger();
+    logger_init();
 
     test_slice_create();
     test_slice_subslice();
     test_slice_copy();
     test_slice_edge_cases();
     test_slice_string();
-    
+
+    logger_free();
     printf("%sall tests passed.%s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__, OPTIONAL_COLOR(COLOR_RESET));
     return 0;
 }

@@ -34,6 +34,7 @@ typedef enum {
 
 // External color mode variable declaration
 extern ColorMode color_mode;
+extern ColorMode debug_color_mode;
 
 const char* color_mode_to_string(ColorMode mode);
 
@@ -42,7 +43,18 @@ void set_output_color_mode(ColorMode mode);
 
 // Macros for detecting terminal and color usage
 #define IS_TERMINAL() (isatty(fileno(stderr)))
+
+/*
+ * USE_COLOR() is true if color is forced or if color is auto and the output is a terminal.
+ * used for all colorized output
+ */
 #define USE_COLOR() ((color_mode == COLOR_MODE_FORCE) || (color_mode == COLOR_MODE_AUTO && IS_TERMINAL()))
+
+/*
+ * DEBUG_COLOR_MODE is the color mode for debug output after USE_COLOR() check.
+ * used for debug colorized output
+ */
+#define USE_COLOR_IN_DEBUG() (color_mode == COLOR_MODE_AUTO ? ((debug_color_mode == COLOR_MODE_FORCE) || (debug_color_mode == COLOR_MODE_AUTO && IS_TERMINAL())) : USE_COLOR())
 
 #define COLOR_RED "\033[1;31m"
 #define COLOR_GREEN "\033[1;32m"
@@ -54,37 +66,26 @@ void set_output_color_mode(ColorMode mode);
 #define COLOR_RESET "\033[0m"
 
 #define OPTIONAL_COLOR(color) (USE_COLOR() ? color : "")
+#define DEBUG_COLOR(color) (USE_COLOR_IN_DEBUG() ? color : "")
+
+// ------------
+// -- Errors --
+// ------------
 
 typedef enum {
-  RESULT_ERROR,
-  RESULT_SOME,
-} ResultType;
-
-#define RESULT(name, result_type, error_type) \
-    typedef struct {                          \
-        ResultType type;                      \
-        union {                               \
-            struct {                          \
-              error_type code;                \
-              char *message;                  \
-            } Error;                          \
-            result_type some;                 \
-        } Result;                             \
-    } name##Result
-
-#define IS_RESULT_ERROR(result) (result->type == RESULT_ERROR)
-#define IS_RESULT_SOME(result) (result->type == RESULT_SOME)
-
-#define TRY(result) if (IS_RESULT_ERROR(result)) { return result; }
-
-#define RESULT_ERROR_CODE(result) (result->Result.error.code)
-#define RESULT_ERROR_MESSAGE(result) (result->Result.error.message)
-
-#define RESULT_SOME_VALUE(result) (result->Result.some)
-
-// ------------ 
-// -- Errors --
-// ------------ 
+  HECTIC_ERROR_NONE = 0,
+  TEMPLATE_ERROR_NONE = 985567,
+  TEMPLATE_ERROR_UNKNOWN_TAG = 985568,
+  TEMPLATE_ERROR_NESTED_INTERPOLATION = 985569,
+  TEMPLATE_ERROR_NESTED_SECTION_ITERATOR = 985570,
+  TEMPLATE_ERROR_UNEXPECTED_SECTION_END = 985571,
+  TEMPLATE_ERROR_NESTED_INCLUDE = 985572,
+  TEMPLATE_ERROR_NESTED_EXECUTE = 985573,
+  TEMPLATE_ERROR_INVALID_CONFIG = 985574,
+  TEMPLATE_ERROR_OUT_OF_MEMORY = 985575,
+  LOGGER_ERROR_INVALID_RULES_STRING = 985576,
+  LOGGER_ERROR_OUT_OF_MEMORY = 985577,
+} HecticErrorCode;
 
 // Define color macros based on output type
 //#define ERROR_PREFIX PP_CAT(COLOR_RED, "Error: ")
@@ -96,6 +97,55 @@ typedef enum {
 #define eprintf(fmt, ...)     "%s" fmt "%s", ERROR_PREFIX, ##__VA_ARGS__, ERROR_SUFFIX
 
 #define todo fprintf(stderr, "%sNot implimented yet%s", COLOR_RED, COLOR_RESET);exit(1)
+
+// ------------
+// -- Result --
+// ------------
+
+typedef enum {
+  RESULT_ERROR,
+  RESULT_SOME,
+} ResultType;
+
+char *result_type_to_string(ResultType type);
+
+typedef struct {
+  HecticErrorCode code;
+  char *message;
+} HecticError;
+
+#define RESULT(name, some_type) \
+    typedef struct {                          \
+        ResultType type;                      \
+        union {                               \
+            HecticError error;                \
+            some_type some;                   \
+        } Result;                             \
+    } name##Result
+
+typedef struct {
+    ResultType type;
+    union {
+        HecticError error;
+    } Result;
+} EmptyResult;
+
+#define IS_RESULT_ERROR(result) (result.type == RESULT_ERROR)
+#define IS_RESULT_SOME(result) (result.type == RESULT_SOME)
+
+#define TRY(result) if (IS_RESULT_ERROR(result)) { return result; }
+
+#define RESULT_ERROR_CODE(result) (result.Result.error.code)
+#define RESULT_ERROR_MESSAGE(result) (result.Result.error.message)
+
+#define RESULT_SOME_VALUE(result) (result.Result.some)
+#define RESULT_ERROR_VALUE(result) (result.Result.error)
+
+#define RESULT_SOME(result_type, value) \
+    (result_type) { .type = RESULT_SOME, .Result.some = value }
+
+#define RESULT_ERROR(result_type, error_code, error_message) \
+    (result_type) { .type = RESULT_ERROR, .Result.error = { .code = error_code, .message = error_message } }
 
 // ------------
 // -- Logger --
@@ -171,50 +221,13 @@ typedef struct LogRule {
 
 void logger_level_reset();
 
-void init_logger(void);
+void logger_init(void);
+
+void logger_free(void);
 
 void logger_level(LogLevel level);
 
 LogLevel log_level_from_string(const char *level_str);
-
-typedef enum {
-  PLACEHOLDER_ERROR,
-} LogRuleParseError;
-
-RESULT(LogParse, LogRule, LogRuleParseError);
-
-/*
- * Set complex logging rules from a string
- * Format: DEFAULT_LEVEL,<file>@<function>=LEVEL,<file>@<line_start>:<line_end>=LEVEL,...
- * Example: "INFO,main.c@main=DEBUG,helper.c@10:50=TRACE"
- *
- * @param rules_str The rule string to parse
- * @return 1 on success, 0 on failure
- */
-int logger_parse_rules(const char *rules_str);
-
-/*
- * Set complex logging rule programmatically
- * 
- * @param level Log level for this rule
- * @param file_pattern File pattern to match (NULL for any file)
- * @param function_pattern Function pattern to match (NULL for any function)
- * @param line_start Start line number (-1 for any)
- * @param line_end End line number (-1 for any)
- * @return 1 on success, 0 on failure
- */
-int logger_add_rule(LogLevel level, const char *file_pattern, const char *function_pattern, 
-                    int line_start, int line_end);
-
-/*
- * Get the effective log level for a message based on complex rules
- * 
- * @param file Source file where log was generated
- * @param func Function where log was generated
- * @param line Line number where log was generated
- * @return The effective log level for this context
- */
-LogLevel logger_get_effective_level(const char *file, const char *func, int line);
 
 /**
  * Core logging function that formats and outputs log messages.
@@ -423,6 +436,8 @@ char *char_to_debug_str__(const char *file, const char *func, int line, Arena *a
 
 char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, int count, ...);
 
+#define ENUM_TO_DEBUG_STR(arena, name, enum_value, enum_str) \
+    enum_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, enum_value, enum_str)
 #define STRING_TO_DEBUG_STR(arena, name, string) \
     string_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, string)
 #define INT_TO_DEBUG_STR(arena, name, number) \
@@ -452,6 +467,49 @@ bool debug_ptrset_contains(PtrSet *set, void *ptr);
     \
     buffer = struct_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, ptr, count, ##__VA_ARGS__); \
 } while (0)
+
+// ------------------
+// -- Logger Rules --
+// ------------------
+
+RESULT(LogRule, LogRule);
+
+/*
+ * Set complex logging rules from a string
+ * Format: DEFAULT_LEVEL,<file>@<function>=LEVEL,<file>@<line_start>:<line_end>=LEVEL,...
+ * Example: "INFO,main.c@main=DEBUG,helper.c@10:50=TRACE"
+ *
+ * @param rules_str The rule string to parse
+ * @return a LogRuleResult containing the LogRule* or an Error
+ */
+LogRuleResult logger_parse_rules__(const char *file, const char *func, int line, Arena *arena, const char *rules_str);
+
+/*
+ * Set complex logging rule programmatically
+ * 
+ * @param level Log level for this rule
+ * @param file_pattern File pattern to match (NULL for any file)
+ * @param function_pattern Function pattern to match (NULL for any function)
+ * @param line_start Start line number (-1 for any)
+ * @param line_end End line number (-1 for any)
+ * @return 1 on success, 0 on failure
+ */
+HecticError logger_add_rule(Arena *arena, LogRule *rules, LogLevel level, const char *file_pattern, const char *function_pattern, int line_start, int line_end);
+
+/*
+ * Get the effective log level for a message based on complex rules
+ * 
+ * @param file Source file where log was generated
+ * @param func Function where log was generated
+ * @param line Line number where log was generated
+ * @return The effective log level for this context
+ */
+LogLevel logger_get_effective_level(const char *file, const char *func, int line);
+
+char *log_rules_to_debug_str__(const char *file, const char *func, int line, Arena *arena, char *name, LogRule *self, PtrSet *visited);
+
+#define LOG_RULES_TO_DEBUG_STR(arena, name, self) \
+    log_rules_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, self, ptrset_init(arena))
 
 // ----------
 // -- Json --
@@ -626,16 +684,6 @@ typedef union {
   TemplateTextValue text;
 } TemplateValue;
 
-typedef enum {
-  TEMPLATE_ERROR_NONE,
-  TEMPLATE_ERROR_UNKNOWN_TAG,
-  TEMPLATE_ERROR_NESTED_INTERPOLATION,
-  TEMPLATE_ERROR_NESTED_SECTION_ITERATOR,
-  TEMPLATE_ERROR_UNEXPECTED_SECTION_END,
-  TEMPLATE_ERROR_NESTED_INCLUDE,
-  TEMPLATE_ERROR_NESTED_EXECUTE,
-} TemplateErrorCode;
-
 struct TemplateNode {
     TemplateNodeType type;
     TemplateValue value;
@@ -643,9 +691,9 @@ struct TemplateNode {
     TemplateNode *next;      // sibling nodes
 };
 
-RESULT(Template, TemplateNode, TemplateErrorCode);
+RESULT(Template, TemplateNode);
 
-TemplateResult *template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
+TemplateResult template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
 
 TemplateConfig template_default_config__(const char *file, const char *func, int line);
 
