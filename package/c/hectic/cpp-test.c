@@ -30,7 +30,6 @@ void set_output_color_mode(ColorMode mode);
  * DEBUG_COLOR_MODE is the color mode for debug output after USE_COLOR() check.
  * used for debug colorized output
  */
-#define DEBUG_COLOR_MODE COLOR_MODE_FORCE
 #define USE_COLOR_IN_DEBUG() (USE_COLOR() ? DEBUG_COLOR_MODE : COLOR_MODE_DISABLE)
 
 #define COLOR_RED "\033[1;31m"

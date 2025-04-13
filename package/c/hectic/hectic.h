@@ -393,7 +393,11 @@ static Arena disposable_arena __attribute__((unused)) = {0};
  * Used to detect cycles in debug strings
  */
 typedef struct PtrSet {
-    void const **data;
+    struct {
+        void const *ptr;
+        const char *type;
+        const char *field_name;  // Add field name to distinguish between same-type fields in unions
+    } *data;
     size_t size;
     size_t capacity;
 } PtrSet;
@@ -401,8 +405,8 @@ typedef struct PtrSet {
 PtrSet *ptrset_init__(const char *file, const char *func, int line, Arena *arena);
 #define ptrset_init(arena) ptrset_init__(__FILE__, __func__, __LINE__, arena)
 
-bool debug_ptrset_contains__(PtrSet *set, const void *ptr);
-void debug_ptrset_add__(const char *file, const char *func, int line, Arena *arena, PtrSet *set, const void *ptr);
+bool debug_ptrset_contains__(PtrSet *set, const void *ptr, const char *type, const char *field_name);
+void debug_ptrset_add__(const char *file, const char *func, int line, Arena *arena, PtrSet *set, const void *ptr, const char *type, const char *field_name);
 
 #define DEBUGSTR(arena, type, value) DEBUGSTR_##type(arena, value)
 
@@ -436,6 +440,8 @@ char *char_to_debug_str__(const char *file, const char *func, int line, Arena *a
 
 char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, int count, ...);
 
+bool debug_ptrset_contains(PtrSet *set, void *ptr);
+
 #define ENUM_TO_DEBUG_STR(arena, name, enum_value, enum_str) \
     enum_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, enum_value, enum_str)
 #define STRING_TO_DEBUG_STR(arena, name, string) \
@@ -451,22 +457,48 @@ char *struct_to_debug_str__(const char *file, const char *func, int line, Arena 
 #define CHAR_TO_DEBUG_STR(arena, name, c) \
     char_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, c)
 
-bool debug_ptrset_contains(PtrSet *set, void *ptr);
-
+/*
+ * STRUCT_TO_DEBUG_STR - Converts a structure into a debug string.
+ *
+ * Parameters:
+ *   arena   - Pointer to the memory allocation arena.
+ *   buffer  - Variable that will hold the resulting debug string.
+ *   type    - Data type of the structure (used for formatting).
+ *   name    - Name of the structure; if NULL, it is replaced with "$1".
+ *   ptr     - Pointer to the structure.
+ *   visited - Set of visited pointers (for cycle detection).
+ *   count   - Count of fields or elements to output.
+ *   ...     - Additional arguments for struct_to_debug_str__.
+ *
+ * Details:
+ *   - If 'ptr' is already present in 'visited', the macro returns a string indicating "cycle detected".
+ *   - If 'ptr' is NULL, the macro returns a string indicating that the structure is NULL.
+ *   - Otherwise, 'ptr' is added to 'visited' and the structure is converted into a debug string.
+ *
+ * Restrictions:
+ *   - This macro must be used at the function level only. Nested usage is not allowed,
+ *     as the 'return' statements within the macro will exit the current function.
+ *
+ * Returns:
+ *   - A debug string created by arena_strdup_fmt__ containing the structure's debugging information.
+ */
 #define STRUCT_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, count, ...) do { \
     if (!name) \
         name = "$1"; \
     \
-    if (debug_ptrset_contains__(visited, ptr)) \
+    if (debug_ptrset_contains__(visited, ptr, #type, name)) \
         return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = {cycle detected} %p", #type, name, ptr); \
     \
     if (!ptr) \
         return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = NULL", #type, name); \
     \
-    debug_ptrset_add__(__FILE__, __func__, __LINE__, arena, visited, ptr); \
+    debug_ptrset_add__(__FILE__, __func__, __LINE__, arena, visited, ptr, #type, name); \
     \
     buffer = struct_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, ptr, count, ##__VA_ARGS__); \
 } while (0)
+
+#define UNION_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, count, ...) \
+    STRUCT_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, count, ##__VA_ARGS__)
 
 // ------------------
 // -- Logger Rules --
