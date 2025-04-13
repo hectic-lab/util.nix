@@ -257,28 +257,34 @@ char* raise_message(
 
 PtrSet *ptrset_init__(POSITION_INFO_DECLARATION, Arena *arena) {
     PtrSet *set = arena_alloc__(POSITION_INFO, arena, sizeof(PtrSet));
-    set->data = arena_alloc__(POSITION_INFO, arena, 4 * sizeof(void*));
+    set->data = arena_alloc__(POSITION_INFO, arena, 4 * sizeof(struct { void const *ptr; const char *type; const char *field_name; }));
     set->size = 0;
     set->capacity = 4;
     return set;
 }
 
-bool debug_ptrset_contains__(PtrSet *set, const void *ptr) {
+bool debug_ptrset_contains__(PtrSet *set, const void *ptr, const char *type, const char *field_name) {
     if (!set) return false;
     for (size_t i = 0; i < set->size; i++) {
-        if (set->data[i] == ptr)
+        if (set->data[i].ptr == ptr && 
+            strcmp(set->data[i].type, type) == 0 && 
+            strcmp(set->data[i].field_name, field_name) == 0)
             return true;
     }
     return false;
 }
 
-void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr) {
+void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr, const char *type, const char *field_name) {
     if (!set) return;
     if (set->size == set->capacity) {
         set->capacity = set->capacity ? set->capacity * 2 : 4;
-        set->data = arena_realloc__(CTX(arena), set->data, set->capacity, set->capacity * sizeof(void*));
+        set->data = arena_realloc__(CTX(arena), set->data, set->capacity * sizeof(struct { void const *ptr; const char *type; const char *field_name; }), 
+                                  set->capacity * 2 * sizeof(struct { void const *ptr; const char *type; const char *field_name; }));
     }
-    set->data[set->size++] = ptr;
+    set->data[set->size].ptr = ptr;
+    set->data[set->size].type = type;
+    set->data[set->size].field_name = field_name;
+    set->size++;
 }
 
 char *enum_to_debug_str__(CTX_DECLARATION, const char *name, size_t enum_value, const char *enum_str) {
@@ -2105,14 +2111,6 @@ char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, con
     );
     return result;
 }
-
-
-//struct TemplateNode {
-//    TemplateNodeType type;
-//    TemplateValue value;
-//    TemplateNode *children;  // child nodes
-//    TemplateNode *next;      // sibling nodes
-//};
 
 char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);
