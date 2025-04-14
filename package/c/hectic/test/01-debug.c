@@ -20,6 +20,18 @@ struct Struct2 {
     Struct *other;
 };
 
+typedef enum TestUnionVariant {
+    TEST_UNION_VARIANT_A,
+    TEST_UNION_VARIANT_B,
+    TEST_UNION_VARIANT_C
+} TestUnionVariant;
+
+typedef union TestUnion {
+    int a;
+    char *b;
+    float c;
+} TestUnion;
+
 char *struct_to_debug_str(Arena *arena, char *name, Struct *self, PtrSet *visited) {
     raise_trace("struct_to_debug_str: name: %s, self: %p, visited: %p", name, self, visited);
 
@@ -48,6 +60,18 @@ char *struct2_to_debug_str(Arena *arena, char *name, Struct2 *self, PtrSet *visi
     return result;
 }
 
+char *test_union_to_debug_str(Arena *arena, char *name, TestUnion *self, PtrSet *visited, TestUnionVariant active_variant) {
+    raise_trace("test_union_to_debug_str: name: %s, self: %p, visited: %p, active_variant: %zu", name, self, visited, active_variant);
+
+    char *result = arena_alloc(arena, MEM_KiB);
+    UNION_TO_DEBUG_STR(arena, result, TestUnion, name, self, visited, active_variant, 3, 
+      TEST_UNION_VARIANT_A, INT_TO_DEBUG_STR(arena, "a", self->a),    
+      TEST_UNION_VARIANT_B, STRING_TO_DEBUG_STR(arena, "b", self->b),
+      TEST_UNION_VARIANT_C, FLOAT_TO_DEBUG_STR(arena, "c", self->c)
+    );
+    return result;
+}
+
 void test_struct_to_debug_str(Arena *arena) {
     // Mock a struct with a cycle
     Struct test_struct = {.a = 1, .b = 2, .next = NULL};
@@ -58,7 +82,7 @@ void test_struct_to_debug_str(Arena *arena) {
     raise_notice("result: %s", result);
 
     char *check = arena_alloc(arena, MEM_KiB);
-    sprintf(check, "Struct struct = {a = 1, b = 2, Struct next = {a = 1, b = 2, Struct next = {cycle detected} %p} %p} %p", (void*)&test_struct, (void*)&test_struct, (void*)&test_struct);
+    sprintf(check, "struct Struct struct = {a = 1, b = 2, struct Struct next = {a = 1, b = 2, struct Struct next = {cycle detected} %p} %p} %p", (void*)&test_struct, (void*)&test_struct, (void*)&test_struct);
     raise_notice("check: %s", check);
     assert(strcmp(result, check) == 0);
 }
@@ -74,7 +98,18 @@ void test_struct2_to_debug_str(Arena *arena) {
     char *result = struct2_to_debug_str(arena, "struct2", &test_struct2, visited);
     raise_notice("result: %s", result);
     char *check = arena_alloc(arena, MEM_KiB);
-    sprintf(check, "Struct2 struct2 = {a = 1, f = 3.140000, c = %p \"hello\", Struct other = {a = 1, b = 2, Struct next = {a = 1, b = 2, Struct next = {cycle detected} %p} %p} %p, Struct2 left = NULL} %p", (void*)test_struct2.c,(void*)&test_struct, (void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
+    sprintf(check, "struct Struct2 struct2 = {a = 1, f = 3.140000, c = %p \"hello\", struct Struct other = {a = 1, b = 2, struct Struct next = {a = 1, b = 2, struct Struct next = {cycle detected} %p} %p} %p, struct Struct2 left = NULL} %p", (void*)test_struct2.c,(void*)&test_struct, (void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
+    raise_notice("check: %s", check);
+    assert(strcmp(result, check) == 0);
+}
+
+void test_test_union_to_debug_str(Arena *arena) {
+    TestUnion test_union = {.a = 1};
+    PtrSet *visited = ptrset_init(arena);
+    char *result = test_union_to_debug_str(arena, "test_union", &test_union, visited, TEST_UNION_VARIANT_A);
+    raise_notice("result: %s", result);
+    char *check = arena_alloc(arena, MEM_KiB);
+    sprintf(check, "union TestUnion test_union = {a = 1} %p", (void*)&test_union);
     raise_notice("check: %s", check);
     assert(strcmp(result, check) == 0);
 }
@@ -91,6 +126,9 @@ int main(void) {
 
     printf("%sTesting struct_to_debug_str2%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     test_struct2_to_debug_str(&arena);
+
+    printf("%sTesting test_union_to_debug_str%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    test_test_union_to_debug_str(&arena);
 
     arena_free(&arena);
     logger_free();

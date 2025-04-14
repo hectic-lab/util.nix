@@ -1,16 +1,7 @@
-// ------------
-// -- Colors --
-// ------------
-
-// Color mode enumeration
-typedef enum {
-  COLOR_MODE_AUTO, 
-  COLOR_MODE_FORCE,
-  COLOR_MODE_DISABLE
-} ColorMode;
 
 // External color mode variable declaration
 extern ColorMode color_mode;
+extern ColorMode debug_color_mode;
 
 const char* color_mode_to_string(ColorMode mode);
 
@@ -30,7 +21,7 @@ void set_output_color_mode(ColorMode mode);
  * DEBUG_COLOR_MODE is the color mode for debug output after USE_COLOR() check.
  * used for debug colorized output
  */
-#define USE_COLOR_IN_DEBUG() (USE_COLOR() ? DEBUG_COLOR_MODE : COLOR_MODE_DISABLE)
+#define USE_COLOR_IN_DEBUG() (color_mode == COLOR_MODE_AUTO ? ((debug_color_mode == COLOR_MODE_FORCE) || (debug_color_mode == COLOR_MODE_AUTO && IS_TERMINAL())) : USE_COLOR())
 
 #define COLOR_RED "\033[1;31m"
 #define COLOR_GREEN "\033[1;32m"
@@ -44,6 +35,5 @@ void set_output_color_mode(ColorMode mode);
 #define OPTIONAL_COLOR(color) (USE_COLOR() ? color : "")
 #define DEBUG_COLOR(color) (USE_COLOR_IN_DEBUG() ? color : "")
 
-OPTIONAL_COLOR(COLOR_RED) "Hello" OPTIONAL_COLOR(COLOR_RESET)
-
+">>>>"
 DEBUG_COLOR(COLOR_RED) "Hello" DEBUG_COLOR(COLOR_RESET)
