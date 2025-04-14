@@ -288,7 +288,7 @@ void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr, const cha
 }
 
 char *enum_to_debug_str__(CTX_DECLARATION, const char *name, size_t enum_value, const char *enum_str) {
-    return arena_strdup_fmt__(CTX(arena), "%s = %s%s%s %zu ", name, DEBUG_COLOR(COLOR_CYAN), enum_str, DEBUG_COLOR(COLOR_RESET), enum_value);
+    return arena_strdup_fmt__(CTX(arena), "%senum%s %s = %s%s%s %zu ", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), name, DEBUG_COLOR(COLOR_CYAN), enum_str, DEBUG_COLOR(COLOR_RESET), enum_value);
 }
 
 char *string_to_debug_str__(CTX_DECLARATION, const char *name, const char *string) {
@@ -321,6 +321,53 @@ char *char_to_debug_str__(CTX_DECLARATION, const char *name, char c) {
     return arena_strdup_fmt__(CTX(arena), "%s = %c", name, c);
 }
 
+char *union_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *type, const char *name, const void *ptr, size_t active_variant, size_t count, ...) {
+    if (count % 2 == 0) {
+        raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "HECTICLIB ERROR: Union to debug str: count is even");
+        assert(0);
+    }
+    
+    va_list args;
+    va_start(args, count);
+    
+    char *value = NULL;
+    bool variant_exists = false;
+    
+    // Find the matching value for the active variant
+    while (count--) {
+        size_t variant = va_arg(args, size_t);
+        if (variant == (size_t)-1) break; // End marker
+        
+        if (variant == active_variant) {
+            variant_exists = true;
+            value = va_arg(args, char*);
+            break;
+        }
+        // Skip the string value for non-matching variants
+        va_arg(args, char*);
+    }
+    
+    va_end(args);
+    
+    if (!variant_exists) {
+        return arena_strdup_fmt__(file, func, line, arena, 
+            "%sunion%s %s %s = {invalid variant %d} %s%p%s", 
+            DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), 
+            type, name, active_variant, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
+    }
+    
+    if (!value) {
+        return arena_strdup_fmt__(file, func, line, arena, 
+            "%sunion%s %s %s = {unknown variant} %s%p%s", 
+            DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), 
+            type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
+    }
+    
+    return arena_strdup_fmt__(file, func, line, arena, 
+        "%sunion%s %s %s = %s %s%p%s", 
+        DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), 
+        type, name, value, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
+}
 
 /* Private function */
 char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
@@ -363,7 +410,7 @@ char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name,
     char *joined = debug_join_debug_strings_v(CTX(arena), count, args);
     va_end(args);
 
-    return arena_strdup_fmt__(CTX(arena), "%s %s = {%s} %s%p%s", type, name, joined, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
+    return arena_strdup_fmt__(CTX(arena), "%sstruct%s %s %s = {%s} %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), type, name, joined, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
 }
 
 // ------------
@@ -2099,15 +2146,15 @@ char *template_text_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena
     return result;
 }
 
-char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateValue *self, PtrSet *visited) {
+char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateValue *self, TemplateNodeType type, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);
 
-    STRUCT_TO_DEBUG_STR(arena, result, TemplateValue, name, self, visited, 5,
-      template_section_value_to_debug_str__(POSITION_INFO, arena, "section", &self->section, visited),
-      template_interpolate_value_to_debug_str__(POSITION_INFO, arena, "interpolate", &self->interpolate, visited),
-      template_execute_value_to_debug_str__(POSITION_INFO, arena, "execute", &self->execute, visited),
-      template_include_value_to_debug_str__(POSITION_INFO, arena, "include", &self->include, visited),
-      template_text_value_to_debug_str__(POSITION_INFO, arena, "text", &self->text, visited)
+    UNION_TO_DEBUG_STR(arena, result, TemplateValue, name, self, visited, type, 5,
+      TEMPLATE_NODE_SECTION, template_section_value_to_debug_str__(POSITION_INFO, arena, "section", &self->section, visited),
+      TEMPLATE_NODE_INTERPOLATE, template_interpolate_value_to_debug_str__(POSITION_INFO, arena, "interpolate", &self->interpolate, visited),
+      TEMPLATE_NODE_EXECUTE, template_execute_value_to_debug_str__(POSITION_INFO, arena, "execute", &self->execute, visited),
+      TEMPLATE_NODE_INCLUDE, template_include_value_to_debug_str__(POSITION_INFO, arena, "include", &self->include, visited),
+      TEMPLATE_NODE_TEXT, template_text_value_to_debug_str__(POSITION_INFO, arena, "text", &self->text, visited)
     );
     return result;
 }
@@ -2116,7 +2163,7 @@ char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, cons
     char *result = arena_alloc(arena, MEM_KiB);
     STRUCT_TO_DEBUG_STR(arena, result, TemplateNode, name, self, visited, 4,
       string_to_debug_str__(POSITION_INFO, arena, "type", template_node_type_to_string(self->type)),
-      template_value_to_debug_str__(POSITION_INFO, arena, "value", &self->value, visited),
+      template_value_to_debug_str__(POSITION_INFO, arena, "value", &self->value, self->type, visited),
       template_node_to_debug_str__(POSITION_INFO, arena, "children", self->children, visited),
       template_node_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
     );

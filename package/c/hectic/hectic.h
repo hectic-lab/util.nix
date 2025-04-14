@@ -438,6 +438,8 @@ char *ptr_to_debug_str__(const char *file, const char *func, int line, Arena *ar
 
 char *char_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, char c);
 
+char *union_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, size_t active_variant, size_t count, ...);
+
 char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, int count, ...);
 
 bool debug_ptrset_contains(PtrSet *set, void *ptr);
@@ -456,6 +458,21 @@ bool debug_ptrset_contains(PtrSet *set, void *ptr);
     ptr_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, ptr)
 #define CHAR_TO_DEBUG_STR(arena, name, c) \
     char_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, c)
+
+#define UNION_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, active_variant, count, ...) do { \
+    if (!name) \
+        name = "$1"; \
+    \
+    if (debug_ptrset_contains__(visited, ptr, #type, name)) \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sunion%s %s %s = {cycle detected} %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET)); \
+    \
+    if (!ptr) \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sunion%s %s %s = NULL", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name); \
+    \
+    debug_ptrset_add__(__FILE__, __func__, __LINE__, arena, visited, ptr, #type, name); \
+    \
+    buffer = union_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, ptr, active_variant, count, ##__VA_ARGS__); \
+} while (0)
 
 /*
  * STRUCT_TO_DEBUG_STR - Converts a structure into a debug string.
@@ -487,18 +504,15 @@ bool debug_ptrset_contains(PtrSet *set, void *ptr);
         name = "$1"; \
     \
     if (debug_ptrset_contains__(visited, ptr, #type, name)) \
-        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = {cycle detected} %p", #type, name, ptr); \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sstruct%s %s %s = {cycle detected} %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET)); \
     \
     if (!ptr) \
-        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%s %s = NULL", #type, name); \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sstruct%s %s %s = NULL", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name); \
     \
     debug_ptrset_add__(__FILE__, __func__, __LINE__, arena, visited, ptr, #type, name); \
     \
     buffer = struct_to_debug_str__(__FILE__, __func__, __LINE__, arena, #type, name, ptr, count, ##__VA_ARGS__); \
 } while (0)
-
-#define UNION_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, count, ...) \
-    STRUCT_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, count, ##__VA_ARGS__)
 
 // ------------------
 // -- Logger Rules --
