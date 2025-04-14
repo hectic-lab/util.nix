@@ -2,6 +2,8 @@
 #include <fnmatch.h>
 #include <string.h>
 #include <assert.h>
+#include <signal.h>
+#include <setjmp.h>
 
 // On systems without strsep, provide a custom implementation
 #ifndef _GNU_SOURCE
@@ -287,15 +289,47 @@ void debug_ptrset_add__(CTX_DECLARATION, PtrSet *set, const void *ptr, const cha
     set->size++;
 }
 
+
+static sigjmp_buf jmp_env;
+
+void segfault_handler(int signo) {
+    (void)signo;
+    siglongjmp(jmp_env, 1);
+}
+
+int is_readable(const void *ptr) {
+    struct sigaction sa, old_sa;
+    sa.sa_handler = segfault_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGSEGV, &sa, &old_sa);
+
+    if (sigsetjmp(jmp_env, 1) == 0) {
+        volatile char c = *(volatile const char *)ptr;
+        (void)c;  // Suppress unused variable warning
+        sigaction(SIGSEGV, &old_sa, NULL);
+        return 1;  // Read success
+    } else {
+        sigaction(SIGSEGV, &old_sa, NULL);
+        return 0;  // Read caused segmentation fault
+    }
+}
+
 char *enum_to_debug_str__(CTX_DECLARATION, const char *name, size_t enum_value, const char *enum_str) {
     return arena_strdup_fmt__(CTX(arena), "%senum%s %s = %s%s%s %zu ", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), name, DEBUG_COLOR(COLOR_CYAN), enum_str, DEBUG_COLOR(COLOR_RESET), enum_value);
 }
 
 char *string_to_debug_str__(CTX_DECLARATION, const char *name, const char *string) {
-    if (!string) {
+    if (!string)
         return arena_strdup_fmt__(CTX(arena), "%s = NULL", name);
-    }
-    return arena_strdup_fmt__(CTX(arena), "%s = %s%p%s \"%s\"", name, DEBUG_COLOR(COLOR_CYAN), string, DEBUG_COLOR(COLOR_RESET), string);
+
+    // Check if the pointer is readable.
+    if (!is_readable(string))
+        return arena_strdup_fmt__(CTX(arena), "%s = unreadable", name);
+
+    return arena_strdup_fmt__(CTX(arena), "%s = %s%p%s \"%s\"",
+                              name, DEBUG_COLOR(COLOR_CYAN), string,
+                              DEBUG_COLOR(COLOR_RESET), string);
 }
 
 char *int_to_debug_str__(CTX_DECLARATION, const char *name, int number) {
@@ -364,7 +398,7 @@ char *union_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *
     }
     
     return arena_strdup_fmt__(file, func, line, arena, 
-        "%sunion%s %s %s = %s %s%p%s", 
+        "%sunion%s %s %s = {%s} %s%p%s", 
         DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), 
         type, name, value, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
 }
