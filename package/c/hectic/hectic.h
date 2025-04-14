@@ -85,6 +85,11 @@ typedef enum {
   TEMPLATE_ERROR_OUT_OF_MEMORY = 985575,
   LOGGER_ERROR_INVALID_RULES_STRING = 985576,
   LOGGER_ERROR_OUT_OF_MEMORY = 985577,
+  DEBUG_TO_JSON_PARSE_NO_EQUAL_SIGN_ERROR = 985578,
+  DEBUG_TO_JSON_PARSE_NO_STRUCT_NAME_ERROR = 985579,
+  DEBUG_TO_JSON_PARSE_LEFT_OPERAND_ERROR = 985580,
+  DEBUG_TO_JSON_PARSE_NO_START_ERROR = 985581,
+  DEBUG_TO_JSON_PARSE_NO_END_ERROR = 985582,
 } HecticErrorCode;
 
 // Define color macros based on output type
@@ -464,7 +469,7 @@ bool debug_ptrset_contains(PtrSet *set, void *ptr);
         name = "$1"; \
     \
     if (debug_ptrset_contains__(visited, ptr, #type, name)) \
-        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sunion%s %s %s = {cycle detected} %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET)); \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sunion%s %s %s = <cycle detected> %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET)); \
     \
     if (!ptr) \
         return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sunion%s %s %s = NULL", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name); \
@@ -504,7 +509,7 @@ bool debug_ptrset_contains(PtrSet *set, void *ptr);
         name = "$1"; \
     \
     if (debug_ptrset_contains__(visited, ptr, #type, name)) \
-        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sstruct%s %s %s = {cycle detected} %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET)); \
+        return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sstruct%s %s %s = <cycle detected> %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET)); \
     \
     if (!ptr) \
         return arena_strdup_fmt__(__FILE__, __func__, __LINE__, arena, "%sstruct%s %s %s = NULL", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), #type, name); \
@@ -588,6 +593,8 @@ typedef struct Json {
     } JsonValue;
 } Json;
 
+RESULT(Json, Json);
+
 #define json_parse(arena, s) json_parse__(__FILE__, __func__, __LINE__, arena, s)
 Json *json_parse__(const char* file, const char* func, int line, Arena *arena, const char **s);
 
@@ -608,7 +615,11 @@ char* json_to_debug_str__(const char* file, const char* func, int line, Arena *a
 
 char *json_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const Json * const item, int indent_level);
 
+JsonResult debug_str_to_json__(const char* file, const char* func, int line, Arena *arena, const char **s);
+
 #define json_to_pretty_str(arena, json) json_to_pretty_str__(__FILE__, __func__, __LINE__, arena, json, 0)
+
+#define DEBUG_STR_TO_JSON(arena, debug_ptr) debug_str_to_json__(__FILE__, __func__, __LINE__, arena, debug_ptr)
 
 // -----------
 // -- Slice --
@@ -625,7 +636,7 @@ typedef struct {
 // printf("Content: %d\n", SLICE_ARGS(slice, int));
 #define SLICE_ARGS(slice, type) ((int)((slice).len / sizeof(type))), ((type*)((slice).data))
 
-Slice slice_create__(const char *file, const char *func, int line, size_t isize, void *array, size_t array_len, size_t start, size_t len);
+Slice slice_create__(const char *file, const char *func, int line, size_t isize, const void *array, size_t array_len, size_t start, size_t len);
 
 Slice slice_subslice__(const char *file, const char *func, int line, Slice s, size_t start, size_t len);
 

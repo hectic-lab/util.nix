@@ -325,7 +325,7 @@ char *string_to_debug_str__(CTX_DECLARATION, const char *name, const char *strin
 
     // Check if the pointer is readable.
     if (!is_readable(string))
-        return arena_strdup_fmt__(CTX(arena), "%s = unreadable", name);
+        return arena_strdup_fmt__(CTX(arena), "%s = <memory unreadable>", name);
 
     return arena_strdup_fmt__(CTX(arena), "%s = %s%p%s \"%s\"",
                               name, DEBUG_COLOR(COLOR_CYAN), string,
@@ -385,14 +385,14 @@ char *union_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *
     
     if (!variant_exists) {
         return arena_strdup_fmt__(file, func, line, arena, 
-            "%sunion%s %s %s = {invalid variant %d} %s%p%s", 
+            "%sunion%s %s %s = <invalid variant %d> %s%p%s", 
             DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), 
             type, name, active_variant, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
     }
     
     if (!value) {
         return arena_strdup_fmt__(file, func, line, arena, 
-            "%sunion%s %s %s = {unknown variant} %s%p%s", 
+            "%sunion%s %s %s = <unknown variant> %s%p%s", 
             DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), 
             type, name, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
     }
@@ -1473,12 +1473,254 @@ char* json_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Json json) {
   return result;
 }
 
+JsonResult debug_str_to_json__(POSITION_INFO_DECLARATION, Arena *arena, const char **s) {
+    raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG STR TO JSON: debug_str: %s", *s);
+
+    // Remove the unused 'start' variable
+    Json *json = arena_alloc__(POSITION_INFO, arena, sizeof(Json));
+    memset(json, 0, sizeof(Json));
+
+    // Extract the name/key
+    const char *equal_sign = strstr(*s, "=");
+    if (!equal_sign) {
+        raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no equal sign found");
+        return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_EQUAL_SIGN_ERROR, "No equal sign found");
+    }
+
+    Slice full_name = slice_create__(POSITION_INFO, 1, *s, strlen(*s), 0, equal_sign - *s);
+    if (full_name.len == 0) {
+        raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no name found");
+        return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_LEFT_OPERAND_ERROR, "No left operand found");
+    }
+
+    // Move past the equal sign
+    *s = skip_whitespace(equal_sign + 1);
+
+    // Check for struct, union, enum, or other types
+    const char *name_str = full_name.data;
+    name_str = skip_whitespace(name_str);
+
+    if (strncmp(name_str, "struct ", 7) == 0) {
+        // Handle struct
+        json->type = JSON_OBJECT;
+        
+        // Extract struct type and name
+        name_str += 7; // Skip "struct "
+        const char *space = strchr(name_str, ' ');
+        
+        if (!space) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: missing struct name");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_STRUCT_NAME_ERROR, "Struct without name");
+        }
+        
+        // Extract type (between "struct " and space)
+        
+        // Extract name (after space, before any other character)
+        name_str = skip_whitespace(space + 1);
+        const char *name_end = name_str;
+        while (*name_end && !isspace(*name_end) && *name_end != '{') name_end++;
+        
+        if (name_end == name_str) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: missing struct variable name");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_STRUCT_NAME_ERROR, "Struct without variable name");
+        }
+        
+        size_t name_len = name_end - name_str;
+        json->key = arena_strncpy__(POSITION_INFO, arena, name_str, name_len);
+        
+        // Find struct body
+        const char *body_start = strchr(name_end, '{');
+        if (!body_start) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no start found for struct");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_START_ERROR, "Struct without start");
+        }
+        
+        const char *body_end = strrchr(body_start, '}');
+        if (!body_end) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no end found for struct");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_END_ERROR, "Struct without end");
+        }
+        
+        // Move pointer past the struct
+        *s = body_end + 1;
+        
+        // TODO: Parse struct fields
+        // For now, we're just creating an empty object
+    } 
+    else if (strncmp(name_str, "union ", 6) == 0) {
+        // Handle union
+        json->type = JSON_OBJECT;
+        
+        // Extract union name
+        name_str += 6; // Skip "union "
+        const char *space = strchr(name_str, ' ');
+        
+        if (!space) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: missing union name");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_STRUCT_NAME_ERROR, "Union without name");
+        }
+        
+        // Extract type (between "union " and space)
+        
+        // Extract name (after space, before any other character)
+        name_str = skip_whitespace(space + 1);
+        const char *name_end = name_str;
+        while (*name_end && !isspace(*name_end) && *name_end != '{') name_end++;
+        
+        size_t name_len = name_end - name_str;
+        json->key = arena_strncpy__(POSITION_INFO, arena, name_str, name_len);
+        
+        // Find body
+        const char *body_start = strchr(name_end, '{');
+        if (!body_start) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no start found for union");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_START_ERROR, "Union without start");
+        }
+        
+        const char *body_end = strrchr(body_start, '}');
+        if (!body_end) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no end found for union");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_END_ERROR, "Union without end");
+        }
+        
+        // Move pointer past the union
+        *s = body_end + 1;
+        
+        // TODO: Parse union variant
+        // For now, we're just creating an empty object
+    }
+    else if (strncmp(name_str, "enum ", 5) == 0) {
+        // Handle enum
+        json->type = JSON_STRING;
+        
+        // Find enum value (typically at the end)
+        const char *value_start = strrchr(*s, ' ');
+        if (!value_start) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: missing enum value");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_LEFT_OPERAND_ERROR, "Invalid enum format");
+        }
+        
+        // Extract name
+        name_str += 5; // Skip "enum "
+        const char *space = strchr(name_str, ' ');
+        
+        if (space) {
+            size_t name_len = space - name_str;
+            json->key = arena_strncpy__(POSITION_INFO, arena, name_str, name_len);
+        }
+        
+        // Extract value as string
+        value_start = skip_whitespace(value_start + 1);
+        json->JsonValue.string = arena_strdup__(POSITION_INFO, arena, value_start);
+        
+        // Move pointer to the end
+        *s += strlen(*s);
+    }
+    else if (strchr(name_str, '[') && strchr(name_str, ']')) {
+        // Handle array
+        json->type = JSON_ARRAY;
+        
+        // Extract array name
+        const char *bracket = strchr(name_str, '[');
+        if (bracket > name_str) {
+            const char *name_end = bracket;
+            while (name_end > name_str && isspace(*(name_end-1))) name_end--;
+            
+            size_t name_len = name_end - name_str;
+            json->key = arena_strncpy__(POSITION_INFO, arena, name_str, name_len);
+        }
+        
+        // Find array body
+        const char *body_start = strchr(*s, '[');
+        if (!body_start) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no start found for array");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_START_ERROR, "Array without start");
+        }
+        
+        const char *body_end = strrchr(body_start, ']');
+        if (!body_end) {
+            raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: no end found for array");
+            return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_NO_END_ERROR, "Array without end");
+        }
+        
+        // Move pointer past the array
+        *s = body_end + 1;
+        
+        // TODO: Parse array elements
+        // For now, we're just creating an empty array
+    }
+    else {
+        // Try to determine value type (string, number, bool, null)
+        const char *value = *s;
+        
+        if (strncmp(value, "NULL", 4) == 0 || strncmp(value, "null", 4) == 0) {
+            json->type = JSON_NULL;
+            *s += 4;
+        }
+        else if (strncmp(value, "true", 4) == 0) {
+            json->type = JSON_BOOL;
+            json->JsonValue.boolean = true;
+            *s += 4;
+        }
+        else if (strncmp(value, "false", 5) == 0) {
+            json->type = JSON_BOOL;
+            json->JsonValue.boolean = false;
+            *s += 5;
+        }
+        else if (*value == '"') {
+            // String value
+            json->type = JSON_STRING;
+            value++; // Skip opening quote
+            
+            const char *end_quote = strchr(value, '"');
+            if (!end_quote) {
+                raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "DEBUG STR TO JSON: unterminated string");
+                return RESULT_ERROR(JsonResult, DEBUG_TO_JSON_PARSE_LEFT_OPERAND_ERROR, "Unterminated string");
+            }
+            
+            size_t str_len = end_quote - value;
+            json->JsonValue.string = arena_strncpy__(POSITION_INFO, arena, value, str_len);
+            *s = end_quote + 1;
+        }
+        else if (isdigit(*value) || *value == '-' || *value == '+') {
+            // Numeric value
+            json->type = JSON_NUMBER;
+            
+            // Use strtod to parse the number
+            char *end;
+            json->JsonValue.number = strtod(value, &end);
+            *s = end;
+        }
+        else {
+            // Default to string for unknown types
+            json->type = JSON_STRING;
+            
+            // Find the end of the value (space, comma, etc.)
+            const char *end = value;
+            while (*end && !isspace(*end) && *end != ',' && *end != '}' && *end != ']') end++;
+            
+            size_t str_len = end - value;
+            json->JsonValue.string = arena_strncpy__(POSITION_INFO, arena, value, str_len);
+            *s = end;
+        }
+        
+        // Extract name for simple types
+        const char *name_end = name_str;
+        while (*name_end && !isspace(*name_end) && *name_end != '=') name_end++;
+        
+        size_t name_len = name_end - name_str;
+        json->key = arena_strncpy__(POSITION_INFO, arena, name_str, name_len);
+    }
+
+    return RESULT_SOME(JsonResult, *json);
+}
+
 // -----------
 // -- slice --
 // -----------
 
 // Create a slice from an array with boundary check.
-Slice slice_create__(POSITION_INFO_DECLARATION, size_t isize, void *array, size_t array_len, size_t start, size_t len) {
+Slice slice_create__(POSITION_INFO_DECLARATION, size_t isize, const void *array, size_t array_len, size_t start, size_t len) {
     // Function entry logging
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
         "SLICE: Creating slice (source: %p, array_length: %zu, start: %zu, length: %zu, item_size: %zu)", 
