@@ -399,6 +399,21 @@
           
               doCheck = false;
             };
+          buildPlHaskellExt = versionSuffix: let
+	      version = "4.0"; 
+            in buildPostgresqlExtension {
+              postgresql = prev."postgresql_${versionSuffix}";
+            } {
+              pname = "plhaskell";
+              inherit version;
+              src = prev.fetchFromGitHub {
+                owner = "ed-o-saurus";
+                repo = "PLHaskell";
+                rev = "d917f0991a455cf0558c2036e360ba1a9b40a8ef";
+                hash = "sha256-+sJmR/SCMfxxExa7GZuNmWez1dfhvlM9qOdO9gHNf74=";
+              };
+              nativeBuildInputs = with prev; [pkg-config curl ghc haskellPackages.hsc2hs haskellPackages.HSFFIG];
+            };
           buildHttpExt = versionSuffix:
             buildPostgresqlExtension {
               postgresql = prev."postgresql_${versionSuffix}";
@@ -418,10 +433,12 @@
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
+            plhaskell = buildPlHaskellExt "15";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
+            plhaskell = buildPlHaskellExt "15";
           };};
           writers = let
             writeC =
@@ -470,10 +487,12 @@
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
+            plhaskell = buildPlHaskellExt "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
+            plhaskell = buildPlHaskellExt "15";
           };};
         }
       );
