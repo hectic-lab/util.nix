@@ -82,7 +82,7 @@ void test_struct_to_debug_str(Arena *arena) {
     raise_notice("result: %s", result);
 
     char *check = arena_alloc(arena, MEM_KiB);
-    sprintf(check, "struct Struct struct = {a = 1, b = 2, struct Struct next = {a = 1, b = 2, struct Struct next = {cycle detected} %p} %p} %p", (void*)&test_struct, (void*)&test_struct, (void*)&test_struct);
+    sprintf(check, "struct Struct struct = {a = 1, b = 2, struct Struct next = {a = 1, b = 2, struct Struct next = <cycle detected> %p} %p} %p", (void*)&test_struct, (void*)&test_struct, (void*)&test_struct);
     raise_notice("check: %s", check);
     assert(strcmp(result, check) == 0);
 }
@@ -98,7 +98,7 @@ void test_struct2_to_debug_str(Arena *arena) {
     char *result = struct2_to_debug_str(arena, "struct2", &test_struct2, visited);
     raise_notice("result: %s", result);
     char *check = arena_alloc(arena, MEM_KiB);
-    sprintf(check, "struct Struct2 struct2 = {a = 1, f = 3.140000, c = %p \"hello\", struct Struct other = {a = 1, b = 2, struct Struct next = {a = 1, b = 2, struct Struct next = {cycle detected} %p} %p} %p, struct Struct2 left = NULL} %p", (void*)test_struct2.c,(void*)&test_struct, (void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
+    sprintf(check, "struct Struct2 struct2 = {a = 1, f = 3.140000, c = %p \"hello\", struct Struct other = {a = 1, b = 2, struct Struct next = {a = 1, b = 2, struct Struct next = <cycle detected> %p} %p} %p, struct Struct2 left = NULL} %p", (void*)test_struct2.c,(void*)&test_struct, (void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
     raise_notice("check: %s", check);
     assert(strcmp(result, check) == 0);
 }
