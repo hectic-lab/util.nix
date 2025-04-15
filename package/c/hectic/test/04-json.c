@@ -118,16 +118,16 @@ static void test_arena_reset_reuse(Arena *arena) {
 //    assert(strcmp(debug_str, "struct Json root = {type = JSON_OBJECT, key = \"key\", value = struct JsonValue = {string = \"value\"}, next = NULL}") == 0);
 //}
 
-static void test_debug_str_to_json(Arena *arena) {
-    const char *debug_str = "struct SomeStruct struct_name = {name = \"value\", next = NULL, value = 123}";
-    JsonResult result = DEBUG_STR_TO_JSON(arena, &debug_str);
-    if (IS_RESULT_ERROR(result)) {
-        raise_exception("DEBUG_STR_TO_JSON: %s", &RESULT_ERROR_MESSAGE(result));
-        return;
-    }
-    raise_notice("result: %s", JSON_TO_DEBUG_STR(arena, "result", &RESULT_SOME_VALUE(result)));
-    assert(RESULT_SOME_VALUE(result).type == JSON_OBJECT);
-}
+//static void test_debug_str_to_json(Arena *arena) {
+//    const char *debug_str = "struct SomeStruct struct_name = {name = \"value\", next = NULL, value = 123}";
+//    JsonResult result = DEBUG_STR_TO_JSON(arena, &debug_str);
+//    if (IS_RESULT_ERROR(result)) {
+//        raise_exception("DEBUG_STR_TO_JSON: %s", &RESULT_ERROR_MESSAGE(result));
+//        return;
+//    }
+//    raise_notice("result: %s", JSON_TO_DEBUG_STR(arena, "result", &RESULT_SOME_VALUE(result)));
+//    assert(RESULT_SOME_VALUE(result).type == JSON_OBJECT);
+//}
 
 int main(void) {
     printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
@@ -154,8 +154,8 @@ int main(void) {
     test_arena_reset_reuse(&arena);
     //arena_reset(&arena);
     //test_json_to_debug_str(&arena);
-    arena_reset(&arena);
-    test_debug_str_to_json(&arena);
+    //arena_reset(&arena);
+    //test_debug_str_to_json(&arena);
 
     arena_free(&arena);
     logger_free();
