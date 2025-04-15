@@ -443,6 +443,8 @@ char *ptr_to_debug_str__(const char *file, const char *func, int line, Arena *ar
 
 char *char_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, char c);
 
+char *bool_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, int boolean);
+
 char *union_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, size_t active_variant, size_t count, ...);
 
 char *struct_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *type, const char *name, const void *ptr, int count, ...);
@@ -463,6 +465,8 @@ bool debug_ptrset_contains(PtrSet *set, void *ptr);
     ptr_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, ptr)
 #define CHAR_TO_DEBUG_STR(arena, name, c) \
     char_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, c)
+#define BOOL_TO_DEBUG_STR(arena, name, boolean) \
+    bool_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, boolean)
 
 #define UNION_TO_DEBUG_STR(arena, buffer, type, name, ptr, visited, active_variant, count, ...) do { \
     if (!name) \
@@ -566,6 +570,8 @@ char *log_rules_to_debug_str__(const char *file, const char *func, int line, Are
 // -- Json --
 // ----------
 
+typedef struct Json Json;
+
 typedef enum {
     JSON_NORAW = 0,
     JSON_RAW = 1,
@@ -580,18 +586,20 @@ typedef enum {
     JSON_OBJECT,
 } JsonType;
 
+typedef union {
+    double number;
+    char *string;
+    int boolean;
+    Json *child;  /* Child element (for arrays/objects) */
+} JsonValue;
+
 /* Full JSON structure */
-typedef struct Json {
+struct Json {
     struct Json *next;   /* Next sibling */
-    struct Json *child;  /* Child element (for arrays/objects) */
     JsonType type;
+    JsonValue value;
     char *key;           /* Key if item is in an object */
-    union {
-        double number;
-        char *string;
-        int boolean;
-    } JsonValue;
-} Json;
+};
 
 RESULT(Json, Json);
 
@@ -609,9 +617,9 @@ Json *json_get_object_item__(const char* file, const char* func, int line, const
 
 #define json_get_object_item(object, key) json_get_object_item__(__FILE__, __func__, __LINE__, object, key)
 
-char* json_to_debug_str__(const char* file, const char* func, int line, Arena *arena, Json json);
+char* json_to_debug_str__(const char* file, const char* func, int line, Arena *arena, const char *name, const Json *self, PtrSet *visited);
 
-#define json_to_debug_str(arena, json) json_to_debug_str__(__FILE__, __func__, __LINE__, arena, json)
+#define JSON_TO_DEBUG_STR(arena, name, json) json_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, json, ptrset_init(arena))
 
 char *json_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const Json * const item, int indent_level);
 

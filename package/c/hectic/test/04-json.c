@@ -7,15 +7,18 @@
 
 #define ARENA_SIZE 1024 * 1024
 
+#undef PRECOMPILED_LOG_LEVEL
+#define PRECOMPILED_LOG_LEVEL LOG_LEVEL_ERROR
+
 // Test 1: Parse JSON object with a string value.
 static void test_parse_json_object(Arena *arena) {
     const char *json = "{\"key\":\"value\"}";
     Json *root = json_parse(arena, &json);
     assert(root->type == JSON_OBJECT);
-    Json *child = root->child;
+    Json *child = root->value.child;
     assert(child && strcmp(child->key, "key") == 0);
     assert(child->type == JSON_STRING);
-    assert(strcmp(child->JsonValue.string, "value") == 0);
+    assert(strcmp(child->value.string, "value") == 0);
 }
 
 // Test 2: Parse JSON number.
@@ -23,7 +26,7 @@ static void test_parse_json_number(Arena *arena) {
     const char *json = "42";
     Json *root = json_parse(arena, &json);
     assert(root->type == JSON_NUMBER);
-    assert(root->JsonValue.number == 42);
+    assert(root->value.number == 42);
 }
 
 // Test 3: Parse JSON string.
@@ -31,7 +34,7 @@ static void test_parse_json_string(Arena *arena) {
     const char *json = "\"hello\"";
     Json *root = json_parse(arena, &json);
     assert(root->type == JSON_STRING);
-    assert(strcmp(root->JsonValue.string, "hello") == 0);
+    assert(strcmp(root->value.string, "hello") == 0);
 }
 
 // Test 4: Get object items by key.
@@ -40,10 +43,10 @@ static void test_get_object_items(Arena *arena) {
     Json *root = json_parse(arena, &json);
     Json *item_a = json_get_object_item(root, "a");
     assert(item_a && item_a->type == JSON_STRING);
-    assert(strcmp(item_a->JsonValue.string, "1") == 0);
+    assert(strcmp(item_a->value.string, "1") == 0);
     Json *item_b = json_get_object_item(root, "b");
     assert(item_b && item_b->type == JSON_NUMBER);
-    assert(item_b->JsonValue.number == 2);
+    assert(item_b->value.number == 2);
 }
 
 // Test 5: Print JSON object.
@@ -88,7 +91,7 @@ static void test_nested_json_object(Arena *arena) {
     Json *inner = json_get_object_item(outer, "inner");
     assert(inner != NULL);
     assert(inner->type == JSON_NUMBER);
-    assert(inner->JsonValue.number == 100);
+    assert(inner->value.number == 100);
 
 }
 
@@ -105,14 +108,23 @@ static void test_arena_reset_reuse(Arena *arena) {
     assert(strcmp(printed2, "\"another test\"") == 0);
 }
 
+static void test_json_to_debug_str(Arena *arena) {
+    const char *json = "{\"key\":\"value\", \"num\":3.14}";
+    Json *root = json_parse(arena, &json);
+    raise_notice("root: %s", json_to_string(DISPOSABLE_ARENA, root));
+    char *debug_str = JSON_TO_DEBUG_STR(arena, "root", root);
+    raise_notice("debug_str: %s", debug_str);
+    assert(strcmp(debug_str, "struct Json root = {type = JSON_OBJECT, key = \"key\", value = struct JsonValue = {string = \"value\"}, next = NULL}") == 0);
+}
+
 static void test_debug_str_to_json(Arena *arena) {
-    const char *debug_str = "struct SomeStruct struct_name = { name = \"value\", next = NULL, value = 123 }";
+    const char *debug_str = "struct SomeStruct struct_name = {name = \"value\", next = NULL, value = 123}";
     JsonResult result = DEBUG_STR_TO_JSON(arena, &debug_str);
     if (IS_RESULT_ERROR(result)) {
         raise_exception("DEBUG_STR_TO_JSON: %s", &RESULT_ERROR_MESSAGE(result));
         return;
     }
-    raise_notice("result: %s", json_to_string(arena, &RESULT_SOME_VALUE(result)));
+    raise_notice("result: %s", JSON_TO_DEBUG_STR(arena, "result", &RESULT_SOME_VALUE(result)));
     assert(RESULT_SOME_VALUE(result).type == JSON_OBJECT);
 }
 
@@ -121,6 +133,8 @@ int main(void) {
     logger_init();
 
     Arena arena = arena_init(ARENA_SIZE);
+
+    logger_level(LOG_LEVEL_WARN);
 
     test_parse_json_object(&arena);
     arena_reset(&arena);
@@ -139,6 +153,9 @@ int main(void) {
     test_nested_json_object(&arena);
     arena_reset(&arena);
     test_arena_reset_reuse(&arena);
+    arena_reset(&arena);
+    logger_level(LOG_LEVEL_TRACE);
+    test_json_to_debug_str(&arena);
     arena_reset(&arena);
     test_debug_str_to_json(&arena);
 

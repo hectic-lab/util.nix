@@ -59,7 +59,9 @@
     forAllSystemsWithPkgs [(import rust-overlay)] ({
       system,
       pkgs,
-    }: {
+    }: let
+      pkgs-unstable = import nixpkgs-unstable { inherit system; };
+    in {
       packages.${system} = let
         rust = {
           nativeBuildInputs = [
@@ -142,6 +144,15 @@
         c = pkgs.mkShell {
           buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ c-hectic nvim-pager watch ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
+        };
+	pure-c = pkgs.mkShell {
+          buildInputs = (with pkgs; [ inotify-tools ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc ]);
+          PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
+
+	  shellHook = ''
+            export PATH=${pkgs-unstable.gcc}/bin:$PATH
+            export PAGER="${self.packages.${system}.nvim-pager}/bin/pager"
+          '';
         };
         default = pkgs.mkShell {
           buildInputs =

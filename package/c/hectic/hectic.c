@@ -340,6 +340,10 @@ char *float_to_debug_str__(CTX_DECLARATION, const char *name, double number) {
     return arena_strdup_fmt__(CTX(arena), "%s = %f", name, number);
 }
 
+char *bool_to_debug_str__(CTX_DECLARATION, const char *name, int boolean) {
+    return arena_strdup_fmt__(CTX(arena), "%s = %s", name, boolean ? "true" : "false");
+}
+
 char *size_t_to_debug_str__(CTX_DECLARATION, const char *name, size_t number) {
     return arena_strdup_fmt__(CTX(arena), "%s = %zu", name, number);
 }
@@ -437,6 +441,7 @@ char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
 }
 
 char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name, const void *ptr, int count, ...) {
+    printf("ZALUPA\n");
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG STR: type: %s, name: %s, ptr: %p, count: %d", type, name, ptr, count);
 
     va_list args;
@@ -853,7 +858,7 @@ char *json_to_pretty_str__(POSITION_INFO_DECLARATION, Arena *arena, const Json *
     if (item->type == JSON_OBJECT) {
         ptr += sprintf(ptr, "{\n");
         
-        Json *child = item->child;
+        Json *child = item->value.child;
         int child_count = 0;
         
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
@@ -892,7 +897,7 @@ char *json_to_pretty_str__(POSITION_INFO_DECLARATION, Arena *arena, const Json *
     } else if (item->type == JSON_ARRAY) {
         ptr += sprintf(ptr, "[\n");
         
-        Json *child = item->child;
+        Json *child = item->value.child;
         int child_count = 0;
         
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
@@ -928,11 +933,11 @@ char *json_to_pretty_str__(POSITION_INFO_DECLARATION, Arena *arena, const Json *
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
                       "PRETTY: Array prettification complete with %d elements", child_count);
     } else if (item->type == JSON_STRING) {
-        sprintf(ptr, "\"%s\"", item->JsonValue.string ? item->JsonValue.string : "");
+        sprintf(ptr, "\"%s\"", item->value.string ? item->value.string : "");
     } else if (item->type == JSON_NUMBER) {
-        sprintf(ptr, "%g", item->JsonValue.number);
+        sprintf(ptr, "%g", item->value.number);
     } else if (item->type == JSON_BOOL) {
-        sprintf(ptr, item->JsonValue.boolean ? "true" : "false");
+        sprintf(ptr, item->value.boolean ? "true" : "false");
     } else if (item->type == JSON_NULL) {
         sprintf(ptr, "null");
     }
@@ -1036,8 +1041,8 @@ static Json *json_parse_array__(POSITION_INFO_DECLARATION, const char **s, Arena
             raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, "Failed to parse array element");
             return NULL;
         }
-        if (!array->child)
-            array->child = element;
+        if (!array->value.child)
+            array->value.child = element;
         else
             last->next = element;
         last = element;
@@ -1096,8 +1101,8 @@ static Json *json_parse_object__(POSITION_INFO_DECLARATION, const char **s, Aren
             return NULL;
         }
         value->key = key; // assign key to the value
-        if (!object->child)
-            object->child = value;
+        if (!object->value.child)
+            object->value.child = value;
         else
             last->next = value;
         last = value;
@@ -1129,7 +1134,7 @@ static Json *json_parse_value__(POSITION_INFO_DECLARATION, const char **s, Arena
         }
         memset(item, 0, sizeof(Json));
         item->type = JSON_STRING;
-        item->JsonValue.string = json_parse_string__(POSITION_INFO, s, arena);
+        item->value.string = json_parse_string__(POSITION_INFO, s, arena);
         return item;
     } else if (strncmp(*s, "null", 4) == 0) {
         Json *item = arena_alloc__(POSITION_INFO, arena, sizeof(Json));
@@ -1143,7 +1148,7 @@ static Json *json_parse_value__(POSITION_INFO_DECLARATION, const char **s, Arena
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_BOOL;
-        item->JsonValue.boolean = 1;
+        item->value.boolean = 1;
         *s += 4;
         return item;
     } else if (strncmp(*s, "false", 5) == 0) {
@@ -1151,7 +1156,7 @@ static Json *json_parse_value__(POSITION_INFO_DECLARATION, const char **s, Arena
         if (!item) return NULL;
         memset(item, 0, sizeof(Json));
         item->type = JSON_BOOL;
-        item->JsonValue.boolean = 0;
+        item->value.boolean = 0;
         *s += 5;
         return item;
     } else if ((**s == '-') || isdigit((unsigned char)**s)) {
@@ -1162,7 +1167,7 @@ static Json *json_parse_value__(POSITION_INFO_DECLARATION, const char **s, Arena
         }
         memset(item, 0, sizeof(Json));
         item->type = JSON_NUMBER;
-        item->JsonValue.number = json_parse_number__(POSITION_INFO, s);
+        item->value.number = json_parse_number__(POSITION_INFO, s);
         return item;
     } else if (**s == '[') {
         return json_parse_array__(POSITION_INFO, s, arena);
@@ -1253,7 +1258,7 @@ char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const 
         ptr += sprintf(ptr, "{");
         type_name = "object";
         
-        Json *child = item->child;
+        Json *child = item->value.child;
         int child_count = 0;
         
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
@@ -1284,7 +1289,7 @@ char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const 
         ptr += sprintf(ptr, "[");
         type_name = "array";
         
-        Json *child = item->child;
+        Json *child = item->value.child;
         int child_count = 0;
         
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, 
@@ -1312,16 +1317,16 @@ char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const 
     } else if (item->type == JSON_STRING) {
         type_name = "string";
         if ((int)raw) {
-            sprintf(ptr, "%s", item->JsonValue.string ? item->JsonValue.string : "");
+            sprintf(ptr, "%s", item->value.string ? item->value.string : "");
         } else {
-            sprintf(ptr, "\"%s\"", item->JsonValue.string ? item->JsonValue.string : "");
+            sprintf(ptr, "\"%s\"", item->value.string ? item->value.string : "");
         }
     } else if (item->type == JSON_NUMBER) {
         type_name = "number";
-        sprintf(ptr, "%g", item->JsonValue.number);
+        sprintf(ptr, "%g", item->value.number);
     } else if (item->type == JSON_BOOL) {
         type_name = "boolean";
-        sprintf(ptr, item->JsonValue.boolean ? "true" : "false");
+        sprintf(ptr, item->value.boolean ? "true" : "false");
     } else if (item->type == JSON_NULL) {
         type_name = "null";
         sprintf(ptr, "null");
@@ -1361,7 +1366,7 @@ Json *json_get_object_item__(POSITION_INFO_DECLARATION, const Json * const objec
     
     // Count the total number of keys for debugging
     int total_keys = 0;
-    Json *debug_scan = object->child;
+    Json *debug_scan = object->value.child;
     while (debug_scan) {
         total_keys++;
         debug_scan = debug_scan->next;
@@ -1371,7 +1376,7 @@ Json *json_get_object_item__(POSITION_INFO_DECLARATION, const Json * const objec
                  "ACCESS: Object has %d key-value pairs", total_keys);
     
     // Perform key search
-    Json *child = object->child;
+    Json *child = object->value.child;
     int position = 0;
     
     while (child) {
@@ -1401,75 +1406,29 @@ Json *json_get_object_item__(POSITION_INFO_DECLARATION, const Json * const objec
     return NULL;
 }
 
-char* json_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, Json json) {
+char *json_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const JsonValue *self, JsonType active_variant, PtrSet *visited) {
+    char *child_str = json_to_debug_str__(POSITION_INFO, arena, "child", self->child, visited);
+    char *result = arena_alloc__(POSITION_INFO, arena, 1024);
+    UNION_TO_DEBUG_STR(arena, result, JsonValue, name, self, visited, active_variant, 5,
+        JSON_STRING, string_to_debug_str__(POSITION_INFO, arena, "string", self->string),
+        JSON_NUMBER, float_to_debug_str__(POSITION_INFO, arena, "number", self->number),
+        JSON_BOOL, bool_to_debug_str__(POSITION_INFO, arena, "boolean", self->boolean),
+        JSON_OBJECT, child_str,
+        JSON_ARRAY, child_str
+    );
+    return result;
+}
+
+char* json_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const Json *self, PtrSet *visited) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "json_to_debug_str(<optimized>, <optimized>)");
 
-  char meta_buffer[256];
-  
-  snprintf(meta_buffer, sizeof(meta_buffer), "Json{addr=%p, type=%s, key=%s, child=%p, next=%p, value=",
-           (void*)&json, json_type_to_string(json.type), json.key ? json.key : "NULL", (void*)json.child, (void*)json.next);
-  
-  size_t meta_len = strlen(meta_buffer);
-  char value_buffer[256] = {0};
-  
-  switch (json.type) {
-    case JSON_NULL:
-      strcpy(value_buffer, "null");
-      break;
-    
-    case JSON_BOOL:
-      strcpy(value_buffer, json.JsonValue.boolean ? "true" : "false");
-      break;
-    
-    case JSON_NUMBER:
-      snprintf(value_buffer, sizeof(value_buffer), "%g", json.JsonValue.number);
-      break;
-    
-    case JSON_STRING: {
-      if (!json.JsonValue.string) {
-        strcpy(value_buffer, "null");
-      } else {
-        snprintf(value_buffer, sizeof(value_buffer), "\"%s\"", json.JsonValue.string);
-      }
-      break;
-    }
-    
-    case JSON_ARRAY: {
-      // For arrays, simply note the number of elements
-      size_t count = 0;
-      Json *item = json.child;
-      while (item) {
-        count++;
-        item = item->next;
-      }
-      snprintf(value_buffer, sizeof(value_buffer), "[array with %zu elements]", count);
-      break;
-    }
-    
-    case JSON_OBJECT: {
-      // For objects, note the number of key-value pairs
-      size_t count = 0;
-      Json *item = json.child;
-      while (item) {
-        count++;
-        item = item->next;
-      }
-      snprintf(value_buffer, sizeof(value_buffer), "{object with %zu key-value pairs}", count);
-      break;
-    }
-    
-    default:
-      strcpy(value_buffer, "<UNKNOWN JSON TYPE>");
-  }
-  
-  // Create final string
-  size_t result_len = meta_len + strlen(value_buffer) + 2; // +2 for closing brace and null character
-  char* result = arena_alloc(arena, result_len);
-  
-  strcpy(result, meta_buffer);
-  strcat(result, value_buffer);
-  strcat(result, "}");
-  
+  char *result = arena_alloc__(POSITION_INFO, arena, 1024);
+  STRUCT_TO_DEBUG_STR(arena, result, Json, name, self, visited, 3,
+    enum_to_debug_str__(POSITION_INFO, arena, "type", self->type, json_type_to_string(self->type)),
+    string_to_debug_str__(POSITION_INFO, arena, "key", self->key),
+    json_value_to_debug_str__(POSITION_INFO, arena, "value", &self->value, self->type, visited),
+    json_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
+  );
   return result;
 }
 
@@ -1611,7 +1570,7 @@ JsonResult debug_str_to_json__(POSITION_INFO_DECLARATION, Arena *arena, const ch
         
         // Extract value as string
         value_start = skip_whitespace(value_start + 1);
-        json->JsonValue.string = arena_strdup__(POSITION_INFO, arena, value_start);
+        json->value.string = arena_strdup__(POSITION_INFO, arena, value_start);
         
         // Move pointer to the end
         *s += strlen(*s);
@@ -1659,12 +1618,12 @@ JsonResult debug_str_to_json__(POSITION_INFO_DECLARATION, Arena *arena, const ch
         }
         else if (strncmp(value, "true", 4) == 0) {
             json->type = JSON_BOOL;
-            json->JsonValue.boolean = true;
+            json->value.boolean = true;
             *s += 4;
         }
         else if (strncmp(value, "false", 5) == 0) {
             json->type = JSON_BOOL;
-            json->JsonValue.boolean = false;
+            json->value.boolean = false;
             *s += 5;
         }
         else if (*value == '"') {
@@ -1679,7 +1638,7 @@ JsonResult debug_str_to_json__(POSITION_INFO_DECLARATION, Arena *arena, const ch
             }
             
             size_t str_len = end_quote - value;
-            json->JsonValue.string = arena_strncpy__(POSITION_INFO, arena, value, str_len);
+            json->value.string = arena_strncpy__(POSITION_INFO, arena, value, str_len);
             *s = end_quote + 1;
         }
         else if (isdigit(*value) || *value == '-' || *value == '+') {
@@ -1688,7 +1647,7 @@ JsonResult debug_str_to_json__(POSITION_INFO_DECLARATION, Arena *arena, const ch
             
             // Use strtod to parse the number
             char *end;
-            json->JsonValue.number = strtod(value, &end);
+            json->value.number = strtod(value, &end);
             *s = end;
         }
         else {
@@ -1700,7 +1659,7 @@ JsonResult debug_str_to_json__(POSITION_INFO_DECLARATION, Arena *arena, const ch
             while (*end && !isspace(*end) && *end != ',' && *end != '}' && *end != ']') end++;
             
             size_t str_len = end - value;
-            json->JsonValue.string = arena_strncpy__(POSITION_INFO, arena, value, str_len);
+            json->value.string = arena_strncpy__(POSITION_INFO, arena, value, str_len);
             *s = end;
         }
         
@@ -2422,10 +2381,10 @@ char *template_text_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena
     return result;
 }
 
-char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateValue *self, TemplateNodeType type, PtrSet *visited) {
+char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateValue *self, TemplateNodeType active_variant, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);
 
-    UNION_TO_DEBUG_STR(arena, result, TemplateValue, name, self, visited, type, 5,
+    UNION_TO_DEBUG_STR(arena, result, TemplateValue, name, self, visited, active_variant, 5,
       TEMPLATE_NODE_SECTION, template_section_value_to_debug_str__(POSITION_INFO, arena, "section", &self->section, visited),
       TEMPLATE_NODE_INTERPOLATE, template_interpolate_value_to_debug_str__(POSITION_INFO, arena, "interpolate", &self->interpolate, visited),
       TEMPLATE_NODE_EXECUTE, template_execute_value_to_debug_str__(POSITION_INFO, arena, "execute", &self->execute, visited),
