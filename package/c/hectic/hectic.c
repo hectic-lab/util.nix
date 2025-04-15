@@ -2484,6 +2484,83 @@ char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, cons
     return result;
 }
 
+
+char *template_node_to_json_str__(POSITION_INFO_DECLARATION, Arena *arena, const TemplateNode *node, int depth) {
+    if (!node) return arena_strncpy__(POSITION_INFO, arena, "", 0);
+
+    if (depth > TEMPLATE_NODE_MAX_DEBUG_DEPTH) {
+      return arena_strncpy__(POSITION_INFO, arena, "...", 3);
+    }
+
+    // Use a temporary buffer on the stack for building the string
+    char temp_buf[MEM_MiB];
+    size_t len = 0;
+    
+    #define APPEND(...) do { \
+        int written = snprintf(temp_buf + len, sizeof(temp_buf) - len, ##__VA_ARGS__); \
+        if (written < 0) return NULL; \
+        len += written; \
+    } while (0)
+
+    if (depth == 0) {
+      APPEND("[");
+    }
+
+    APPEND("{\"type\":\"%s\",", template_node_type_to_string(node->type));
+
+    switch (node->type) {
+        case TEMPLATE_NODE_SECTION:
+            APPEND("\"content\":{\"iterator\":\"%s\",\"collection\"=\"%s\"}",
+                node->value.section.iterator,
+                node->value.section.collection);
+            char *body_str = template_node_to_json_str__(POSITION_INFO, arena, node->value.section.body, depth + 1);
+            if (body_str) {
+                APPEND(",\"body\":%s", body_str);
+            }
+            break;
+        case TEMPLATE_NODE_INTERPOLATE:
+            APPEND("\"content\":{\"key\":\"%s\"}", node->value.interpolate.key);
+            break;
+        case TEMPLATE_NODE_EXECUTE:
+            APPEND("\"content\":{\"code\":\"%s\"}", node->value.execute.code);
+            break;
+        case TEMPLATE_NODE_INCLUDE:
+            APPEND("\"content\":{\"key\":\"%s\"}", node->value.include.key);
+            break;
+        case TEMPLATE_NODE_TEXT:
+            APPEND("\"content\":{\"content\":\"%s\"}", node->value.text.content);
+            break;
+        default:
+            break;
+    }
+
+    if (node->children) {
+        APPEND(",\"children\":[");
+        char *child_str = template_node_to_json_str__(POSITION_INFO, arena, node->children, depth + 1);
+        if (child_str) {
+            APPEND(",%s", child_str);
+        }
+        APPEND("]");
+    }
+
+    APPEND("}");
+
+    if (node->next) {
+        char *next_str = template_node_to_json_str__(POSITION_INFO, arena, node->next, depth + 1);
+        if (next_str) {
+            APPEND(",%s", next_str);
+        }
+    }
+
+    if (depth == 0) {
+      APPEND("]");
+    }
+
+    // Copy the final string to arena-allocated memory
+    char *result = arena_strncpy__(POSITION_INFO, arena, temp_buf, len);
+    return result;
+}
+
 // ---------
 // -- End --
 // ---------

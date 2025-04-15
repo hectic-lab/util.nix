@@ -623,6 +623,8 @@ char* json_to_debug_str__(const char* file, const char* func, int line, Arena *a
 
 char *json_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const Json * const item, int indent_level);
 
+#define JSON_TO_PRETTY_STR(arena, json) json_to_pretty_str__(__FILE__, __func__, __LINE__, arena, json, 0)
+
 // Prettify a flat debug string by adding line breaks and structure
 char *debug_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const char *flat_str);
 #define debug_to_pretty_str(arena, str) debug_to_pretty_str__(__FILE__, __func__, __LINE__, arena, str)
@@ -764,11 +766,16 @@ TemplateConfig template_default_config__(const char *file, const char *func, int
 
 char *template_node_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited);
 
+char *template_node_to_json_str__(const char *file, const char *func, int line, Arena *arena, const TemplateNode *node, int depth);
+
 #define template_parse(arena, s, config) template_parse__(__FILE__, __func__, __LINE__, arena, s, config)
 
 #define template_default_config() template_default_config__(__FILE__, __func__, __LINE__)
 
 #define TEMPLATE_NODE_TO_DEBUG_STR(arena, name, node) \
     template_node_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, node, ptrset_init(arena))
+
+#define TEMPLATE_NODE_TO_JSON_STR(arena, node) \
+    template_node_to_json_str__(__FILE__, __func__, __LINE__, arena, node, 0)
 
 #endif // EPRINTF_H

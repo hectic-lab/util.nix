@@ -4,18 +4,38 @@
 #include <string.h>
 #include "hectic.h"
 
-#define ARENA_SIZE 1024 * 1024
+#define ARENA_SIZE MEM_MiB
 
-//static char *remove_all_spaces(char *s) {
-//    char *new_s = NULL;
-//    while (*s) {
-//        if (*s != ' ' && *s != '\t' && *s != '\n') {
-//            new_s = s;
-//        }
-//        s++;
-//    }
-//    return new_s;
-//}
+#define TEST_TEMPLATE_NODE_TO_DEBUG_STR \
+  "struct TemplateNode root = {\n" \
+  "  enum type = TEXT 0 ,\n" \
+  "  union TemplateValue value = {\n" \
+  "    struct TemplateTextValue text = {\n" \
+  "      content = %p \"Hello\"\n" \
+  "    } %p\n" \
+  "  } %p,\n" \
+  "  struct TemplateNode children = NULL,\n" \
+  "  struct TemplateNode next = {\n" \
+  "    enum type = INTERPOLATE 1 ,\n" \
+  "    union TemplateValue value = {\n" \
+  "      struct TemplateInterpolateValue interpolate = {\n" \
+  "        key = %p \"name\"\n" \
+  "      } %p\n" \
+  "    } %p,\n" \
+  "    struct TemplateNode children = NULL,\n" \
+  "    struct TemplateNode next = {\n" \
+  "      enum type = TEXT 0 ,\n" \
+  "      union TemplateValue value = {\n" \
+  "        struct TemplateTextValue text = {\n" \
+  "          content = %p \"!\"\n" \
+  "        } %p\n" \
+  "      } %p,\n" \
+  "      struct TemplateNode children = NULL,\n" \
+  "      struct TemplateNode next = NULL\n" \
+  "    } %p\n" \
+  "  } %p\n" \
+  "} %p\n"
+
 
 static void test_template_node_to_debug_str(Arena *arena) {
     TemplateNode *root = arena_alloc(arena, sizeof(TemplateNode));
@@ -30,57 +50,40 @@ static void test_template_node_to_debug_str(Arena *arena) {
     root->next->next->type = TEMPLATE_NODE_TEXT;
     root->next->next->value.text.content = arena_strncpy(arena, "!", 1);
 
-    char *debug_str = TEMPLATE_NODE_TO_DEBUG_STR(arena, "root", root);
+    char *debug_str = debug_to_pretty_str(arena, TEMPLATE_NODE_TO_DEBUG_STR(arena, "root", root));
+    raise_log("debug_str: \n%s", debug_str);
 
-    raise_notice("debug_str: %s", debug_str);
-    char *expected;
-    //sprintf(expected, "struct TemplateNode root = {enum type = TEXT 0, union TemplateValue value = {struct TemplateTextValue text = {content = %p \"Hello\"} %p} %p, struct TemplateNode children = NULL, struct TemplateNode next = {enum type = INTERPOLATE 1, union TemplateValue value = {struct TemplateInterpolateValue interpolate = {key = %p \"name\"} %p} %p, struct TemplateNode children = NULL, struct TemplateNode next = {enum type = TEXT 0, union TemplateValue value = {struct TemplateTextValue text = {content = %p \"!\"} %p} %p, struct TemplateNode children = NULL, struct TemplateNode next = NULL} %p} %p} %p",
-    //    root.value.text.content,
-    //    root.value.text,
-    //    root.value,
-    //    root.next.value.interpolate.key,
-    //    root.next.value.interpolate,
-    //    root.next.value,
+    { // some debug output
+      Arena *debug_arena = DISPOSABLE_ARENA;
+      const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, root);
+      Json *json = json_parse(debug_arena, &json_str);
+      raise_notice("json_str: \n%s", JSON_TO_PRETTY_STR(debug_arena, json));
+    }
 
+    char *expected_debug_str = arena_alloc(arena, MEM_KiB);
+    sprintf(expected_debug_str, TEST_TEMPLATE_NODE_TO_DEBUG_STR,
+        (void*)root->value.text.content,
+        (void*)&root->value.text,
+        (void*)&root->value,
+        (void*)root->next->value.interpolate.key,
+        (void*)&root->next->value.interpolate,
+        (void*)&root->next->value,
+        (void*)root->next->next->value.text.content,
+        (void*)&root->next->next->value.text,
+        (void*)&root->next->next->value,
+        (void*)root->next->next,
+        (void*)root->next,
+        (void*)root
+    );
 
-    //assert(strcmp(
-    //  remove_all_spaces(debug_str),
-    //  remove_all_spaces(""            
-    //  "["                             
-    //  "  {"                           
-    //  "    \"type\":\"TEXT\","        
-    //  "    \"content\":{"             
-    //  "      \"content\":\"Hello\""   
-    //  "    }"                         
-    //  "  },"                          
-    //  "  {"                           
-    //  "    \"type\":\"INTERPOLATE\"," 
-    //  "    \"content\":{"             
-    //  "      \"key\":\"name\""        
-    //  "    }"                         
-    //  "  },"                          
-    //  "  {"                           
-    //  "    \"type\":\"TEXT\","        
-    //  "    \"content\":{"             
-    //  "      \"content\":\"!\""       
-    //  "    }"                         
-    //  "  }"                           
-    //  "]")) == 0);
+    raise_log("expected_debug_str: \n%s", expected_debug_str);
+
+    assert(strcmp(debug_str, expected_debug_str) == 0);
 }
-
-//static void test_template_parse(Arena *arena, TemplateConfig *config) {
-//    const char *template = "Hello {% name %}!";
-//    TemplateResult *result = template_parse(arena, &template, config);
-//
-//    Arena *debug_arena = DISPOSABLE_ARENA;
-//    const char *debug_str = template_node_to_debug_str(debug_arena, &result->Result.node);
-//    raise_notice("debug_str: %s", debug_str);
-//    raise_notice("result: %s", json_to_pretty_str(debug_arena, json_parse(debug_arena, &debug_str)));
-//    assert(result->type == TEMPLATE_RESULT_NODE);
-//}
 
 int main(void) {
     printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
+    debug_color_mode = COLOR_MODE_DISABLE;
     logger_init();
 
     Arena arena = arena_init(ARENA_SIZE);
