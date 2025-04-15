@@ -623,11 +623,11 @@ char* json_to_debug_str__(const char* file, const char* func, int line, Arena *a
 
 char *json_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const Json * const item, int indent_level);
 
+// Prettify a flat debug string by adding line breaks and structure
+char *debug_to_pretty_str__(const char* file, const char* func, int line, Arena *arena, const char *flat_str);
+#define debug_to_pretty_str(arena, str) debug_to_pretty_str__(__FILE__, __func__, __LINE__, arena, str)
+
 JsonResult debug_str_to_json__(const char* file, const char* func, int line, Arena *arena, const char **s);
-
-#define json_to_pretty_str(arena, json) json_to_pretty_str__(__FILE__, __func__, __LINE__, arena, json, 0)
-
-#define DEBUG_STR_TO_JSON(arena, debug_ptr) debug_str_to_json__(__FILE__, __func__, __LINE__, arena, debug_ptr)
 
 // -----------
 // -- Slice --

@@ -33,6 +33,16 @@ static void test_template_node_to_debug_str(Arena *arena) {
     char *debug_str = TEMPLATE_NODE_TO_DEBUG_STR(arena, "root", root);
 
     raise_notice("debug_str: %s", debug_str);
+    char *expected;
+    //sprintf(expected, "struct TemplateNode root = {enum type = TEXT 0, union TemplateValue value = {struct TemplateTextValue text = {content = %p \"Hello\"} %p} %p, struct TemplateNode children = NULL, struct TemplateNode next = {enum type = INTERPOLATE 1, union TemplateValue value = {struct TemplateInterpolateValue interpolate = {key = %p \"name\"} %p} %p, struct TemplateNode children = NULL, struct TemplateNode next = {enum type = TEXT 0, union TemplateValue value = {struct TemplateTextValue text = {content = %p \"!\"} %p} %p, struct TemplateNode children = NULL, struct TemplateNode next = NULL} %p} %p} %p",
+    //    root.value.text.content,
+    //    root.value.text,
+    //    root.value,
+    //    root.next.value.interpolate.key,
+    //    root.next.value.interpolate,
+    //    root.next.value,
+
+
     //assert(strcmp(
     //  remove_all_spaces(debug_str),
     //  remove_all_spaces(""            

@@ -114,6 +114,42 @@ void test_test_union_to_debug_str(Arena *arena) {
     assert(strcmp(result, check) == 0);
 }
 
+#define INDENTED_RESULT \
+    "struct Struct2 struct2 = {\n" \
+    "  a = 1,\n" \
+    "  f = 3.140000,\n" \
+    "  c = %p \"hello\",\n" \
+    "  struct Struct other = {\n" \
+    "    a = 1,\n" \
+    "    b = 2,\n" \
+    "    struct Struct next = {\n" \
+    "      a = 1,\n" \
+    "      b = 2,\n" \
+    "      struct Struct next = <cycle detected> %p\n" \
+    "    } %p\n" \
+    "  } %p,\n" \
+    "  struct Struct2 left = NULL\n" \
+    "} %p\n"
+
+void test_debug_to_indented_str(Arena *arena) {
+    Struct test_struct = {.a = 1, .b = 2, .next = NULL};
+    test_struct.next = &test_struct;
+
+    Struct2 test_struct2 = {.a = 1, .c = "hello", .f = 3.14, .left = NULL, .other = &test_struct};
+
+    PtrSet *visited = ptrset_init(arena);
+    char *result = struct2_to_debug_str(arena, "struct2", &test_struct2, visited);
+    raise_notice("result: %s", result);
+
+    char *indented = debug_to_pretty_str(arena, result);
+    raise_notice("indented: \n%s", indented);
+
+    char *expected = arena_alloc(arena, MEM_KiB);
+    sprintf(expected, INDENTED_RESULT, (void*)test_struct2.c, (void*)&test_struct, (void*)&test_struct, (void*)&test_struct, (void*)&test_struct2);
+    raise_notice("expected: \n%s", expected);
+    assert(strcmp(indented, expected) == 0);
+}
+
 int main(void) {
     printf("%sRunning %s%s%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_CYAN), __FILE__,  OPTIONAL_COLOR(COLOR_RESET));
     debug_color_mode = COLOR_MODE_DISABLE;
@@ -129,6 +165,9 @@ int main(void) {
 
     printf("%sTesting test_union_to_debug_str%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     test_test_union_to_debug_str(&arena);
+
+    printf("%sTesting debug_to_indented_str%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    test_debug_to_indented_str(&arena);
 
     arena_free(&arena);
     logger_free();
