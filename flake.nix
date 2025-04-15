@@ -145,6 +145,15 @@
           buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ c-hectic nvim-pager watch ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
         };
+	postgres-c = pkgs.mkShell {
+          buildInputs = (with pkgs; [ inotify-tools postgresql_15 ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc ]);
+          PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
+
+	  shellHook = ''
+            export PATH=${pkgs-unstable.gcc}/bin:$PATH
+            export PAGER="${self.packages.${system}.nvim-pager}/bin/pager"
+          '';
+        };
 	pure-c = pkgs.mkShell {
           buildInputs = (with pkgs; [ inotify-tools ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
@@ -434,11 +443,25 @@
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
             plhaskell = buildPlHaskellExt "15";
+            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_17; };
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
             plhaskell = buildPlHaskellExt "15";
+            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_16; };
+          };};
+          postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
+            http = buildHttpExt "15";
+            pg_smtp_client = buildSmtpExt "15";
+            plhaskell = buildPlHaskellExt "15";
+            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_15; };
+          };};
+          postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
+            http = buildHttpExt "14";
+            pg_smtp_client = buildSmtpExt "14";
+            plhaskell = buildPlHaskellExt "15";
+            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_14; };
           };};
           writers = let
             writeC =
@@ -484,16 +507,6 @@
             writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
             writeMinC = writeMinC;
           };
-          postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
-            http = buildHttpExt "15";
-            pg_smtp_client = buildSmtpExt "15";
-            plhaskell = buildPlHaskellExt "15";
-          };};
-          postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
-            http = buildHttpExt "14";
-            pg_smtp_client = buildSmtpExt "14";
-            plhaskell = buildPlHaskellExt "15";
-          };};
         }
       );
       lib = {
