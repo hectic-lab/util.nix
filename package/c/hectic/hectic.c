@@ -70,6 +70,13 @@ void set_output_color_mode(ColorMode mode) {
 #define CTX_DECLARATION POSITION_INFO_DECLARATION, Arena *arena
 #define CTX(lifetimed_arena) POSITION_INFO, arena = (lifetimed_arena)
 
+/* Utility: Skip whitespace */
+static const char *skip_whitespace(const char *s) {
+    while (*s && isspace((unsigned char)*s))
+        s++;
+    return s;
+}
+
 // -----------
 // -- Error --
 // -----------
@@ -441,7 +448,6 @@ char *debug_join_debug_strings_v(CTX_DECLARATION, int count, va_list args) {
 }
 
 char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name, const void *ptr, int count, ...) {
-    printf("ZALUPA\n");
     raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "DEBUG STR: type: %s, name: %s, ptr: %p, count: %d", type, name, ptr, count);
 
     va_list args;
@@ -450,6 +456,87 @@ char *struct_to_debug_str__(CTX_DECLARATION, const char *type, const char *name,
     va_end(args);
 
     return arena_strdup_fmt__(CTX(arena), "%sstruct%s %s %s = {%s} %s%p%s", DEBUG_COLOR(COLOR_GREEN), DEBUG_COLOR(COLOR_RESET), type, name, joined, DEBUG_COLOR(COLOR_CYAN), ptr, DEBUG_COLOR(COLOR_RESET));
+}
+
+char *debug_to_pretty_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *s) {
+  int indent = 0;
+  size_t len = strlen(s) * 3; // Estimate for extra spaces, newlines, and indents
+  char *result = arena_alloc__(POSITION_INFO, arena, len);
+  char *current = result;
+  size_t remaining = len;
+
+  #define INDENT_STR "  "
+
+  while (*s) {
+    if (*s == '{') {
+      int written = snprintf(current, remaining, "{\n");
+      current += written;
+      remaining -= written;
+      
+      indent++;
+      for (int i = 0; i < indent; i++) {
+        written = snprintf(current, remaining, INDENT_STR);
+        current += written;
+        remaining -= written;
+      }
+      s++;
+    } else if (*s == '}') {
+      int written = snprintf(current, remaining, "\n");
+      current += written;
+      remaining -= written;
+      
+      indent--;
+      for (int i = 0; i < indent; i++) {
+        written = snprintf(current, remaining, INDENT_STR);
+        current += written;
+        remaining -= written;
+      }
+      
+      written = snprintf(current, remaining, "}");
+      current += written;
+      remaining -= written;
+      s++;
+    } else if (*s == ',') {
+      int written = snprintf(current, remaining, ",\n");
+      current += written;
+      remaining -= written;
+      
+      for (int i = 0; i < indent; i++) {
+        written = snprintf(current, remaining, INDENT_STR);
+        current += written;
+        remaining -= written;
+      }
+      s++;
+      s = skip_whitespace(s);
+    } else {
+      if (remaining > 1) {
+        *current++ = *s;
+        remaining--;
+      }
+      s++;
+    }
+    
+    // If we're running low on space, expand the buffer
+    if (remaining < 20) {
+      size_t used = current - result;
+      size_t new_len = len * 2;
+      result = arena_realloc__(POSITION_INFO, arena, result, len, new_len);
+      current = result + used;
+      remaining = new_len - used;
+      len = new_len;
+    }
+  }
+  
+  // Add final newline and null terminator
+  if (remaining > 2) {
+    *current++ = '\n';
+    *current = '\0';
+  } else {
+    // Ensure null-termination even if we can't add the newline
+    result[len - 1] = '\0';
+  }
+  
+  return result;
 }
 
 // ------------
@@ -959,14 +1046,6 @@ const char* json_type_to_string(JsonType type) {
         case JSON_OBJECT: return "OBJECT";
         default: return "UNKNOWN";
     }
-}
-
-
-/* Utility: Skip whitespace */
-static const char *skip_whitespace(const char *s) {
-    while (*s && isspace((unsigned char)*s))
-        s++;
-    return s;
 }
 
 static Json *json_parse_value__(POSITION_INFO_DECLARATION, const char **s, Arena *arena);
@@ -2397,7 +2476,7 @@ char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, con
 char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);
     STRUCT_TO_DEBUG_STR(arena, result, TemplateNode, name, self, visited, 4,
-      string_to_debug_str__(POSITION_INFO, arena, "type", template_node_type_to_string(self->type)),
+      enum_to_debug_str__(POSITION_INFO, arena, "type", self->type, template_node_type_to_string(self->type)),
       template_value_to_debug_str__(POSITION_INFO, arena, "value", &self->value, self->type, visited),
       template_node_to_debug_str__(POSITION_INFO, arena, "children", self->children, visited),
       template_node_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
