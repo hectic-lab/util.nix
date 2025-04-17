@@ -428,7 +428,7 @@
               doCheck = false;
             };
           buildPlHaskellExt = versionSuffix: let
-            version = "4.0";
+            version = "4.0"; # XXX(nrv): What the hell is this? What the hell are all the `version` mentions below? Is it that?
           in
             buildPostgresqlExtension {
               postgresql = prev."postgresql_${versionSuffix}";
@@ -457,6 +457,22 @@
               };
               nativeBuildInputs = with prev; [pkg-config curl];
             };
+          buildPostgreactExt = versionSuffix:
+            buildPostgresqlExtension {
+              postgresql = prev."postgresql_${versionSuffix}";
+            } (rec {
+              pname = "postgreact";
+              version = "1.0";
+              src = ./package/c/${pname};
+              nativeBuildInputs = with prev; [pkg-config]; # ???
+              meta = with lib; {
+                description = "PostgreSQL extension for simple templating.";
+                homepage = "https://github.com/hectic-lab/util.nix";
+                license = licenses.asl20;
+                platforms = postgresql.meta.platforms;
+                maintainers = with maintainers; [];
+              };
+            });
         in {
           hectic = self.packages.${prev.system};
           postgresql_17 =
@@ -490,9 +506,9 @@
                 prev.postgresql_15.pkgs
                 // {
                   http = buildHttpExt "15";
+                  postgreact = buildPostgreactExt "15";
                   pg_smtp_client = buildSmtpExt "15";
                   plhaskell = buildPlHaskellExt "15";
-                  postgreact = self.packages.${prev.system}.postgreact.override {postgresql = prev.postgresql_17;};
                 };
             };
           postgresql_14 =
