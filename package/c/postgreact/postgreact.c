@@ -6,11 +6,15 @@
 PG_MODULE_MAGIC;
 #endif
 
-/* Define the function hello */
-PG_FUNCTION_INFO_V1(hello);
-
-/* Implement the function */
 Datum hello(PG_FUNCTION_ARGS) 
 {
-    PG_RETURN_TEXT_P(cstring_to_text("Hello, world!"));
+    PG_RETURN_TEXT_P(cstring_to_text("Eblan!"));
 }
+
+void _PG_init(void) {
+
+}
+void _PG_fini(void) {
+
+}
+

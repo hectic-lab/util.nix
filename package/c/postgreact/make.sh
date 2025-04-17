@@ -7,6 +7,8 @@
 #   --color       Pass -fdiagnostics-color=always to compiler.
 #   help, --help  Show this help message.
 
+set -u
+
 check_dependencies() {
   for dep in gcc pg_config; do
     if ! command -v "$dep" >/dev/null 2>&1; then
@@ -91,7 +93,7 @@ case "$MODE" in
     
     # Copy extension files to target directory
     cp postgreact.control target/
-    cp postgreact--0.1.sql target/
+    cp postgreact--${EXTENSION_VERSION}.sql target/
     
     echo "Build complete. Files available in target/ directory."
     ;;
