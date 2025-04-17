@@ -3,6 +3,10 @@
 
 -- Define the hello function that uses our C implementation
 CREATE FUNCTION hello()
-RETURNS text
-AS 'postgreact', 'hello'
-LANGUAGE C STRICT;
+RETURNS
+  TEXT
+STRICT VOLATILE
+LANGUAGE C
+AS
+  'MODULE_PATHNAME', 'hello'
+;

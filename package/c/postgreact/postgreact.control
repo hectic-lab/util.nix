@@ -1,4 +1,0 @@
-comment = 'My first extension'
-default_version = '1.0'
-module_pathname = $libdir/postgreact
-relocatable = true
