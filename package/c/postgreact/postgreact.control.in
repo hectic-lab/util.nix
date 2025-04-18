@@ -1,4 +1,4 @@
-comment = 'My first extension'
+comment = '@EXTENSION_COMMENT@'
 default_version = '@EXTENSION_VERSION@'
-module_pathname = '$libdir/postgreact'
+module_pathname = '$libdir/@EXTENSION@'
 relocatable = false
