@@ -133,10 +133,10 @@
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
-        #hmpl = pkgs.callPackage ./package/c/hmpl/default.nix {
-        #  hectic = self.packages.${system}.hectic;
-        #};
-        #postgreact = pkgs.callPackage ./package/c/postgreact {};
+            #hmpl = pkgs.callPackage ./package/c/hmpl/default.nix {
+            #  hectic = self.packages.${system}.hectic;
+            #};
+        postgreact = pkgs.callPackage ./package/c/postgreact {};
       };
 
       devShells.${system} = let
@@ -457,22 +457,6 @@
               };
               nativeBuildInputs = with prev; [pkg-config curl];
             };
-          buildPostgreactExt = versionSuffix:
-            buildPostgresqlExtension {
-              postgresql = prev."postgresql_${versionSuffix}";
-            } (rec {
-              pname = "postgreact";
-              version = "1.0";
-              src = ./package/c/${pname};
-              nativeBuildInputs = with prev; [pkg-config]; # ???
-              meta = with lib; {
-                description = "PostgreSQL extension for simple templating.";
-                homepage = "https://github.com/hectic-lab/util.nix";
-                license = licenses.asl20;
-                platforms = postgresql.meta.platforms;
-                maintainers = with maintainers; [];
-              };
-            });
         in {
           hectic = self.packages.${prev.system};
           postgresql_17 =
@@ -484,7 +468,7 @@
                   http = buildHttpExt "17";
                   pg_smtp_client = buildSmtpExt "17";
                   plhaskell = buildPlHaskellExt "15";
-                  postgreact = buildPostgreactExt "17";
+                  postgreact = self.packages.${prev.system}.postgreact.override {postgresql = prev.postgresql_17;};
                 };
             };
           postgresql_16 =
@@ -496,7 +480,7 @@
                   http = buildHttpExt "16";
                   pg_smtp_client = buildSmtpExt "16";
                   plhaskell = buildPlHaskellExt "15";
-                  postgreact = buildPostgreactExt "16";
+                  postgreact = self.packages.${prev.system}.postgreact.override {postgresql = prev.postgresql_17;};
                 };
             };
           postgresql_15 =
@@ -508,7 +492,7 @@
                   http = buildHttpExt "15";
                   pg_smtp_client = buildSmtpExt "15";
                   plhaskell = buildPlHaskellExt "15";
-                  postgreact = buildPostgreactExt "15";
+                  postgreact = self.packages.${prev.system}.postgreact.override {postgresql = prev.postgresql_17;};
                 };
             };
           postgresql_14 =
@@ -520,7 +504,7 @@
                   http = buildHttpExt "14";
                   pg_smtp_client = buildSmtpExt "14";
                   plhaskell = buildPlHaskellExt "15";
-                  postgreact = buildPostgreactExt "15";
+                  postgreact = self.packages.${prev.system}.postgreact.override {postgresql = prev.postgresql_17;};
                 };
             };
           writers = let
