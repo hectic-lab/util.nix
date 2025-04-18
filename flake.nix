@@ -368,7 +368,6 @@
       };
       overlays.default = final: prev: (
         let
-          version = "1.6.1";
           pkgs-unstable = import nixpkgs-unstable { inherit (prev) system; };
 
           buildPgrxExtension =
@@ -423,45 +422,50 @@
               };
               nativeBuildInputs = with prev; [pkg-config curl ghc haskellPackages.hsc2hs haskellPackages.HSFFIG];
             };
-          buildHttpExt = versionSuffix:
-            buildPostgresqlExtension {
+          buildHttpExt = versionSuffix: let
+              version = "1.6.1";
+            in buildPostgresqlExtension {
               postgresql = prev."postgresql_${versionSuffix}";
             } {
               pname = "http";
               inherit version;
-              src = prev.fetchFromGitHub {
-                owner = "pramsey";
-                repo = "pgsql-http";
-                rev = "v${version}";
-                hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
-              };
-              nativeBuildInputs = with prev; [pkg-config curl];
+              src = prev.fetchFromGitHub { owner = "pramsey"; repo = "pgsql-http"; rev = "v${version}"; hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM="; }; nativeBuildInputs = with prev; [pkg-config curl]; };
+          buildHelloExt = versionSuffix: let
+              postgresql = prev."postgresql_${versionSuffix}";
+	  in buildPostgresqlExtension {
+              inherit postgresql;
+            } {
+              pname = "postgrect";
+              version = "0.1";
+              src = ./package/c/postgreact;
+              nativeBuildInputs = with prev; [pkg-config];
+              preInstall = ''mkdir $out'';
             };
         in {
           hectic = self.packages.${prev.system};
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
-            plhaskell = buildPlHaskellExt "15";
-            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_17; };
+            plhaskell = buildPlHaskellExt "17";
+            postgreact = buildHelloExt "17";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
-            plhaskell = buildPlHaskellExt "15";
-            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_16; };
+            plhaskell = buildPlHaskellExt "16";
+            postgreact = buildHelloExt "16";
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
             plhaskell = buildPlHaskellExt "15";
-            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_15; };
+            postgreact = buildHelloExt "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
-            plhaskell = buildPlHaskellExt "15";
-            postgreact = prev.callPackage ./package/c/postgreact/default.nix { postgresql = prev.postgresql_14; };
+            plhaskell = buildPlHaskellExt "14";
+            postgreact = buildHelloExt "14";
           };};
           writers = let
             writeC =
