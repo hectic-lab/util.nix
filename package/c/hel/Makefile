@@ -9,7 +9,7 @@ PG_CONFIG = pg_config
 HECTIC_CONFIG = hectic-config
 
 CFLAGS += $(shell $(HECTIC_CONFIG) --cflags)
-LDFLAGS += $(shell $(HECTIC_CONFIG) --libs)
+LIBS += $(shell $(HECTIC_CONFIG) --libs)
 
 SHLIB_LINK := $(LIBS)
 
