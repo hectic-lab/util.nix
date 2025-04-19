@@ -54,6 +54,7 @@ esac
 RUN_TESTS=1
 OPTFLAGS="-O2"
 CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address -fanalyzer"
+LDFLAGS="-lhectic"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
 DEBUG=0
@@ -96,9 +97,18 @@ case "$MODE" in
   build)
     mkdir -p target
     echo "# Build library"
+    # Build object file with position independent code for shared library
     # shellcheck disable=SC2086
-    cc $CFLAGS $OPTFLAGS $STD_FLAGS -c hectic.c -o target/hectic.o
+    cc $CFLAGS $OPTFLAGS $STD_FLAGS -fPIC -c hectic.c -o target/hectic.o
+    
+    # Create static library (.a)
+    echo "# Creating static library (libhectic.a)"
     ar rcs target/libhectic.a target/hectic.o
+    
+    # Create shared library (.so)
+    echo "# Creating shared library (libhectic.so)"
+    # shellcheck disable=SC2086
+    cc -shared -o target/libhectic.so target/hectic.o
     ;;
   check)
     mkdir -p target/test
@@ -137,7 +147,8 @@ case "$MODE" in
       exe="target/test/$test_name"
       echo "Building test: $test_name"
       # shellcheck disable=SC2086
-      cc $CFLAGS $OPTFLAGS -I. "$test_file" -Ltarget -lhectic $LDFLAGS -o "$exe"
+      # Explicitly link with the static library to maintain original behavior
+      cc $CFLAGS $OPTFLAGS -I. "$test_file" -o "$exe" target/libhectic.a
       if [ "$?" -ne 0 ]; then
         exit 1
       fi

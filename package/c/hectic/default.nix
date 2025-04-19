@@ -20,6 +20,7 @@ stdenv.mkDerivation {
   installPhase = ''
     mkdir -p $out/lib $out/include $out/bin
     cp target/libhectic.a $out/lib/
+    cp target/libhectic.so $out/lib/
     cp hectic.h $out/include/
     
     # Create hectic-config script
@@ -27,9 +28,10 @@ stdenv.mkDerivation {
     #!/bin/sh
     
     usage() {
-      echo "Usage: hectic-config [--cflags] [--libs]"
+      echo "Usage: hectic-config [--cflags] [--libs] [--static]"
       echo "  --cflags  Print the compiler flags"
-      echo "  --libs    Print the linker flags"
+      echo "  --libs    Print the linker flags (dynamic library by default)"
+      echo "  --static  When used with --libs, use static linking"
       echo "  --help    Display this help message"
       exit \$1
     }
@@ -38,13 +40,28 @@ stdenv.mkDerivation {
       usage 1
     fi
     
+    static=0
+    
+    for arg in "\$@"; do
+      if [ "\$arg" = "--static" ]; then
+        static=1
+      fi
+    done
+    
     while [ \$# -gt 0 ]; do
       case "\$1" in
         --cflags)
           echo "-I$out/include"
           ;;
         --libs)
-          echo "-L$out/lib -lhectic"
+          if [ \$static -eq 1 ]; then
+            echo "-L$out/lib -static -lhectic"
+          else
+            echo "-L$out/lib -lhectic"
+          fi
+          ;;
+        --static)
+          # Already processed above
           ;;
         --help)
           usage 0
