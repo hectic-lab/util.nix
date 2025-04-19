@@ -54,7 +54,6 @@ esac
 RUN_TESTS=1
 OPTFLAGS="-O2"
 CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address -fanalyzer"
-LDFLAGS="-lhectic"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
 DEBUG=0
@@ -98,7 +97,7 @@ case "$MODE" in
     mkdir -p target
     echo "# Build library"
     # shellcheck disable=SC2086
-    cc $CFLAGS $OPTFLAGS $STD_FLAGS -c hectic.c -lhectic -o target/hectic.o
+    cc $CFLAGS $OPTFLAGS $STD_FLAGS -c hectic.c -o target/hectic.o
     ar rcs target/libhectic.a target/hectic.o
     ;;
   check)
