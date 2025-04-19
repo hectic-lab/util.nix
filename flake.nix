@@ -430,7 +430,7 @@
               pname = "http";
               inherit version;
               src = prev.fetchFromGitHub { owner = "pramsey"; repo = "pgsql-http"; rev = "v${version}"; hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM="; }; nativeBuildInputs = with prev; [pkg-config curl]; };
-          buildHelloExt = versionSuffix: let
+          buildHelExt = versionSuffix: let
               postgresql = prev."postgresql_${versionSuffix}";
 	  in buildPostgresqlExtension {
               inherit postgresql;
@@ -447,25 +447,25 @@
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
             plhaskell = buildPlHaskellExt "17";
-            hel = buildHelloExt "17";
+            hel = buildHelExt "17";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
             plhaskell = buildPlHaskellExt "16";
-            hel = buildHelloExt "16";
+            hel = buildHelExt "16";
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
             plhaskell = buildPlHaskellExt "15";
-            hel = buildHelloExt "15";
+            hel = buildHelExt "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
             plhaskell = buildPlHaskellExt "14";
-            hel = buildHelloExt "14";
+            hel = buildHelExt "14";
           };};
           writers = let
             writeC =

@@ -86,8 +86,14 @@ case "$MODE" in
   build)
     mkdir -p target
     echo "# Building PostgreSQL extension"
+    
+    # Get hectic library paths from nix
+    HECTIC_PATH=$(nix build --print-out-paths -f ../../../. c-hectic)
+    HECTIC_INCLUDE="$HECTIC_PATH/include"
+    HECTIC_LIB="$HECTIC_PATH/lib"
+    
     # shellcheck disable=SC2086
-    gcc $CFLAGS $OPTFLAGS -I$PG_INCLUDE -shared -o target/hel.so hel.c
+    gcc $CFLAGS $OPTFLAGS -I$PG_INCLUDE -I$HECTIC_INCLUDE -shared -o target/hel.so hel.c -L$HECTIC_LIB -lhectic
     
     # Copy extension files to target directory
     cp hel.control target/
