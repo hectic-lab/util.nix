@@ -87,11 +87,11 @@ case "$MODE" in
     mkdir -p target
     echo "# Building PostgreSQL extension"
     # shellcheck disable=SC2086
-    gcc $CFLAGS $OPTFLAGS -I$PG_INCLUDE -shared -o target/postgreact.so postgreact.c
+    gcc $CFLAGS $OPTFLAGS -I$PG_INCLUDE -shared -o target/hel.so hel.c
     
     # Copy extension files to target directory
-    cp postgreact.control target/
-    cp postgreact--0.1.sql target/
+    cp hel.control target/
+    cp hel--0.1.sql target/
     
     echo "Build complete. Files available in target/ directory."
     ;;
