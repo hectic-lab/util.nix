@@ -437,8 +437,8 @@
             } {
               pname = "postgrect";
               version = "0.1";
-              src = ./package/c/postgreact;
-              nativeBuildInputs = with prev; [pkg-config];
+              src = ./package/c/hel;
+              nativeBuildInputs = (with prev; [pkg-config]) ++ [ self.packages.${prev.system}.c-hectic ];
               preInstall = ''mkdir $out'';
             };
         in {
@@ -447,25 +447,25 @@
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
             plhaskell = buildPlHaskellExt "17";
-            postgreact = buildHelloExt "17";
+            hel = buildHelloExt "17";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
             plhaskell = buildPlHaskellExt "16";
-            postgreact = buildHelloExt "16";
+            hel = buildHelloExt "16";
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
             plhaskell = buildPlHaskellExt "15";
-            postgreact = buildHelloExt "15";
+            hel = buildHelloExt "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
             plhaskell = buildPlHaskellExt "14";
-            postgreact = buildHelloExt "14";
+            hel = buildHelloExt "14";
           };};
           writers = let
             writeC =

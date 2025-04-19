@@ -43,7 +43,7 @@
   "    struct TemplateSectionValue section = {\n" \
   "      iterator = %p \"item\",\n" \
   "      collection = %p \"items\",\n" \
-  "      body = {\n" \
+  "      struct TemplateNode body = {\n" \
   "        enum type = TEXT 0 ,\n" \
   "        union TemplateValue value = {\n" \
   "          struct TemplateTextValue text = {\n" \
