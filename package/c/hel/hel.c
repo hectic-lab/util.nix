@@ -11,13 +11,18 @@ PG_MODULE_MAGIC;
 
 /* Helper function to get a JSON value by key path */
 static Json *json_get_by_path(Arena *arena, const Json *context, const char *key_path) {
+    
+    char *path_copy;
+    char *token;
+    Json *current;
+
     if (!context || !key_path || !*key_path) {
         return NULL;
     }
-    
-    char *path_copy = arena_strdup(arena, key_path);
-    char *token = strtok(path_copy, ".");
-    Json *current = (Json*)context;
+
+    path_copy = arena_strdup(arena, key_path);
+    token = strtok(path_copy, ".");
+    current = (Json*)context;
     
     while (token && current) {
         current = json_get_object_item(current, token);
@@ -67,12 +72,15 @@ static char *render_text_node(Arena *arena, const TemplateNode *node) {
 
 /* Render an interpolation node */
 static char *render_interpolation_node(Arena *arena, const TemplateNode *node, const Json *context) {
+    const char *key;
+    Json *value;
+
     if (!node || node->type != TEMPLATE_NODE_INTERPOLATE || !context) {
         return "";
     }
-    
-    const char *key = node->value.interpolate.key;
-    Json *value = json_get_by_path(arena, context, key);
+
+    key = node->value.interpolate.key;
+    value = json_get_by_path(arena, context, key);
     
     if (!value) {
         return "";
@@ -83,40 +91,60 @@ static char *render_interpolation_node(Arena *arena, const TemplateNode *node, c
 
 /* Render a section node (for loop) */
 static char *render_section_node(Arena *arena, const TemplateNode *node, const Json *context) {
+    const char *collection_key;
+    const char *iterator_name; 
+    TemplateNode *body;
+
+    Json *collection;
+
+    size_t buffer_size;
+    char *buffer;
+    size_t buffer_pos;
+
+    Json *item;
+
+    const char *empty_json;
+    Json *iter_context;
+
+    Json *item_json;
+
+    char *rendered_body;
+    size_t rendered_len;
+
     if (!node || node->type != TEMPLATE_NODE_SECTION || !context) {
         return "";
     }
     
-    const char *collection_key = node->value.section.collection;
-    const char *iterator_name = node->value.section.iterator;
-    TemplateNode *body = node->value.section.body;
+    collection_key = node->value.section.collection;
+    iterator_name = node->value.section.iterator;
+    body = node->value.section.body;
     
-    Json *collection = json_get_by_path(arena, context, collection_key);
+    collection = json_get_by_path(arena, context, collection_key);
     
     if (!collection || collection->type != JSON_ARRAY) {
         return "";
     }
     
-    size_t buffer_size = 1024;
-    char *buffer = arena_alloc(arena, buffer_size);
-    size_t buffer_pos = 0;
+    buffer_size = 1024;
+    buffer = arena_alloc(arena, buffer_size);
+    buffer_pos = 0;
     
-    Json *item = collection->value.child;
+    item = collection->value.child;
     while (item) {
-        const char *empty_json = "{}";
-        Json *iter_context = json_parse(arena, &empty_json);
+        empty_json = "{}";
+        iter_context = json_parse(arena, &empty_json);
         if (!iter_context) {
             return "";
         }
         
-        Json *item_json = arena_alloc(arena, sizeof(Json));
+        item_json = arena_alloc(arena, sizeof(Json));
         memcpy(item_json, item, sizeof(Json));
         item_json->key = arena_strdup(arena, iterator_name);
         item_json->next = NULL;
         
-        char *rendered_body = render_template_node(arena, body, iter_context);
+        rendered_body = render_template_node(arena, body, iter_context);
         
-        size_t rendered_len = strlen(rendered_body);
+        rendered_len = strlen(rendered_body);
         if (buffer_pos + rendered_len + 1 > buffer_size) {
             buffer_size = (buffer_pos + rendered_len + 1) * 2;
             buffer = arena_realloc(arena, buffer, buffer_size / 2, buffer_size);
@@ -134,26 +162,38 @@ static char *render_section_node(Arena *arena, const TemplateNode *node, const J
 
 /* Render an include node */
 static char *render_include_node(Arena *arena, const TemplateNode *node, const Json *context) {
+    
+    const char *include_key;
+    Json *include_value;
+    
+    char *buffer;
+    size_t buffer_pos;
+
+    Json *include_item;
+    Json *template_json;
+    Json *content_json;
+    Json *context_json;
+
     if (!node || node->type != TEMPLATE_NODE_INCLUDE || !context) {
         return "";
     }
-    
-    const char *include_key = node->value.include.key;
-    Json *include_value = json_get_by_path(arena, context, include_key);
-    
+    include_key = node->value.include.key;
+    include_value = json_get_by_path(arena, context, include_key);
+
     if (!include_value || include_value->type != JSON_ARRAY) {
         return "";
     }
+
+    buffer = arena_alloc(arena, 1024);
+    buffer_pos = 0;
     
-    char *buffer = arena_alloc(arena, 1024);
-    size_t buffer_pos = 0;
     
-    Json *include_item = include_value->value.child;
+    include_item = include_value->value.child;
     while (include_item) {
         if (include_item->type == JSON_OBJECT) {
-            Json *template_json = json_get_object_item(include_item, "template");
-            Json *content_json = json_get_object_item(include_item, "content");
-            Json *context_json = json_get_object_item(include_item, "context");
+            template_json = json_get_object_item(include_item, "template");
+            content_json = json_get_object_item(include_item, "content");
+            context_json = json_get_object_item(include_item, "context");
             
             if (template_json && template_json->type == JSON_STRING) {
                 const char *template_str = template_json->value.string;
@@ -183,17 +223,22 @@ static char *render_include_node(Arena *arena, const TemplateNode *node, const J
 
 /* Render a template node tree recursively */
 static char *render_template_node(Arena *arena, const TemplateNode *node, const Json *context) {
-    if (!node) {
-        return "";
-    }
     
     size_t buffer_size = 4096;
     char *output = arena_alloc(arena, buffer_size);
     size_t output_pos = 0;
+    size_t rendered_len;
+    const TemplateNode *current;
+    char *rendered;
+
+    if (!node) {
+        return "";
+    }
+
+    current = node;
     
-    const TemplateNode *current = node;
     while (current) {
-        char *rendered = NULL;
+        rendered = NULL;
         
         switch (current->type) {
             case TEMPLATE_NODE_TEXT:
@@ -222,7 +267,7 @@ static char *render_template_node(Arena *arena, const TemplateNode *node, const 
                 break;
         }
         
-        size_t rendered_len = strlen(rendered);
+        rendered_len = strlen(rendered);
         if (output_pos + rendered_len + 1 > buffer_size) {
             buffer_size = (output_pos + rendered_len + 1) * 2;
             output = arena_realloc(arena, output, buffer_size / 2, buffer_size);
@@ -271,10 +316,21 @@ Datum render(PG_FUNCTION_ARGS)
     
     /* Initialize arena for memory management */
     Arena arena = arena_init(MEM_MiB);
+
+    TemplateNode root_node;
+    TemplateResult template_result;
+    TemplateConfig config;
+
+    Json *context;
+
+    const char *template_ptr;
+
+    char *result_str;
+    text *result;
     
     /* Parse the JSON context */
     const char *json_ptr = context_str;
-    Json *context = json_parse(&arena, &json_ptr);
+    context = json_parse(&arena, &json_ptr);
     
     if (!context) {
         arena_free(&arena);
@@ -283,9 +339,9 @@ Datum render(PG_FUNCTION_ARGS)
     }
     
     /* Parse the template text */
-    const char *template_ptr = template_str;
-    TemplateConfig config = template_default_config();
-    TemplateResult template_result = template_parse(&arena, &template_ptr, &config);
+    template_ptr = template_str;
+    config = template_default_config();
+    template_result = template_parse(&arena, &template_ptr, &config);
     
     if (IS_RESULT_ERROR(template_result)) {
         arena_free(&arena);
@@ -295,11 +351,11 @@ Datum render(PG_FUNCTION_ARGS)
     }
     
     /* Render the template */
-    TemplateNode root_node = RESULT_SOME_VALUE(template_result);
-    char *result_str = render_template_node(&arena, &root_node, context);
+    root_node = RESULT_SOME_VALUE(template_result);
+    result_str = render_template_node(&arena, &root_node, context);
     
     /* Prepare return value */
-    text *result = cstring_to_text(result_str);
+    result = cstring_to_text(result_str);
     
     arena_free(&arena);
     
