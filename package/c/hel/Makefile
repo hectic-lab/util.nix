@@ -7,7 +7,11 @@ PG_CONFIG = pg_config
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 
-# Add hectic library path
-CFLAGS += -I -lhectic
+HECTIC_CONFIG = hectic-config
+
+CFLAGS += $(shell $(HECTIC_CONFIG) --cflags)
+LDFLAGS += $(shell $(HECTIC_CONFIG) --libs)
+
+SHLIB_LINK := $(LIBS)
 
 include $(PGXS)
