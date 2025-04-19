@@ -603,11 +603,11 @@ struct Json {
 
 RESULT(Json, Json);
 
-#define json_parse(arena, s) json_parse__(__FILE__, __func__, __LINE__, arena, s)
 Json *json_parse__(const char* file, const char* func, int line, Arena *arena, const char **s);
+#define json_parse(arena, s) json_parse__(__FILE__, __func__, __LINE__, arena, s)
 
-#define json_to_string(arena, item) json_to_string__(__FILE__, __func__, __LINE__, arena, item)
 char *json_to_string__(const char* file, const char* func, int line, Arena *arena, const Json * const item);
+#define json_to_string(arena, item) json_to_string__(__FILE__, __func__, __LINE__, arena, item)
 
 #define json_to_string_with_opts(arena, item, raw) json_to_string_with_opts__(__FILE__, __func__, __LINE__, arena, item, raw)
 char *json_to_string_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw);
