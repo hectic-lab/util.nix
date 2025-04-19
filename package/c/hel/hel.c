@@ -1,8 +1,8 @@
-#include "postgres.h"
-#include "fmgr.h"
-#include "utils/builtins.h"
-#include "utils/json.h"
-#include "hectic.h"
+#include <postgres.h>
+#include <fmgr.h>
+#include <utils/builtins.h>
+#include <utils/json.h>
+#include <hectic.h>
 #include <string.h>
 
 #ifdef PG_MODULE_MAGIC
