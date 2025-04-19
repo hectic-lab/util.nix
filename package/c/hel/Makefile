@@ -1,11 +1,10 @@
 MODULE_big = hel
 OBJS = hel.o
 EXTENSION = hel
-DATA = hel--0.1.sql
+
+DATA = $(wildcard *.sql)
 
 PG_CONFIG = pg_config
-
-PGXS := $(shell $(PG_CONFIG) --pgxs)
 
 HECTIC_CONFIG = hectic-config
 
@@ -14,4 +13,5 @@ LDFLAGS += $(shell $(HECTIC_CONFIG) --libs)
 
 SHLIB_LINK := $(LIBS)
 
+PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
