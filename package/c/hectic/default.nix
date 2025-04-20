@@ -20,7 +20,7 @@ stdenv.mkDerivation {
   installPhase = ''
     mkdir -p $out/lib $out/include $out/bin
     cp target/libhectic.a $out/lib/
-    cp target/libhectic.so $out/lib/
+    cp target/hectic.so $out/lib/
     cp hectic.h $out/include/
     
     # Create hectic-config script
