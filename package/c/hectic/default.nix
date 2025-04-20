@@ -1,4 +1,4 @@
-{ stdenv, gcc, lib, bash, inotify-tools }:
+{ stdenv, patchelf, gcc, lib, bash, inotify-tools }:
 
 stdenv.mkDerivation {
   pname = "hectic";
