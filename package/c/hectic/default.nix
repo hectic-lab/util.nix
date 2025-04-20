@@ -22,6 +22,7 @@ stdenv.mkDerivation {
     cp target/libhectic.a $out/lib/
     cp target/hectic.so $out/lib/
     cp hectic.h $out/include/
+    ln $out/lib/hectic.so $out/lib/libhectic.so
     
     # Create hectic-config script
     cat > $out/bin/hectic-config <<EOF
@@ -31,6 +32,7 @@ stdenv.mkDerivation {
       echo "Usage: hectic-config [--cflags] [--libs] [--static]"
       echo "  --cflags  Print the compiler flags"
       echo "  --libs    Print the linker flags (dynamic library by default)"
+      echo "  --libdir  Print the lib directory"
       echo "  --static  When used with --libs, use static linking"
       echo "  --help    Display this help message"
       exit \$1
@@ -53,6 +55,9 @@ stdenv.mkDerivation {
         --cflags)
           echo "-I$out/include"
           ;;
+	--libdir)
+          echo "-I$out/lib"
+	  ;;
         --libs)
           if [ \$static -eq 1 ]; then
             echo "-L$out/lib -static -lhectic"
