@@ -54,7 +54,7 @@ esac
 RUN_TESTS=1
 OPTFLAGS="-O2"
 CFLAGS="-Wall -Wextra -Werror -pedantic -fsanitize=address -fanalyzer"
-LDFLAGS="-lhectic"
+LDFLAGS="-lhectic -static-libasan"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
 DEBUG=0
