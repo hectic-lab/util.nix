@@ -106,9 +106,9 @@ case "$MODE" in
     ar rcs target/libhectic.a target/hectic.o
     
     # Create shared library (.so)
-    echo "# Creating shared library (libhectic.so)"
+    echo "# Creating shared library (hectic.so)"
     # shellcheck disable=SC2086
-    cc -shared -o target/libhectic.so target/hectic.o
+    cc -shared -o target/hectic.so target/hectic.o
     ;;
   check)
     mkdir -p target/test
