@@ -155,7 +155,7 @@
           '';
         };
 	pure-c = pkgs.mkShell {
-          buildInputs = (with pkgs; [ inotify-tools ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc ]);
+          buildInputs = (with pkgs; [ inotify-tools ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc binutils ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
 
 	  shellHook = ''
@@ -429,16 +429,29 @@
             } {
               pname = "http";
               inherit version;
-              src = prev.fetchFromGitHub { owner = "pramsey"; repo = "pgsql-http"; rev = "v${version}"; hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM="; }; nativeBuildInputs = with prev; [pkg-config curl]; };
+              src = prev.fetchFromGitHub {
+	        owner = "pramsey";
+		repo = "pgsql-http";
+		rev = "v${version}";
+		hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
+	    };
+	    nativeBuildInputs = with prev; [pkg-config curl];
+	  };
           buildHelExt = versionSuffix: let
               postgresql = prev."postgresql_${versionSuffix}";
+	      c-hectic = self.packages.${prev.system}.c-hectic;
 	  in buildPostgresqlExtension {
               inherit postgresql;
             } {
-              pname = "postgrect";
+              pname = "hel";
               version = "0.1";
               src = ./package/c/hel;
-              nativeBuildInputs = (with prev; [pkg-config]) ++ [ self.packages.${prev.system}.c-hectic ];
+              nativeBuildInputs = (with prev; [pkg-config]) ++ [ c-hectic ];
+	      dontShrinkRPath = true;
+	      postFixup = ''
+	        echo ">>> postFixup running..."
+                ${prev.patchelf}/bin/patchelf --set-rpath ${c-hectic}/lib $out/lib/hel.so
+              '';
               preInstall = ''mkdir $out'';
             };
         in {
