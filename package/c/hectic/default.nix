@@ -10,7 +10,7 @@ stdenv.mkDerivation {
 
   buildPhase = ''
     ls
-    ${bash}/bin/sh ./make.sh build
+    ${bash}/bin/sh ./make.sh --no-asan build 
   '';
 
   checkPhase = ''

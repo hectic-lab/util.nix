@@ -1,5 +1,5 @@
 #!/bin/sh
-# Usage: make.sh [build|check[test1 test2 ...]] [--norun] [--debug] [--color]
+# Usage: make.sh [build|check[test1 test2 ...]] [--norun] [--debug] [--color] [--no-asan]
 # Options:
 #   build         Build the library and app (default if no mode is provided).
 #   watch         Build the library and app and watch for changes.
@@ -7,6 +7,7 @@
 #   --norun       (check only) Build tests but do not run them.
 #   --debug       Build with -O0 (debug mode).
 #   --color       Pass -fdiagnostics-color=always to compiler.
+#   --no-asan     Build without Address Sanitizer.
 #   help, --help  Show this help message.
 #   test1 test2   (check only) Run specific tests by name (without .c extension)
 
@@ -30,13 +31,14 @@ check_dependencies
 
 print_help() {
   cat <<EOF
-Usage: $0 [build|check[test1 test2 ...]] [--norun] [--debug] [--color]
+Usage: $0 [build|check[test1 test2 ...]] [--norun] [--debug] [--color] [--no-asan]
   build         Build the library and app (default).
   watch         Build the library and app and watch for changes.
   check         Build tests; runs them unless --norun is specified.
   --norun       (check only) Build tests but do not run them.
   --debug       Build with debug flags (-O0).
   --color       Force colored compiler diagnostics.
+  --no-asan     Build without Address Sanitizer.
   test1 test2   (check only) Run specific tests by name (without .c extension)
   help, --help  Display this help message.
 EOF
@@ -58,6 +60,7 @@ LDFLAGS="-lhectic -static-libasan"
 STD_FLAGS="-std=c99"
 COLOR_FLAG=""
 DEBUG=0
+USE_ASAN=1
 
 # Process options
 while [ $# -gt 0 ]; do
@@ -76,6 +79,9 @@ while [ $# -gt 0 ]; do
     --color)
       COLOR_FLAG="-fdiagnostics-color=always"
       ;;
+    --no-asan)
+      USE_ASAN=0
+      ;;
     *)
       break
       ;;
@@ -85,6 +91,13 @@ done
 
 MODE="${1:-build}"
 shift 2> /dev/null
+
+# Apply ASAN settings based on user choice
+if [ "$USE_ASAN" -eq 0 ]; then
+  # Remove ASAN flags
+  CFLAGS=$(echo "$CFLAGS" | sed 's/-fsanitize=address//')
+  LDFLAGS=$(echo "$LDFLAGS" | sed 's/-static-libasan//')
+fi
 
 if [ -n "$COLOR_FLAG" ]; then
   CFLAGS="$CFLAGS $COLOR_FLAG"
