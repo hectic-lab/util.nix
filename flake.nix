@@ -130,7 +130,8 @@
         prettify-log = pkgs.callPackage ./package/prettify-log/default.nix rust.commonArgs;
         pg-from = pkgs.callPackage ./package/postgres/pg-from/default.nix rust.commonArgs;
         pg-schema = pkgs.callPackage ./package/postgres/pg-schema/default.nix rust.commonArgs;
-        wpg_dupmall = pkgs.callPackage ./package/postgres/wpg_dupmall.nix rust.commonArgs; 
+        pg_wdumpall = pkgs.callPackage ./package/postgres/pg_wdumpall.nix rust.commonArgs; 
+        pg_wdump = pkgs.callPackage ./package/postgres/pg_wdump.nix rust.commonArgs; 
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
