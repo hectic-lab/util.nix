@@ -34,6 +34,8 @@ Parameters defining syntax for blocks controlling loops or nested structures.
   Finalizes the section declaration block.  
   *Example:* `do ` | `:`
 
+*Example*
+
 *Section Example:*
 ```tpl
 {% for item in items do
