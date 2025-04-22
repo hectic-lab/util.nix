@@ -137,6 +137,7 @@
             #  hectic = self.packages.${system}.hectic;
             #};
         postgreact = pkgs.callPackage ./package/c/postgreact {};
+        support-bot = pkgs.callPackage ./package/support-bot {};
       };
 
       devShells.${system} = let
