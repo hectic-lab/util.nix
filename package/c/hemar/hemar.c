@@ -2,12 +2,26 @@
 #include <fmgr.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
+#include <utils/jsonb.h>
 #include "hectic.h"
 #include <string.h>
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
 #endif
+
+#define LOG_FILE "/tmp/hemar.log"
+
+#define INIT \
+    logger_init(); \
+    logger_level(LOG_LEVEL_TRACE); \
+    logger_set_file(LOG_FILE); \
+    logger_set_output_mode(LOG_OUTPUT_BOTH); \
+    Arena arena = arena_init(MEM_MiB);
+
+#define FREE \
+    arena_free(&arena); \
+    logger_free();
 
 /* helper function to get a JSON value by key path */
 static Json *json_get_by_path(Arena *arena, const Json *context, const char *key_path) {
@@ -297,7 +311,7 @@ static char *render_template_node(Arena *arena, const TemplateNode *node, const 
 }
 
 /* Define the function render */
-PG_FUNCTION_INFO_V1(render);
+PG_FUNCTION_INFO_V1(pg_render);
 
 /* 
  * Function to render templates using hectic library with JSON context
@@ -305,17 +319,22 @@ PG_FUNCTION_INFO_V1(render);
  *   1. declare - JSON context for rendering
  *   2. template - The template text to render
  */
-Datum render(PG_FUNCTION_ARGS)
+Datum pg_render(PG_FUNCTION_ARGS)
 {
+    INIT;
+
+    printf("Rendering template\n");
+
     text *context_text = PG_GETARG_TEXT_PP(0);
     text *template_text = PG_GETARG_TEXT_PP(1);
+
+    printf("Context: %s\n", text_to_cstring(context_text));
     
     /* Convert input text to C string */
     char *template_str = text_to_cstring(template_text);
     char *context_str = text_to_cstring(context_text);
-    
-    /* Initialize arena for memory management */
-    Arena arena = arena_init(MEM_MiB);
+
+    printf("Template: %s\n", template_str);
 
     TemplateNode root_node;
     TemplateResult template_result;
@@ -333,7 +352,7 @@ Datum render(PG_FUNCTION_ARGS)
     context = json_parse(&arena, &json_ptr);
     
     if (!context) {
-        arena_free(&arena);
+        FREE;
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("Invalid JSON context")));
     }
@@ -344,7 +363,7 @@ Datum render(PG_FUNCTION_ARGS)
     template_result = template_parse(&arena, &template_ptr, &config);
     
     if (IS_RESULT_ERROR(template_result)) {
-        arena_free(&arena);
+        FREE;
         ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
                  errmsg("Failed to parse template: %s", 
                         RESULT_ERROR_MESSAGE(template_result))));
@@ -357,7 +376,59 @@ Datum render(PG_FUNCTION_ARGS)
     /* Prepare return value */
     result = cstring_to_text(result_str);
     
-    arena_free(&arena);
-    
+    FREE;
     PG_RETURN_TEXT_P(result);
+}
+
+PG_FUNCTION_INFO_V1(pg_test_log);
+
+Datum pg_test_log(PG_FUNCTION_ARGS) {
+    INIT;
+    raise_info("Testing log");
+
+    FREE;
+    PG_RETURN_VOID();
+}
+
+PG_FUNCTION_INFO_V1(pg_test_log_2);
+
+Datum pg_test_log_2(PG_FUNCTION_ARGS) {
+    INIT;
+    raise_info("Testing log");
+
+    text *context_text = PG_GETARG_TEXT_PP(0);
+    text *template_text = PG_GETARG_TEXT_PP(1);
+
+    raise_info("Context: %s", text_to_cstring(context_text));
+    raise_info("Template: %s", text_to_cstring(template_text));
+
+    FREE;
+    PG_RETURN_VOID();
+}
+
+PG_FUNCTION_INFO_V1(pg_template_parse);
+
+Datum pg_template_parse(PG_FUNCTION_ARGS) {
+    INIT;
+
+    TemplateConfig config;
+    const char *template_ptr;
+    TemplateResult template_result;
+
+    template_ptr = "{{ name }}";
+    config = template_default_config();
+    template_result = template_parse(&arena, &template_ptr, &config);
+
+    if (IS_RESULT_ERROR(template_result)) {
+        FREE;
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                 errmsg("Failed to parse template: %s", 
+                        RESULT_ERROR_MESSAGE(template_result))));
+    }
+
+    const char *json_str = "{\"a\": 1}";
+    Jsonb *jb = DatumGetJsonbP(DirectFunctionCall1(jsonb_in, CStringGetDatum(json_str)));
+
+    FREE;
+    PG_RETURN_VOID();
 }
