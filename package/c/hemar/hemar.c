@@ -9,7 +9,7 @@
 PG_MODULE_MAGIC;
 #endif
 
-/* Helper function to get a JSON value by key path */
+/* helper function to get a JSON value by key path */
 static Json *json_get_by_path(Arena *arena, const Json *context, const char *key_path) {
     
     char *path_copy;

@@ -1,6 +1,6 @@
-MODULE_big = hel
-OBJS = hel.o
-EXTENSION = hel
+MODULE_big = hemar
+OBJS = hemar.o
+EXTENSION = hemar
 
 DATA = $(wildcard *.sql)
 

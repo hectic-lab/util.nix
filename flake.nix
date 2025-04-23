@@ -439,20 +439,20 @@
 	    };
 	    nativeBuildInputs = with prev; [pkg-config curl];
 	  };
-          buildHelExt = versionSuffix: let
+          buildHemarExt = versionSuffix: let
               postgresql = prev."postgresql_${versionSuffix}";
 	      c-hectic = self.packages.${prev.system}.c-hectic;
 	  in buildPostgresqlExtension {
               inherit postgresql;
             } {
-              pname = "hel";
+              pname = "hemar";
               version = "0.1";
-              src = ./package/c/hel;
+              src = ./package/c/hemar;
               nativeBuildInputs = (with prev; [pkg-config]) ++ [ c-hectic ];
 	      dontShrinkRPath = true;
 	      postFixup = ''
 	        echo ">>> postFixup running..."
-                ${prev.patchelf}/bin/patchelf --set-rpath ${c-hectic}/lib $out/lib/hel.so
+                ${prev.patchelf}/bin/patchelf --set-rpath ${c-hectic}/lib $out/lib/hemar.so
               '';
               preInstall = ''mkdir $out'';
             };
@@ -462,25 +462,25 @@
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
             plhaskell = buildPlHaskellExt "17";
-            hel = buildHelExt "17";
+            hemar = buildHemarExt "17";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
             plhaskell = buildPlHaskellExt "16";
-            hel = buildHelExt "16";
+            hemar = buildHemarExt "16";
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
             plhaskell = buildPlHaskellExt "15";
-            hel = buildHelExt "15";
+            hemar = buildHemarExt "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
             plhaskell = buildPlHaskellExt "14";
-            hel = buildHelExt "14";
+            hemar = buildHemarExt "14";
           };};
           writers = let
             writeC =
