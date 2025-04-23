@@ -20,7 +20,27 @@ CREATE SCHEMA hemar;
 --      $hemar$
 --    ); 
 --   ```
-CREATE FUNCTION "hemar"."render"("declare" json, "template" text)
+CREATE FUNCTION "hemar"."render"("declare" jsonb, "template" text)
 RETURNS text
-AS 'hemar', 'render'
+AS 'hemar', 'pg_render'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION "hemar"."test_log"()
+RETURNS void
+AS 'hemar', 'pg_test_log'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION "hemar"."test_log_2"(text, text)
+RETURNS void
+AS 'hemar', 'pg_test_log_2'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION "hemar"."test_log_3"(name1 text, name2 text)
+RETURNS void
+AS 'hemar', 'pg_test_log_2'
+LANGUAGE C STRICT;
+
+CREATE FUNCTION "hemar"."template_parse"(text)
+RETURNS void
+AS 'hemar', 'pg_template_parse'
 LANGUAGE C STRICT;

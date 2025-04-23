@@ -77,7 +77,7 @@ stdenv.mkDerivation {
       esac
       shift
     done
-    EOF
+EOF
     
     chmod +x $out/bin/hectic-config
   '';
