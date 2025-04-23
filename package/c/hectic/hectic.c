@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include <signal.h>
+#include <errno.h>
 #include <setjmp.h>
 
 // On systems without strsep, provide a custom implementation
@@ -44,6 +45,62 @@ ColorMode debug_color_mode = COLOR_MODE_AUTO;
 LogLevel current_log_level = LOG_LEVEL_INFO;
 LogRule *log_rules = NULL;
 Arena *log_rules_arena = NULL;
+
+// File logging configuration
+static FILE *log_file = NULL;
+static LogOutputMode log_output_mode = LOG_OUTPUT_STDERR_ONLY;
+static char *log_file_path = NULL;
+
+/**
+ * Set log output mode
+ * @param mode The output mode (stderr only, file only, or both)
+ */
+void logger_set_output_mode(LogOutputMode mode) {
+    log_output_mode = mode;
+}
+
+/**
+ * Set log file path
+ * @param file_path Path to the log file. If NULL, file logging is disabled.
+ * @return 0 on success, -1 on failure (e.g., unable to open file)
+ */
+int logger_set_file(const char *file_path) {
+    // Close current log file if open
+    if (log_file != NULL && log_file != stderr) {
+        fclose(log_file);
+        log_file = NULL;
+    }
+    
+    // Free previous path if it exists
+    if (log_file_path != NULL) {
+        free(log_file_path);
+        log_file_path = NULL;
+    }
+    
+    // If path is NULL, disable file logging
+    if (file_path == NULL) {
+        log_output_mode = LOG_OUTPUT_STDERR_ONLY;
+        return 0;
+    }
+    
+    // Copy the file path
+    log_file_path = strdup(file_path);
+    if (log_file_path == NULL) {
+        fprintf(stderr, "ERROR: Failed to allocate memory for log file path\n");
+        return -1;
+    }
+    
+    // Open the log file
+    log_file = fopen(file_path, "a");
+    if (log_file == NULL) {
+        fprintf(stderr, "ERROR: Failed to open log file %s: %s\n", file_path, strerror(errno));
+        free(log_file_path);
+        log_file_path = NULL;
+        return -1;
+    }
+    
+    return 0;
+}
 
 const char* color_mode_to_string(ColorMode mode) {
     switch (mode) {
@@ -207,6 +264,35 @@ void logger_init(void) {
         fprintf(stderr, "INIT: Logger initialized with default level %s\n", 
                 log_level_to_string(current_log_level));
     }
+    
+    // Check for file logging environment variables
+    const char* log_file_env = getenv("LOG_FILE");
+    if (log_file_env) {
+        if (logger_set_file(log_file_env) == 0) {
+            fprintf(stderr, "INIT: Logging to file: %s\n", log_file_env);
+            
+            // Check for output mode
+            const char* log_mode_env = getenv("LOG_OUTPUT_MODE");
+            if (log_mode_env) {
+                if (strcmp(log_mode_env, "FILE_ONLY") == 0) {
+                    logger_set_output_mode(LOG_OUTPUT_FILE_ONLY);
+                    fprintf(stderr, "INIT: Log output mode set to FILE_ONLY\n");
+                } else if (strcmp(log_mode_env, "BOTH") == 0) {
+                    logger_set_output_mode(LOG_OUTPUT_BOTH);
+                    fprintf(stderr, "INIT: Log output mode set to BOTH\n");
+                } else {
+                    logger_set_output_mode(LOG_OUTPUT_STDERR_ONLY);
+                    fprintf(stderr, "INIT: Log output mode set to STDERR_ONLY\n");
+                }
+            } else {
+                // Default to both if file is specified but mode isn't
+                logger_set_output_mode(LOG_OUTPUT_BOTH);
+                fprintf(stderr, "INIT: Log output mode set to BOTH (default)\n");
+            }
+        } else {
+            fprintf(stderr, "INIT: Failed to open log file: %s\n", log_file_env);
+        }
+    }
 }
 
 void logger_free(void) {
@@ -216,6 +302,21 @@ void logger_free(void) {
         free(log_rules_arena);
         log_rules_arena = NULL;
     }
+    
+    // Close log file if open
+    if (log_file != NULL && log_file != stderr) {
+        fclose(log_file);
+        log_file = NULL;
+    }
+    
+    // Free log file path if allocated
+    if (log_file_path != NULL) {
+        free(log_file_path);
+        log_file_path = NULL;
+    }
+    
+    // Reset output mode
+    log_output_mode = LOG_OUTPUT_STDERR_ONLY;
 }
 
 char* raise_message(
@@ -237,25 +338,57 @@ char* raise_message(
     static char timeStr[20];
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &tm_info);
 
-    // Print timestamp, log level with color, location info
-    fprintf(stderr, "%s %s%s%s %s:%s:%s%d%s ", 
-            timeStr, 
-            log_level_to_color(level), 
-            log_level_to_string(level), 
-            OPTIONAL_COLOR(COLOR_RESET),
-            file,
-            func,
-            OPTIONAL_COLOR(COLOR_GREEN),
-            line,
-            OPTIONAL_COLOR(COLOR_RESET));
-
-    // Print the actual message with variable arguments
+    // Format the message first
     va_list args;
     va_start(args, format);
-    vfprintf(stderr, format, args);
+    
+    // Create a buffer for the message
+    char message_buffer[4096]; // Adjust size as needed
+    int header_len = snprintf(message_buffer, sizeof(message_buffer), 
+                             "%s %s%s%s %s:%s:%s%d%s ", 
+                             timeStr, 
+                             log_level_to_color(level), 
+                             log_level_to_string(level), 
+                             OPTIONAL_COLOR(COLOR_RESET),
+                             file,
+                             func,
+                             OPTIONAL_COLOR(COLOR_GREEN),
+                             line,
+                             OPTIONAL_COLOR(COLOR_RESET));
+    
+    // Add the formatted message
+    vsnprintf(message_buffer + header_len, sizeof(message_buffer) - header_len, format, args);
     va_end(args);
-
-    fprintf(stderr, "\n");
+    
+    // Add newline
+    strcat(message_buffer, "\n");
+    
+    // Write to stderr if needed
+    if (log_output_mode == LOG_OUTPUT_STDERR_ONLY || log_output_mode == LOG_OUTPUT_BOTH) {
+        fprintf(stderr, "%s", message_buffer);
+    }
+    
+    // Write to file if configured
+    if ((log_output_mode == LOG_OUTPUT_FILE_ONLY || log_output_mode == LOG_OUTPUT_BOTH) && log_file != NULL) {
+        // Remove ANSI color codes for file output
+        char file_buffer[4096];
+        char *src = message_buffer;
+        char *dst = file_buffer;
+        
+        while (*src) {
+            if (*src == '\033') {
+                // Skip ANSI escape sequence
+                while (*src && *src != 'm') src++;
+                if (*src) src++; // Skip the 'm'
+            } else {
+                *dst++ = *src++;
+            }
+        }
+        *dst = '\0';
+        
+        fprintf(log_file, "%s", file_buffer);
+        fflush(log_file); // Ensure log is written immediately
+    }
 
     return timeStr;
 }

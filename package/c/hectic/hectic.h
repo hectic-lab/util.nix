@@ -13,6 +13,29 @@
 #include <ctype.h>
 #include <stdbool.h>
 
+/* 
+ * Hectic Library - A C utility library
+ * 
+ * This library includes several components:
+ * - Logging system with multiple severity levels
+ * - Memory management with arenas
+ * - JSON parsing and serialization
+ * - Template engine
+ * 
+ * Logging System Usage:
+ * - Set global log level: logger_level(LOG_LEVEL_DEBUG);
+ * - Log messages: raise_debug("Debug message with %s", value);
+ * 
+ * File Logging:
+ * - Set log file: logger_set_file("/path/to/logfile.log");
+ * - Select output mode: logger_set_output_mode(LOG_OUTPUT_BOTH);
+ * 
+ * Environment Variables:
+ * - LOG_LEVEL: Set global log level ("TRACE", "DEBUG", etc.)
+ * - LOG_FILE: Set log file path
+ * - LOG_OUTPUT_MODE: Set output mode ("STDERR_ONLY", "FILE_ONLY", "BOTH")
+ */
+
 // -------------
 // -- Helpers --
 // -------------
@@ -223,6 +246,28 @@ typedef struct LogRule {
     int line_end;             // End line number (-1 for any)
     struct LogRule *next;     // Next rule in the chain
 } LogRule;
+
+/*
+ * Log output mode - controls how logs are written to files
+ */
+typedef enum {
+    LOG_OUTPUT_STDERR_ONLY,   // Write only to stderr (default)
+    LOG_OUTPUT_FILE_ONLY,     // Write only to file
+    LOG_OUTPUT_BOTH           // Write to both stderr and file
+} LogOutputMode;
+
+/**
+ * Set log output mode
+ * @param mode The output mode (stderr only, file only, or both)
+ */
+void logger_set_output_mode(LogOutputMode mode);
+
+/**
+ * Set log file path
+ * @param file_path Path to the log file. If NULL, file logging is disabled.
+ * @return 0 on success, -1 on failure (e.g., unable to open file)
+ */
+int logger_set_file(const char *file_path);
 
 void logger_level_reset();
 
