@@ -93,11 +93,11 @@ case "$MODE" in
     HECTIC_LIB="$HECTIC_PATH/lib"
     
     # shellcheck disable=SC2086
-    gcc $CFLAGS $OPTFLAGS -I$PG_INCLUDE -I$HECTIC_INCLUDE -shared -o target/hel.so hel.c -L$HECTIC_LIB -lhectic
+    gcc $CFLAGS $OPTFLAGS -I$PG_INCLUDE -I$HECTIC_INCLUDE -shared -o target/hemar.so hemar.c -L$HECTIC_LIB -lhectic
     
     # Copy extension files to target directory
-    cp hel.control target/
-    cp hel--0.1.sql target/
+    cp hemar.control target/
+    cp hemar--0.1.sql target/
     
     echo "Build complete. Files available in target/ directory."
     ;;

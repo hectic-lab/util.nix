@@ -1,12 +1,12 @@
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
-\echo Use "CREATE EXTENSION hel" to load this file. \quit
+\echo Use "CREATE EXTENSION hemar" to load this file. \quit
 
-CREATE SCHEMA hel;
+CREATE SCHEMA hemar;
 
 -- Define the parse_text_with_hectic function that uses hectic library
 -- Expected usage:
 --   ```sql
---    SELECT "hel"."render"(
+--    SELECT "hemar"."render"(
 --      "declare" := 
 --        jsonb_build_object(
 --          'name', 'test',
@@ -15,12 +15,12 @@ CREATE SCHEMA hel;
 --            'limit', 100
 --          )
 --        ),
---      "template" := $hel$
+--      "template" := $hemar$
 --        {{ name }} {{ config.limit }}
---      $hel$
+--      $hemar$
 --    ); 
 --   ```
-CREATE FUNCTION "hel"."render"("declare" json, "template" text)
+CREATE FUNCTION "hemar"."render"("declare" json, "template" text)
 RETURNS text
-AS 'hel', 'render'
+AS 'hemar', 'render'
 LANGUAGE C STRICT;
