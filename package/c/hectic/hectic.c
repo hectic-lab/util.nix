@@ -2241,36 +2241,70 @@ char *log_rules_to_debug_str__(CTX_DECLARATION, char *name, LogRule *self, PtrSe
     return result;
 }
 
+// ----------
+// -- View --
+// ----------
+
+View view_create(const void *data, size_t len, size_t isize) {
+  View view = { .data = data, .len = len, .isize = isize };
+  return view;
+}
+
+View string_to_view(const char *str) {
+  return view_create(str, strlen(str), sizeof(char));
+}
+
+View *string_to_view_ptr__(POSITION_INFO_DECLARATION, Arena *arena, const char *str) {
+  View *view = arena_alloc__(POSITION_INFO, arena, sizeof(View));
+  const View tmp = string_to_view(str);
+  *(void **)&view->data = (void *)tmp.data;
+  *(size_t *)&view->len = tmp.len;
+  *(size_t *)&view->isize = tmp.isize;
+  return view;
+}
+
 // ---------------
 // -- Templater --
 // ---------------
 
 // Look at package\c\hectic\docs\templater.md
 
-TemplateConfig template_default_config__(POSITION_INFO_DECLARATION) {
+TemplateConfig template_default_config__(POSITION_INFO_DECLARATION, Arena *arena) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "TEMPLATE: Default config");
-  TemplateConfig config;
-
-  config.Syntax.Braces.open = "{%";
-  config.Syntax.Braces.close = "%}";
-  config.Syntax.Section.control = "for ";
-  config.Syntax.Section.source = " in ";
-  config.Syntax.Section.begin = " do ";
-  config.Syntax.Interpolate.invoke = "";
-  config.Syntax.Include.invoke = "include ";
-  config.Syntax.Execute.invoke = "exec ";
-  config.Syntax.nesting = "->";
+  TemplateConfig config = {
+    .Syntax = {
+      .Braces = {
+        .open = string_to_view_ptr__(POSITION_INFO, arena, "{%"),
+        .close = string_to_view_ptr__(POSITION_INFO, arena, "%}")
+      },
+      .Section = {
+        .control = string_to_view_ptr__(POSITION_INFO, arena, "for "),
+        .source = string_to_view_ptr__(POSITION_INFO, arena, " in "),
+        .begin = string_to_view_ptr__(POSITION_INFO, arena, " do ")
+      },
+      .Interpolate = {
+        .invoke = string_to_view_ptr__(POSITION_INFO, arena, "")
+      },
+      .Include = {
+        .invoke = string_to_view_ptr__(POSITION_INFO, arena, "include ")
+      },
+      .Execute = {
+        .invoke = string_to_view_ptr__(POSITION_INFO, arena, "exec ")
+      },
+      .nesting = string_to_view_ptr__(POSITION_INFO, arena, "->")
+    }
+  };
 
   return config;
 }
 
 #define CHECK_CONFIG_STR(field, name)                                      \
 do {                                                                       \
-  if (config->Syntax.field == NULL) {                                                  \
+  if (config->Syntax.field->data == NULL) {                                                  \
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "VALIDATE: " name " is NULL");     \
     return false;                                                          \
   }                                                                        \
-  if (strlen(config->Syntax.field) > TEMPLATE_MAX_PREFIX_LEN) {                   \
+  if (config->Syntax.field->len > TEMPLATE_MAX_PREFIX_LEN) {                   \
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "VALIDATE: " name " is too long"); \
     return false;                                                          \
   }                                                                        \
@@ -2299,42 +2333,95 @@ bool template_validate_config__(POSITION_INFO_DECLARATION, const TemplateConfig 
 #undef CHECK_CONFIG_STR
 
 #define TEMPLATE_ASSERT_SYNTAX(pattern, message_arg, code_arg) \
-  if (strncmp(*s, pattern, strlen(pattern))) { \
+  if (strncmp(*s, pattern, strlen(pattern)) == 0) { \
     raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: " message_arg); \
     return RESULT_ERROR(TemplateResult, code_arg, message_arg); \
   }
+
+TemplateValue init_template_value__(POSITION_INFO_DECLARATION, TemplateNodeType type) {
+  TemplateValue value;
+  switch (type) {
+    case TEMPLATE_NODE_TEXT:
+      value.text.content = NULL;
+      break;
+    case TEMPLATE_NODE_INTERPOLATE:
+      value.interpolate.key = NULL;
+      break;
+    case TEMPLATE_NODE_SECTION:
+      value.section.iterator = NULL;
+      value.section.collection = NULL;
+      value.section.body = NULL;
+      break;
+    case TEMPLATE_NODE_EXECUTE:
+      value.execute.code = NULL;
+      break;
+    case TEMPLATE_NODE_INCLUDE:
+      value.include.key = NULL;
+      break;
+    default:
+      raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "INIT: Unknown node type");
+      exit(1);
+  }
+  return value;
+}
+
+TemplateNode init_template_node__(POSITION_INFO_DECLARATION, Arena *arena, TemplateNodeType type) {
+  TemplateNode node;
+  node.next = NULL;
+  node.type = type;
+  node.value = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateValue));
+  *node.value = init_template_value__(POSITION_INFO, type);
+  return node;
+}
+
+TemplateResult init_template_result__(POSITION_INFO_DECLARATION, Arena *arena, TemplateNodeType type) {
+  TemplateResult result;
+  result.type = RESULT_SOME;
+  result.Result.some = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+  *result.Result.some = init_template_node__(POSITION_INFO, arena, type);
+  return result;
+}
+
+TemplateNode new_template_node__(TemplateNodeType type, TemplateValue *value) {
+  TemplateNode node;
+  node.next = NULL;
+  node.type = type;
+  node.value = value;
+  return node;
+}
 
 TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config);
 
 TemplateResult template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Interpolation");
 
-  TemplateResult result;
+  TemplateResult result = init_template_result__(POSITION_INFO, arena, TEMPLATE_NODE_INTERPOLATE);
 
   const char **s = s_ptr;
 
   // Skip to the content of the interpolation
-  *s += strlen(config->Syntax.Braces.open);
+  *s += config->Syntax.Braces.open->len;
   *s = skip_whitespace(*s);
-  *s += strlen(config->Syntax.Interpolate.invoke);
+  *s += config->Syntax.Interpolate.invoke->len;
 
   *s = skip_whitespace(*s);
   const char *key_start = *s;
 
-  while (isalnum(**s)) {
-    if (**s == ' ' || strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close))) break;
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in interpolation", TEMPLATE_ERROR_NESTED_INTERPOLATION);
+  while (**s != '\0') {
+    if (isspace(**s) || strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in interpolation", TEMPLATE_ERROR_NESTED_INTERPOLATION);
 
     (*s)++;
   }
 
   size_t key_len = *s - key_start;
-  result.type = RESULT_SOME;
+  
+  char *key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
+  
+  result.Result.some->value->interpolate.key = key;
 
-  result.Result.some.value.interpolate.key = arena_strncpy__(POSITION_INFO, arena, key_start, key_len);
-  result.Result.some.type = TEMPLATE_NODE_INTERPOLATE;
-
-  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+  *s = skip_whitespace(*s);
+  *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
 }
@@ -2342,46 +2429,44 @@ TemplateResult template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena *
 TemplateResult template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Section");
 
-  TemplateResult result;
-  result.type = RESULT_SOME;
-  result.Result.some.type = TEMPLATE_NODE_SECTION;
+  TemplateResult result = init_template_result__(POSITION_INFO, arena, TEMPLATE_NODE_SECTION);
 
   const char **s = s_ptr;
 
   // Skip to the content of the section
-  *s += strlen(config->Syntax.Braces.open);
+  *s += config->Syntax.Braces.open->len;
   *s = skip_whitespace(*s);
-  *s += strlen(config->Syntax.Section.control);
+  *s += config->Syntax.Section.control->len;
 
   // Find the iterator name
   *s = skip_whitespace(*s);
   const char *iterator_start = *s;
 
-  while (isalnum(**s)) {
-    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.source, strlen(config->Syntax.Section.source))) break;
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in section element name", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
+  while (**s != '\0') {
+    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.source->data, config->Syntax.Section.source->len) == 0) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close->data, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in section element name", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
 
     (*s)++;
   }
 
   size_t iterator_len = *s - iterator_start;
-  result.Result.some.value.section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
+  result.Result.some->value->section.iterator = arena_strncpy__(POSITION_INFO, arena, iterator_start, iterator_len);
 
   // Find the collection name
   *s = skip_whitespace(*s);
   const char *collection_start = *s;
   
-  while (isalnum(**s)) {
-    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.begin, strlen(config->Syntax.Section.begin))) break;
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in section iterator", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
+  while (**s != '\0') {
+    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.begin->data, config->Syntax.Section.begin->len) == 0) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close->data, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in section iterator", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
 
     (*s)++;
   }
 
   size_t collection_len = *s - collection_start;
-  result.Result.some.value.section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
+  result.Result.some->value->section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
 
   // Parse the body
   TemplateResult body_result = template_parse__(POSITION_INFO, arena, s, config);
@@ -2389,40 +2474,39 @@ TemplateResult template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena,
     return body_result;
   }
 
-  result.Result.some.value.section.body = &body_result.Result.some;
+  result.Result.some->value->section.body = body_result.Result.some;
 
-  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+  *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
 }
 
 TemplateResult template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Include");
-  TemplateResult result;
-  result.type = RESULT_SOME;
-  result.Result.some.type = TEMPLATE_NODE_INCLUDE;
+
+  TemplateResult result = init_template_result__(POSITION_INFO, arena, TEMPLATE_NODE_INCLUDE);
 
   const char **s = s_ptr;
 
   // Skip to the content of the include
-  *s += strlen(config->Syntax.Braces.open);
+  *s += config->Syntax.Braces.open->len;
   *s = skip_whitespace(*s);
-  *s += strlen(config->Syntax.Include.invoke);
+  *s += config->Syntax.Include.invoke->len;
 
   *s = skip_whitespace(*s);
   const char *include_start = *s;
 
-  while (isalnum(**s)) {
-    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close))) break;
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in include", TEMPLATE_ERROR_NESTED_INCLUDE);
+  while (**s != '\0') {
+    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in include", TEMPLATE_ERROR_NESTED_INCLUDE);
 
     (*s)++;
   }
 
   size_t include_len = *s - include_start;
-  result.Result.some.value.include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
+  result.Result.some->value->include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
 
-  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+  *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
 }
@@ -2430,28 +2514,26 @@ TemplateResult template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena,
 TemplateResult template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Execute");
 
-  TemplateResult result;
-  result.type = RESULT_SOME;
-  result.Result.some.type = TEMPLATE_NODE_EXECUTE;
+  TemplateResult result = init_template_result__(POSITION_INFO, arena, TEMPLATE_NODE_EXECUTE);
 
   const char **s = s_ptr;
 
-  *s += strlen(config->Syntax.Braces.open);
+  *s += config->Syntax.Braces.open->len;
   *s = skip_whitespace(*s);
-  *s += strlen(config->Syntax.Execute.invoke);
+  *s += config->Syntax.Execute.invoke->len;
 
   *s = skip_whitespace(*s);
   const char *code_start = *s;
 
-  while (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close))) {
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open, "Nested tag in execute", TEMPLATE_ERROR_NESTED_EXECUTE);
+  while (strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) {
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in execute", TEMPLATE_ERROR_NESTED_EXECUTE);
     (*s)++;
   }
 
   size_t code_len = *s - code_start;
-  result.Result.some.value.execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
+  result.Result.some->value->execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
 
-  *s_ptr = *s + strlen(config->Syntax.Braces.close);
+  *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
 }
@@ -2472,62 +2554,129 @@ TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const c
   const char *start = *s;
 
   TemplateNode *root = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+  *root = init_template_node__(POSITION_INFO, arena, TEMPLATE_NODE_TEXT);
+  
   TemplateNode *current = root;
+  bool current_node_filled = false;
 
-  int open_brace_len = strlen(config->Syntax.Braces.open);
+  int open_brace_len = config->Syntax.Braces.open->len;
 
-  while (*s) {
-    // Find the first open brace
-    if (strncmp(*s, config->Syntax.Braces.open, open_brace_len) == 0) {
-      // Add text node if there is any text before the tag
+  while (*s && **s != '\0') {
+    if (strncmp(*s, config->Syntax.Braces.open->data, open_brace_len) == 0) {
       if (start != *s) {
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Text node: %s", arena_strncpy__(POSITION_INFO, DISPOSABLE_ARENA, start, *s - start));
-        current->type = TEMPLATE_NODE_TEXT;
-        current->value.text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
+        
+        if (current_node_filled) {
+          TemplateNode *new_node = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+          *new_node = init_template_node__(POSITION_INFO, arena, TEMPLATE_NODE_TEXT);
+          current->next = new_node;
+          current = new_node;
+        } else {
+          current->type = TEMPLATE_NODE_TEXT;
+          *current->value = init_template_value__(POSITION_INFO, TEMPLATE_NODE_TEXT);
+        }
+        
+        current->value->text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
+        current_node_filled = true;
       }
 
-      // Deside tag type by prefix
+      // Determine tag type by prefix
       TemplateResult current_result;
       {
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Found tag");
 
         const char *tag_prefix = *s + open_brace_len;
         tag_prefix = skip_whitespace(tag_prefix);
-	    raise_trace("tag_prefix: %p", tag_prefix);
+        raise_trace("tag_prefix: %p", tag_prefix);
 
-        if (strncmp(tag_prefix, config->Syntax.Section.control, strlen(config->Syntax.Section.control)) == 0) {
+        typedef struct {
+          const View * const prefix;
+          int tag_type;
+        } PrefixMatch;
+
+        PrefixMatch matches[] = {
+          {config->Syntax.Section.control, 1},
+          {config->Syntax.Interpolate.invoke, 2},
+          {config->Syntax.Include.invoke, 3},
+          {config->Syntax.Execute.invoke, 4}
+        };
+
+        int matched_type = 0;
+        size_t max_length = 0;
+
+        // Find longest match (in case when one name of tage is part of another)
+        for (int i = 0; i < 4; i++) {
+          if (strncmp(tag_prefix, matches[i].prefix->data, matches[i].prefix->len) == 0) {
+            // NOTE(yukkop): >= becouse one of the strings may be ""
+            if (matches[i].prefix->len >= max_length) {
+              max_length = matches[i].prefix->len;
+              matched_type = matches[i].tag_type;
+            }
+          }
+        }
+
+        if (matched_type == 1) {
           raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Section tag");
           current_result = template_parse_section__(POSITION_INFO, arena, s, config);
-        } else if (strncmp(tag_prefix, config->Syntax.Interpolate.invoke, strlen(config->Syntax.Interpolate.invoke)) == 0) {
+          start = *s;
+        } else if (matched_type == 2) {
           raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Interpolation tag");
           current_result = template_parse_interpolation__(POSITION_INFO, arena, s, config);
-        } else if (strncmp(tag_prefix, config->Syntax.Include.invoke, strlen(config->Syntax.Include.invoke)) == 0) {
+          start = *s;
+        } else if (matched_type == 3) {
           raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Include tag");
           current_result = template_parse_include__(POSITION_INFO, arena, s, config);
-        } else if (strncmp(tag_prefix, config->Syntax.Execute.invoke, strlen(config->Syntax.Execute.invoke)) == 0) {
+          start = *s;
+        } else if (matched_type == 4) {
           raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Execute tag");
           current_result = template_parse_execute__(POSITION_INFO, arena, s, config);
+          start = *s;
         } else {
           raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Unknown tag prefix: %s", slice_create__(POSITION_INFO, 1, (char *)tag_prefix, strlen(tag_prefix), 0, TEMPLATE_MAX_PREFIX_LEN));
-
           return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_UNKNOWN_TAG, "Unknown tag prefix");
         }
 
         TRY(current_result);
       }
 
-      *current = current_result.Result.some;
-      current->next = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
-      current = current->next;
+      if (current_node_filled) {
+        // SAFETY(yukkop): NO init necessary here
+        TemplateNode *new_node = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+        *new_node = *current_result.Result.some;
+        current->next = new_node;
+        current = new_node;
+      } else {
+        *current = *current_result.Result.some;
+      }
+      current_node_filled = true;
     }
 
-    (*s)++;
+    if (**s != '\0') {
+      (*s)++;
+    }
   }
 
   // Add text node if there is any text after the last tag
   if (start != *s) {
-    current->type = TEMPLATE_NODE_TEXT;
-    current->value.text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
+    if (current_node_filled) {
+      TemplateNode *new_node = arena_alloc__(POSITION_INFO, arena, sizeof(TemplateNode));
+      *new_node = init_template_node__(POSITION_INFO, arena, TEMPLATE_NODE_TEXT);
+      current->next = new_node;
+      current = new_node;
+    } else {
+      current->type = TEMPLATE_NODE_TEXT;
+      *current->value = init_template_value__(POSITION_INFO, TEMPLATE_NODE_TEXT);
+    }
+    
+    current->value->text.content = arena_strncpy__(POSITION_INFO, arena, start, *s - start);
+    current_node_filled = true;
+  }
+
+  // Set null when node is not filled
+  if (!current_node_filled && current == root) {
+    root->type = TEMPLATE_NODE_TEXT;
+    *root->value = init_template_value__(POSITION_INFO, TEMPLATE_NODE_TEXT);
+    root->value->text.content = arena_strncpy__(POSITION_INFO, arena, "", 0);
   }
 
   return RESULT_SOME(TemplateResult, *root);
@@ -2608,10 +2757,9 @@ char *template_value_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, con
 
 char *template_node_to_debug_str__(POSITION_INFO_DECLARATION, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited) {
     char *result = arena_alloc(arena, MEM_KiB);
-    STRUCT_TO_DEBUG_STR(arena, result, TemplateNode, name, self, visited, 4,
+    STRUCT_TO_DEBUG_STR(arena, result, TemplateNode, name, self, visited, 3,
       enum_to_debug_str__(POSITION_INFO, arena, "type", self->type, template_node_type_to_string(self->type)),
-      template_value_to_debug_str__(POSITION_INFO, arena, "value", &self->value, self->type, visited),
-      template_node_to_debug_str__(POSITION_INFO, arena, "children", self->children, visited),
+      template_value_to_debug_str__(POSITION_INFO, arena, "value", self->value, self->type, visited),
       template_node_to_debug_str__(POSITION_INFO, arena, "next", self->next, visited)
     );
     return result;
@@ -2644,36 +2792,27 @@ char *template_node_to_json_str__(POSITION_INFO_DECLARATION, Arena *arena, const
     switch (node->type) {
         case TEMPLATE_NODE_SECTION:
             APPEND("\"content\":{\"iterator\":\"%s\",\"collection\":\"%s\"}",
-                node->value.section.iterator,
-                node->value.section.collection);
-            char *body_str = template_node_to_json_str__(POSITION_INFO, arena, node->value.section.body, depth + 1);
+                node->value->section.iterator,
+                node->value->section.collection);
+            char *body_str = template_node_to_json_str__(POSITION_INFO, arena, node->value->section.body, depth + 1);
             if (body_str) {
                 APPEND(",\"body\":%s", body_str);
             }
             break;
         case TEMPLATE_NODE_INTERPOLATE:
-            APPEND("\"content\":{\"key\":\"%s\"}", node->value.interpolate.key);
+            APPEND("\"content\":{\"key\":\"%s\"}", node->value->interpolate.key);
             break;
         case TEMPLATE_NODE_EXECUTE:
-            APPEND("\"content\":{\"code\":\"%s\"}", node->value.execute.code);
+            APPEND("\"content\":{\"code\":\"%s\"}", node->value->execute.code);
             break;
         case TEMPLATE_NODE_INCLUDE:
-            APPEND("\"content\":{\"key\":\"%s\"}", node->value.include.key);
+            APPEND("\"content\":{\"key\":\"%s\"}", node->value->include.key);
             break;
         case TEMPLATE_NODE_TEXT:
-            APPEND("\"content\":{\"content\":\"%s\"}", node->value.text.content);
+            APPEND("\"content\":{\"content\":\"%s\"}", node->value->text.content);
             break;
         default:
             break;
-    }
-
-    if (node->children) {
-        APPEND(",\"children\":[");
-        char *child_str = template_node_to_json_str__(POSITION_INFO, arena, node->children, depth + 1);
-        if (child_str) {
-            APPEND(",%s", child_str);
-        }
-        APPEND("]");
     }
 
     APPEND("}");
