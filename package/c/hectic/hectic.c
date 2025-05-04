@@ -1390,6 +1390,7 @@ static Json *json_parse_value__(POSITION_INFO_DECLARATION, const char **s, Arena
     return NULL;
 }
 
+// FIXME(yukkop): **s changes in the function. Need to fix.
 Json *json_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s) {
     // Function entry logging with DEBUG level
     raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
@@ -1508,7 +1509,7 @@ char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const 
                       "FORMAT: Processing JSON array elements");
         
         while (child) {
-            char *child_str = json_to_string_with_opts__(file, func, line, arena, child, raw);
+            char *child_str = json_to_string_with_opts__(POSITION_INFO, arena, child, raw);
             if (child_str) {
                 ptr += sprintf(ptr, "%s", child_str);
             } else {
@@ -2390,7 +2391,7 @@ TemplateNode new_template_node__(TemplateNodeType type, TemplateValue *value) {
   return node;
 }
 
-TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config);
+TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config, bool inner_parse);
 
 TemplateResult template_parse_interpolation__(POSITION_INFO_DECLARATION, Arena *arena, const char **s_ptr, const TemplateConfig *config) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Interpolation");
@@ -2443,10 +2444,9 @@ TemplateResult template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena,
   const char *iterator_start = *s;
 
   while (**s != '\0') {
-    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.source->data, config->Syntax.Section.source->len) == 0) break;
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close->data, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
+    if (isspace(**s) || strncmp(*s, config->Syntax.Section.source->data, config->Syntax.Section.source->len) == 0) break;
     TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in section element name", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
-
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close->data, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
     (*s)++;
   }
 
@@ -2455,27 +2455,37 @@ TemplateResult template_parse_section__(POSITION_INFO_DECLARATION, Arena *arena,
 
   // Find the collection name
   *s = skip_whitespace(*s);
+  *s += config->Syntax.Section.source->len;
+  *s = skip_whitespace(*s);
   const char *collection_start = *s;
   
   while (**s != '\0') {
-    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Section.begin->data, config->Syntax.Section.begin->len) == 0) break;
+    if (isspace(**s) || strncmp(*s, config->Syntax.Section.begin->data, config->Syntax.Section.begin->len) == 0) break;
+    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in section collection", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
     TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.close->data, "Unexpected section end", TEMPLATE_ERROR_UNEXPECTED_SECTION_END);
-    TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in section iterator", TEMPLATE_ERROR_NESTED_SECTION_ITERATOR);
-
     (*s)++;
   }
 
   size_t collection_len = *s - collection_start;
   result.Result.some->value->section.collection = arena_strncpy__(POSITION_INFO, arena, collection_start, collection_len);
 
+  // Skip to the body
+  *s = skip_whitespace(*s);
+
   // Parse the body
-  TemplateResult body_result = template_parse__(POSITION_INFO, arena, s, config);
+  TemplateResult body_result = template_parse__(POSITION_INFO, arena, s, config, true);
   if (body_result.type == RESULT_ERROR) {
     return body_result;
   }
 
   result.Result.some->value->section.body = body_result.Result.some;
 
+  // Skip to the end of the section
+  *s = skip_whitespace(*s);
+  if (strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) != 0) {
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Expected section end");
+    return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_UNEXPECTED_SECTION_END, "Expected section end");
+  }
   *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
@@ -2497,15 +2507,20 @@ TemplateResult template_parse_include__(POSITION_INFO_DECLARATION, Arena *arena,
   const char *include_start = *s;
 
   while (**s != '\0') {
-    if (**s == ' ' || **s == '\n' || **s == '\t' || strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) break;
+    if (isspace(**s) || strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) break;
     TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in include", TEMPLATE_ERROR_NESTED_INCLUDE);
-
     (*s)++;
   }
 
   size_t include_len = *s - include_start;
   result.Result.some->value->include.key = arena_strncpy__(POSITION_INFO, arena, include_start, include_len);
 
+  // Skip to the end of the include
+  *s = skip_whitespace(*s);
+  if (strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) != 0) {
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Expected include end");
+    return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_UNEXPECTED_INCLUDE_END, "Expected include end");
+  }
   *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
@@ -2518,6 +2533,7 @@ TemplateResult template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena,
 
   const char **s = s_ptr;
 
+  // Skip to the content of the execute
   *s += config->Syntax.Braces.open->len;
   *s = skip_whitespace(*s);
   *s += config->Syntax.Execute.invoke->len;
@@ -2525,7 +2541,9 @@ TemplateResult template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena,
   *s = skip_whitespace(*s);
   const char *code_start = *s;
 
-  while (strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) {
+  // Find the end of the code
+  while (**s != '\0') {
+    if (strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) break;
     TEMPLATE_ASSERT_SYNTAX(config->Syntax.Braces.open->data, "Nested tag in execute", TEMPLATE_ERROR_NESTED_EXECUTE);
     (*s)++;
   }
@@ -2533,12 +2551,17 @@ TemplateResult template_parse_execute__(POSITION_INFO_DECLARATION, Arena *arena,
   size_t code_len = *s - code_start;
   result.Result.some->value->execute.code = arena_strncpy__(POSITION_INFO, arena, code_start, code_len);
 
+  // Skip to the end of the execute
+  if (strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) != 0) {
+    raise_message(LOG_LEVEL_EXCEPTION, POSITION_INFO, "PARSE: Expected execute end");
+    return RESULT_ERROR(TemplateResult, TEMPLATE_ERROR_UNEXPECTED_EXECUTE_END, "Expected execute end");
+  }
   *s_ptr = *s + config->Syntax.Braces.close->len;
 
   return result;
 }
 
-TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config) {
+TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s, const TemplateConfig *config, bool inner_parse) {
   raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Iteration start");
 
   if (!template_validate_config__(POSITION_INFO, config)) {
@@ -2561,7 +2584,13 @@ TemplateResult template_parse__(POSITION_INFO_DECLARATION, Arena *arena, const c
 
   int open_brace_len = config->Syntax.Braces.open->len;
 
+
   while (*s && **s != '\0') {
+    // Check for closing brace if this is inner parse
+    if (inner_parse && strncmp(*s, config->Syntax.Braces.close->data, config->Syntax.Braces.close->len) == 0) {
+      raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Found closing brace in inner parse");
+      break;
+    }
     if (strncmp(*s, config->Syntax.Braces.open->data, open_brace_len) == 0) {
       if (start != *s) {
         raise_message(LOG_LEVEL_TRACE, POSITION_INFO, "PARSE: Text node: %s", arena_strncpy__(POSITION_INFO, DISPOSABLE_ARENA, start, *s - start));
@@ -2796,7 +2825,7 @@ char *template_node_to_json_str__(POSITION_INFO_DECLARATION, Arena *arena, const
                 node->value->section.collection);
             char *body_str = template_node_to_json_str__(POSITION_INFO, arena, node->value->section.body, depth + 1);
             if (body_str) {
-                APPEND(",\"body\":%s", body_str);
+                APPEND(",\"body\":[%s]", body_str);
             }
             break;
         case TEMPLATE_NODE_INTERPOLATE:

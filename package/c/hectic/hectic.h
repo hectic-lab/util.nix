@@ -97,22 +97,24 @@ void set_output_color_mode(ColorMode mode);
 
 typedef enum {
   HECTIC_ERROR_NONE = 0,
-  TEMPLATE_ERROR_NONE = 985567,
-  TEMPLATE_ERROR_UNKNOWN_TAG = 985568,
-  TEMPLATE_ERROR_NESTED_INTERPOLATION = 985569,
-  TEMPLATE_ERROR_NESTED_SECTION_ITERATOR = 985570,
-  TEMPLATE_ERROR_UNEXPECTED_SECTION_END = 985571,
-  TEMPLATE_ERROR_NESTED_INCLUDE = 985572,
-  TEMPLATE_ERROR_NESTED_EXECUTE = 985573,
-  TEMPLATE_ERROR_INVALID_CONFIG = 985574,
-  TEMPLATE_ERROR_OUT_OF_MEMORY = 985575,
-  LOGGER_ERROR_INVALID_RULES_STRING = 985576,
-  LOGGER_ERROR_OUT_OF_MEMORY = 985577,
-  DEBUG_TO_JSON_PARSE_NO_EQUAL_SIGN_ERROR = 985578,
-  DEBUG_TO_JSON_PARSE_NO_STRUCT_NAME_ERROR = 985579,
-  DEBUG_TO_JSON_PARSE_LEFT_OPERAND_ERROR = 985580,
-  DEBUG_TO_JSON_PARSE_NO_START_ERROR = 985581,
-  DEBUG_TO_JSON_PARSE_NO_END_ERROR = 985582,
+  TEMPLATE_ERROR_NONE = 900000,
+  TEMPLATE_ERROR_UNKNOWN_TAG = 900001,
+  TEMPLATE_ERROR_NESTED_INTERPOLATION = 900002,
+  TEMPLATE_ERROR_NESTED_SECTION_ITERATOR = 900003,
+  TEMPLATE_ERROR_UNEXPECTED_SECTION_END = 900004,
+  TEMPLATE_ERROR_NESTED_INCLUDE = 900005,
+  TEMPLATE_ERROR_NESTED_EXECUTE = 900006,
+  TEMPLATE_ERROR_INVALID_CONFIG = 900007,
+  TEMPLATE_ERROR_OUT_OF_MEMORY = 900008,
+  TEMPLATE_ERROR_UNEXPECTED_INCLUDE_END = 900009,
+  TEMPLATE_ERROR_UNEXPECTED_EXECUTE_END = 900010,
+  LOGGER_ERROR_INVALID_RULES_STRING = 800001,
+  LOGGER_ERROR_OUT_OF_MEMORY = 800002,
+  DEBUG_TO_JSON_PARSE_NO_EQUAL_SIGN_ERROR = 700003,
+  DEBUG_TO_JSON_PARSE_NO_STRUCT_NAME_ERROR = 700004,
+  DEBUG_TO_JSON_PARSE_LEFT_OPERAND_ERROR = 700005,
+  DEBUG_TO_JSON_PARSE_NO_START_ERROR = 700006,
+  DEBUG_TO_JSON_PARSE_NO_END_ERROR = 700007,
 } HecticErrorCode;
 
 // Define color macros based on output type
@@ -814,7 +816,7 @@ struct TemplateNode {
 
 RESULT(Template, TemplateNode);
 
-TemplateResult template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
+TemplateResult template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config, bool inner_parse);
 
 TemplateConfig template_default_config__(const char *file, const char *func, int line, Arena *arena);
 
@@ -822,7 +824,7 @@ char *template_node_to_debug_str__(const char *file, const char *func, int line,
 
 char *template_node_to_json_str__(const char *file, const char *func, int line, Arena *arena, const TemplateNode *node, int depth);
 
-#define template_parse(arena, s, config) template_parse__(__FILE__, __func__, __LINE__, arena, s, config)
+#define template_parse(arena, s, config) template_parse__(__FILE__, __func__, __LINE__, arena, s, config, false)
 
 #define template_default_config(arena) template_default_config__(__FILE__, __func__, __LINE__, arena)
 
