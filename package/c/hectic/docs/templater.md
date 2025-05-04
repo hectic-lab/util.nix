@@ -123,16 +123,16 @@ Includes content from other templates.
 }
 ```
 
-## Function Tags
+## Execution Tags
 **Note:** Currently not included in C library; implemented as a wrapper on applicable platforms.
-Enables calling functions with arguments.
+Enables calling functions with arguments, or execute code. Have hardcoded context var - alows use template context 
 - **Prefix**  
   Denotes a function call.  
   *Example:* `exec` | *(Empty)*
 
 *Function Example:*
 ```tpl
-  {% exec my_function(arg1, arg2, 'literal') %}
+  {% exec RETURN my_function(context->arg1, context->arg2, 'literal') %}
   {% exec RETURN 'aaaaa' %}
 ```
 
@@ -143,3 +143,32 @@ Enables calling functions with arguments.
 - **Missing Fields/Functions/Templates:** Configurable to either return an error or warning.
 - **Circular Includes:** Detect when possible.
 - **No Shadowing:** Variables defined in section tags must not conflict with context variable names, otherwise, return an error.
+
+
+## Shared example
+```tpl
+  <div>text before<div>
+
+  {% include inner_template %}
+
+  {% name %}
+
+  {% for item in array do
+    some text: {% name2 %}
+    {% item.name %}
+  %}
+
+  <div>code insertion:</div>
+  {% execute
+    context + '{"name3": "zalupa"}';
+
+    IF context->condition THEN
+      RAISE INFO 'some log';
+
+      RETURN 'some text';
+    END
+    RETURN 'some other text';
+  %}
+
+  <div id="footer">...</div>
+```

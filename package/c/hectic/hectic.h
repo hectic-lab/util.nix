@@ -147,7 +147,7 @@ typedef struct {
         ResultType type;                      \
         union {                               \
             HecticError error;                \
-            some_type some;                   \
+            some_type *some;                  \
         } Result;                             \
     } name##Result
 
@@ -166,11 +166,11 @@ typedef struct {
 #define RESULT_ERROR_CODE(result) (result.Result.error.code)
 #define RESULT_ERROR_MESSAGE(result) (result.Result.error.message)
 
-#define RESULT_SOME_VALUE(result) (result.Result.some)
+#define RESULT_SOME_VALUE(result) (*result.Result.some)
 #define RESULT_ERROR_VALUE(result) (result.Result.error)
 
 #define RESULT_SOME(result_type, value) \
-    (result_type) { .type = RESULT_SOME, .Result.some = value }
+    (result_type) { .type = RESULT_SOME, .Result.some = &value }
 
 #define RESULT_ERROR(result_type, error_code, error_message) \
     (result_type) { .type = RESULT_ERROR, .Result.error = { .code = error_code, .message = error_message } }
@@ -427,7 +427,7 @@ static Arena disposable_arena __attribute__((unused)) = {0};
 
 #define DISPOSABLE_ARENA __extension__ ({  \
     if (disposable_arena.begin == NULL) {  \
-        disposable_arena = arena_init__(__FILE__, __func__, __LINE__, MEM_MiB); \
+        disposable_arena = arena_init__(__FILE__, __func__, __LINE__, MEM_MiB * 8); \
     } else { \
         arena_reset(&disposable_arena); \
     } \
@@ -726,6 +726,16 @@ char* slice_to_debug_str__(const char* file, const char* func, int line, Arena *
 
 #define slice_to_debug_str(arena, slice) slice_to_debug_str__(__FILE__, __func__, __LINE__, arena, slice)
 
+// ----------
+// -- View --
+// ----------
+
+typedef struct {
+    const void * const data;
+    const size_t len;
+    const size_t isize;
+} View;
+
 // ---------------
 // -- Templater --
 // ---------------
@@ -743,24 +753,24 @@ typedef enum {
 typedef struct {
   struct {
     struct {
-      const char *open;      // Default: "{%"
-      const char *close;     // Default: "%}"
+      const View * const open;      // Default: "{%"
+      const View * const close;     // Default: "%}"
     } Braces;
     struct {
-      const char *control;   // default: "for "
-      const char *source;    // default: " in "
-      const char *begin;     // default: " do "
+      const View * const control;   // default: "for "
+      const View * const source;    // default: " in "
+      const View * const begin;     // default: " do "
     } Section;
     struct {
-      const char *invoke;    // default: ""
+      const View * const invoke;    // default: ""
     } Interpolate;
     struct {
-      const char *invoke;    // default: "include "
+      const View * const invoke;    // default: "include "
     } Include;
     struct {
-      const char *invoke;    // default: "exec "
+      const View * const invoke;    // default: "exec "
     } Execute;
-    const char *nesting;    // default: "->"
+    const View * const nesting;    // default: "->"
   } Syntax;
 } TemplateConfig;
 
@@ -798,16 +808,15 @@ typedef union {
 
 struct TemplateNode {
     TemplateNodeType type;
-    TemplateValue value;
-    TemplateNode *children;  // child nodes
-    TemplateNode *next;      // sibling nodes
+    TemplateValue *value;
+    TemplateNode *next;
 };
 
 RESULT(Template, TemplateNode);
 
 TemplateResult template_parse__(const char *file, const char *func, int line, Arena *arena, const char **s, const TemplateConfig *config);
 
-TemplateConfig template_default_config__(const char *file, const char *func, int line);
+TemplateConfig template_default_config__(const char *file, const char *func, int line, Arena *arena);
 
 char *template_node_to_debug_str__(const char *file, const char *func, int line, Arena *arena, const char *name, const TemplateNode *self, PtrSet *visited);
 
@@ -815,12 +824,17 @@ char *template_node_to_json_str__(const char *file, const char *func, int line, 
 
 #define template_parse(arena, s, config) template_parse__(__FILE__, __func__, __LINE__, arena, s, config)
 
-#define template_default_config() template_default_config__(__FILE__, __func__, __LINE__)
+#define template_default_config(arena) template_default_config__(__FILE__, __func__, __LINE__, arena)
 
 #define TEMPLATE_NODE_TO_DEBUG_STR(arena, name, node) \
     template_node_to_debug_str__(__FILE__, __func__, __LINE__, arena, name, node, ptrset_init(arena))
 
 #define TEMPLATE_NODE_TO_JSON_STR(arena, node) \
     template_node_to_json_str__(__FILE__, __func__, __LINE__, arena, node, 0)
+
+TemplateNode init_template_node__(const char *file, const char *func, int line, Arena *arena, TemplateNodeType type);
+
+#define init_template_node(arena, type) \
+    init_template_node__(__FILE__, __func__, __LINE__, arena, type)
 
 #endif // EPRINTF_H
