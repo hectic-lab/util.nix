@@ -151,12 +151,24 @@ static void simplest_test_template_parse(Arena *arena, TemplateConfig *config) {
 
     TemplateNode node = RESULT_SOME_VALUE(template_result);
 
+    char *result_str;
     { // some debug output
       Arena *debug_arena = DISPOSABLE_ARENA;
       const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, &node);
       Json *json = json_parse(debug_arena, &json_str);
       raise_notice("json_str: \n%s", JSON_TO_PRETTY_STR(debug_arena, json));
+      result_str = arena_strdup(arena, JSON_TO_PRETTY_STR(debug_arena, json));
     }
+
+    assert(strcmp(result_str, 
+    "[\n"
+    "  {\n"
+    "    \"type\": \"TEXT\",\n"
+    "    \"content\": {\n"
+    "      \"content\": \"{{ name }}\"\n"
+    "    }\n"
+    "  }\n"
+    "]") == 0);
 }
 
 static void simplest_interpolation_test_template_parse(Arena *arena, TemplateConfig *config) {
@@ -171,11 +183,61 @@ static void simplest_interpolation_test_template_parse(Arena *arena, TemplateCon
 
     TemplateNode node = RESULT_SOME_VALUE(template_result);
 
+    char *result_str;
     { // some debug output
       Arena *debug_arena = DISPOSABLE_ARENA;
       const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, &node);
       Json *json = json_parse(debug_arena, &json_str);
       raise_log("json_str: \n%s", json_str);
+      raise_notice("json_str: \n%s", JSON_TO_PRETTY_STR(debug_arena, json));
+      result_str = arena_strdup(arena, JSON_TO_PRETTY_STR(debug_arena, json));
+    }
+
+    assert(strcmp(result_str, 
+    "[\n"
+    "  {\n"
+    "    \"type\": \"INTERPOLATE\",\n"
+    "    \"content\": {\n"
+    "      \"key\": \"name\"\n"
+    "    }\n"
+    "  },\n"
+    "  {\n"
+    "    \"type\": \"TEXT\",\n"
+    "    \"content\": {\n"
+    "      \"content\": \" \"\n"
+    "    }\n"
+    "  },\n"
+    "  {\n"
+    "    \"type\": \"INTERPOLATE\",\n"
+    "    \"content\": {\n"
+    "      \"key\": \"name2\"\n"
+    "    }\n"
+    "  }\n"
+    "]") == 0);
+}
+
+static void simplest_separator_test_template_parse(Arena *arena, TemplateConfig *config) {
+    const char *template_str = "{%"
+    "  for item in items"
+    "    {% name %} {% item.name %}"
+    "  %}"
+    ""  
+    "  {% name2 %}";
+
+    TemplateResult template_result = template_parse(arena, &template_str, config);
+
+    if (IS_RESULT_ERROR(template_result)) {
+      raise_exception("template_parse failed");
+      return;
+    }
+
+    TemplateNode node = RESULT_SOME_VALUE(template_result);
+
+    { // some debug output
+      Arena *debug_arena = DISPOSABLE_ARENA;
+      const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, &node);
+      raise_log("json_str: \n%s", json_str);
+      Json *json = json_parse(debug_arena, &json_str);
       raise_notice("json_str: \n%s", JSON_TO_PRETTY_STR(debug_arena, json));
     }
 }
@@ -206,6 +268,10 @@ int main(void) {
 
     simplest_interpolation_test_template_parse(&arena, &config);
     printf("%sTest 3: simplest_interpolation_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    arena_reset(&arena);
+
+    simplest_separator_test_template_parse(&arena, &config);
+    printf("%sTest 4: simplest_separator_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     arena_reset(&arena);
 
     logger_free();
