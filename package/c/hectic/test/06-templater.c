@@ -233,12 +233,87 @@ static void simplest_separator_test_template_parse(Arena *arena, TemplateConfig 
 
     TemplateNode node = RESULT_SOME_VALUE(template_result);
 
+    char *result_str = TEMPLATE_NODE_PRETTY_JSON(node, arena);
+
+    char *expected_result_str = arena_strdup(arena, 
+    "[\n"
+    "  {\n"
+    "    \"type\": \"SECTION\",\n"
+    "    \"content\": {\n"
+    "      \"iterator\": \"item\",\n"
+    "      \"collection\": \"items\"\n"
+    "    },\n"
+    "    \"body\": [\n"
+    "      {\n"
+    "        \"type\": \"INTERPOLATE\",\n"
+    "        \"content\": {\n"
+    "          \"key\": \"name\"\n"
+    "        }\n"
+    "      },\n"
+    "      {\n"
+    "        \"type\": \"TEXT\",\n"
+    "        \"content\": {\n"
+    "          \"content\": \" \"\n"
+    "        }\n"
+    "      },\n"
+    "      {\n"
+    "        \"type\": \"INTERPOLATE\",\n"
+    "        \"content\": {\n"
+    "          \"key\": \"item.name\"\n"
+    "        }\n"
+    "      },\n"
+    "      {\n"
+    "        \"type\": \"TEXT\",\n"
+    "        \"content\": {\n"
+    "          \"content\": \"  \"\n"
+    "        }\n"
+    "      }\n"
+    "    ]\n"
+    "  },\n"
+    "  {\n"
+    "    \"type\": \"TEXT\",\n"
+    "    \"content\": {\n"
+    "      \"content\": \"  \"\n"
+    "    }\n"
+    "  },\n"
+    "  {\n"
+    "    \"type\": \"INTERPOLATE\",\n"
+    "    \"content\": {\n"
+    "      \"key\": \"name2\"\n"
+    "    }\n"
+    "  }\n"
+    "]");
+
+    raise_log("result_str: \n%s", result_str);
+
+    assert(strcmp(result_str, expected_result_str) == 0);
+}
+
+static void simplest_execute_test_template_parse(Arena *arena, TemplateConfig *config) {
+    const char *template_str = 
+    "{% %}"
+    "{% execute RETURN 'aaaaaa' %}"
+    "{%   name    %}"
+    "{%   name2   %}"
+    "{%   name3   %}";
+
+    TemplateResult template_result = template_parse(arena, &template_str, config);
+
+    if (IS_RESULT_ERROR(template_result)) {
+      raise_exception("template_parse failed");
+      return;
+    }
+
+    TemplateNode node = RESULT_SOME_VALUE(template_result);
+
+    //char *result_str;
     { // some debug output
       Arena *debug_arena = DISPOSABLE_ARENA;
       const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, &node);
       raise_log("json_str: \n%s", json_str);
       Json *json = json_parse(debug_arena, &json_str);
       raise_notice("json_str: \n%s", JSON_TO_PRETTY_STR(debug_arena, json));
+      //result_str = arena_strdup(arena, JSON_TO_PRETTY_STR(debug_arena, json));
     }
 }
 
@@ -272,6 +347,10 @@ int main(void) {
 
     simplest_separator_test_template_parse(&arena, &config);
     printf("%sTest 4: simplest_separator_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    arena_reset(&arena);
+
+    simplest_execute_test_template_parse(&arena, &config);
+    printf("%sTest 5: simplest_execute_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     arena_reset(&arena);
 
     logger_free();

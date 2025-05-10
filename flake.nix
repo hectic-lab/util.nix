@@ -201,87 +201,161 @@
             buildInputs = [pkgs.stack];
           });
       };
-      nixosConfigurations."${system}_manual_test" = nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [
-          self.nixosModules."preset.default"
-          self.nixosModules."hardware.hetzner"
-          ({modulesPath, pkgs, ...}: {
-            imports = [
-              (modulesPath + "/profiles/qemu-guest.nix")
-            ];
+      nixosConfigurations = {
+        "${system}_manual_test" = nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            self.nixosModules."preset.default"
+            self.nixosModules."hardware.hetzner"
+            ({modulesPath, pkgs, ...}: {
+              imports = [
+                (modulesPath + "/profiles/qemu-guest.nix")
+              ];
 
-            users.users.root.openssh.authorizedKeys.keys = [ ];
-            environment.systemPackages = with pkgs; [
-              (pkgs.writers.writeMinCBin "minc-hello-world" ["<stdio.h>"] /*c*/ ''
-                printf("hello world\n");
-              '')
-              (pkgs.writers.writeMinCBin "minc-env" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
-                char *env_name;
-                if (argc > 1) {
-                  env_name = argv[1];
-                } else {
-                  env_name = "HOME";
-                }
-                char *value = getenv(env_name);
-                if (value) {
-                    printf("%s: %s\n", env_name, value);
-                } else {
-                    printf("Environment variable %s not found.\n", env_name);
-                }
-              '')
-              (pkgs.writers.writeMinCBin "minc-env-check" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
-                char *env_name;
-                if (argc > 1) {
-                  env_name = argv[1];
-                } else {
-                  env_name = "HOME";
-                }
+              environment.systemPackages = with pkgs; [
+                (pkgs.writers.writeMinCBin "minc-hello-world" ["<stdio.h>"] /*c*/ ''
+                  printf("hello world\n");
+                '')
+                (pkgs.writers.writeMinCBin "minc-env" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
+                  char *env_name;
+                  if (argc > 1) {
+                    env_name = argv[1];
+                  } else {
+                    env_name = "HOME";
+                  }
+                  char *value = getenv(env_name);
+                  if (value) {
+                      printf("%s: %s\n", env_name, value);
+                  } else {
+                      printf("Environment variable %s not found.\n", env_name);
+                  }
+                '')
+                (pkgs.writers.writeMinCBin "minc-env-check" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
+                  char *env_name;
+                  if (argc > 1) {
+                    env_name = argv[1];
+                  } else {
+                    env_name = "HOME";
+                  }
 
-                char *value = getenv(env_name);
-                if (value) {
-                    char buffer[128]; 
-                    sprintf(buffer, "echo $%s\n", env_name);
-                    system(buffer);
-                } else {
-                    printf("Environment variable %s not found.\n", env_name);
-                }
-              '')
-            ];
-            programs.zsh.shellAliases = {
-              jc = ''journalctl'';
-              sc = ''journalctl'';
-              nv = ''nvim'';
-              sd = "shutdown now";
-            };
+                  char *value = getenv(env_name);
+                  if (value) {
+                      char buffer[128]; 
+                      sprintf(buffer, "echo $%s\n", env_name);
+                      system(buffer);
+                  } else {
+                      printf("Environment variable %s not found.\n", env_name);
+                  }
+                '')
+              ];
 
-            virtualisation = {
-              vmVariant = {
-                systemd.services.fix-root-perms = {
-                  description = "Fix root directory permissions";
-                  after = [ "local-fs.target" ];
-                  wantedBy = [ "multi-user.target" ];
-                  serviceConfig = {
-                    Type = "oneshot";
-                    ExecStart = "${pkgs.coreutils}/bin/chmod 755 /";
+              users.users.root.openssh.authorizedKeys.keys = [
+                ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrbBG+U07f7OKvOxYIGYCaNvyozzxQF+I9Fb5TYZErK yukkop vm-postgres''
+              ];
+
+              programs.zsh.shellAliases = self.lib.sharedShellAliases;
+
+              virtualisation = {
+                vmVariant = {
+                  systemd.services.fix-root-perms = {
+                    description = "Fix root directory permissions";
+                    after = [ "local-fs.target" ];
+                    wantedBy = [ "multi-user.target" ];
+                    serviceConfig = {
+                      Type = "oneshot";
+                      ExecStart = "${pkgs.coreutils}/bin/chmod 755 /";
+                    };
+                  };
+                  virtualisation = {
+                    diskSize = 1024*6;
+                    diskImage = null;
+                    forwardPorts = [ ];
                   };
                 };
-                virtualisation = {
-                  diskSize = 1024*6;
-                  diskImage = null;
-                  forwardPorts = [ ];
+              };
+              networking.firewall = {
+                enable = true;
+                allowedTCPPorts = [
+                  80
+                ];
+              };
+            })
+          ];
+          pkgs = import nixpkgs {inherit system; overlays = [ self.overlays.default ];};
+        };
+        "${system}_hemar_test" = nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            self.nixosModules."preset.default"
+            self.nixosModules."hardware.hetzner"
+            ({modulesPath, pkgs, ...}: {
+              imports = [
+                (modulesPath + "/profiles/qemu-guest.nix")
+              ];
+
+              users.users.root.openssh.authorizedKeys.keys = [
+                ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrbBG+U07f7OKvOxYIGYCaNvyozzxQF+I9Fb5TYZErK yukkop vm-postgres''
+              ];
+
+              services.postgresql =
+	      let
+	        package = pkgs.postgresql_15;
+	      in {
+                enable = true;
+                package = package;
+                settings = 
+                {
+                  port = 64317;
+                  listen_addresses = lib.mkForce "*";
+                  shared_preload_libraries = "";
+                };
+                extensions = [ package.pkgs.hemar ];
+                authentication =  builtins.concatStringsSep "\n" [
+                  "local all       all     trust"
+                  "host  sameuser    all     127.0.0.1/32 scram-sha-256"
+                  "host  sameuser    all     ::1/128 scram-sha-256"
+                ];
+                initialScript = pkgs.writeText "init-sql-script" ''
+                  CREATE EXTENSION "hemar";
+
+		  SELECT hemar.parse('{% zalupa %}');
+		  SELECT hemar.parse('{% zalupa %}');
+                '';
+              };                   
+ 
+              environment.systemPackages = with pkgs; [ ];
+              programs.zsh.shellAliases = self.lib.sharedShellAliases // {
+	        conn = "sudo su postgres -c 'psql -p 64317'";
+	      };
+
+              virtualisation = {
+                vmVariant = {
+                  systemd.services.fix-root-perms = {
+                    description = "Fix root directory permissions";
+                    after = [ "local-fs.target" ];
+                    wantedBy = [ "multi-user.target" ];
+                    serviceConfig = {
+                      Type = "oneshot";
+                      ExecStart = "${pkgs.coreutils}/bin/chmod 755 /";
+                    };
+                  };
+                  virtualisation = {
+                    diskSize = 1024*6;
+                    diskImage = null;
+                    forwardPorts = [ ];
+                  };
                 };
               };
-            };
-            networking.firewall = {
-              enable = true;
-              allowedTCPPorts = [
-                80
-              ];
-            };
-          })
-        ];
-        pkgs = import nixpkgs {inherit system; overlays = [ self.overlays.default ];};
+              networking.firewall = {
+                enable = true;
+                allowedTCPPorts = [
+                  80
+                ];
+              };
+            })
+          ];
+          pkgs = import nixpkgs {inherit system; overlays = [ self.overlays.default ];};
+        };
       };
     })
     // {
@@ -531,6 +605,13 @@
       lib = {
         # -- For all systems --
         inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs;
+
+        sharedShellAliases = {
+          jc = ''journalctl'';
+          sc = ''journalctl'';
+          nv = ''nvim'';
+          sd = "shutdown now";
+        };
 
         readEnvironment = { envVarsToRead, prefix ? "" }:
           builtins.listToAttrs

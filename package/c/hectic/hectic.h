@@ -427,6 +427,8 @@ char* arena_strncpy__(const char *file, const char *func, int line, Arena *arena
 
 static Arena disposable_arena __attribute__((unused)) = {0};
 
+#define DISPOSABLE_ARENA_FREE arena_free(&disposable_arena)
+
 #define DISPOSABLE_ARENA __extension__ ({  \
     if (disposable_arena.begin == NULL) {  \
         disposable_arena = arena_init__(__FILE__, __func__, __LINE__, MEM_MiB * 8); \
@@ -653,11 +655,11 @@ RESULT(Json, Json);
 Json *json_parse__(const char* file, const char* func, int line, Arena *arena, const char **s);
 #define json_parse(arena, s) json_parse__(__FILE__, __func__, __LINE__, arena, s)
 
-char *json_to_string__(const char* file, const char* func, int line, Arena *arena, const Json * const item);
-#define json_to_string(arena, item) json_to_string__(__FILE__, __func__, __LINE__, arena, item)
+char *json_to_str__(const char* file, const char* func, int line, Arena *arena, const Json * const item);
+#define JSON_TO_STR(arena, item) json_to_str__(__FILE__, __func__, __LINE__, arena, item)
 
-#define json_to_string_with_opts(arena, item, raw) json_to_string_with_opts__(__FILE__, __func__, __LINE__, arena, item, raw)
-char *json_to_string_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw);
+char *json_to_str_with_opts__(const char* file, const char* func, int line, Arena *arena, const Json * const item, JsonRawOpt raw);
+#define JSON_TO_STR_WITH_OPTS(arena, item, raw) json_to_str_with_opts__(__FILE__, __func__, __LINE__, arena, item, raw)
 
 /* Retrieve an object item by key (case-sensitive) */
 Json *json_get_object_item__(const char* file, const char* func, int line, const Json * const object, const char * const key);
@@ -838,5 +840,32 @@ TemplateNode init_template_node__(const char *file, const char *func, int line, 
 
 #define init_template_node(arena, type) \
     init_template_node__(__FILE__, __func__, __LINE__, arena, type)
+
+#define TEMPLATE_NODE_DISPOSABLE_JSON(node) __extension__ ({ \
+    Arena *debug_arena = DISPOSABLE_ARENA; \
+    const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, &node); \
+    Json *json = json_parse(debug_arena, &json_str); \
+    arena_strdup(debug_arena, JSON_TO_PRETTY_STR(debug_arena, json)); \
+})
+
+#define TEMPLATE_NODE_PRETTY_JSON(node, arena) __extension__ ({ \
+    Arena *debug_arena = DISPOSABLE_ARENA; \
+    const char *json_str = TEMPLATE_NODE_TO_JSON_STR(debug_arena, &node); \
+    Json *json = json_parse(debug_arena, &json_str); \
+    arena_strdup(arena, JSON_TO_PRETTY_STR(debug_arena, json)); \
+})
+
+// --------------
+// -- Colorize --
+// --------------
+
+typedef struct {
+    const char *pattern;
+    int highlight_start;
+    int highlight_len;
+    const char *color;
+} PatternHighlight;
+
+char *colorize_partial_patterns(char *output, const char *input, PatternHighlight *patterns, size_t pattern_count);
 
 #endif // EPRINTF_H

@@ -1,0 +1,47 @@
+[
+  {
+    "type": "SECTION",
+    "content": {
+      "iterator": "item",
+      "collection": "items"
+    },
+    "body": [
+      {
+        "type": "INTERPOLATE",
+        "content": {
+          "key": "name"
+        }
+      },
+      {
+        "type": "TEXT",
+        "content": {
+          "content": " "
+        }
+      },
+      {
+        "type": "INTERPOLATE",
+        "content": {
+          "key": "item.name"
+        }
+      },
+      {
+        "type": "TEXT",
+        "content": {
+          "content": "  "
+        }
+      }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "content": {
+      "content": "  "
+    }
+  },
+  {
+    "type": "INTERPOLATE",
+    "content": {
+      "key": "name2"
+    }
+  }
+]
