@@ -53,7 +53,7 @@ static void test_get_object_items(Arena *arena) {
 static void test_print_json_object(Arena *arena) {
     const char *json = "{\"key\":\"value\", \"num\":3.14}";
     Json *root = json_parse(arena, &json);
-    char *printed = json_to_string(arena, root);
+    char *printed = JSON_TO_STR(arena, root);
     assert(strstr(printed, "\"key\":") != NULL);
     assert(strstr(printed, "\"value\"") != NULL);
     assert(strstr(printed, "\"num\":") != NULL);
@@ -64,7 +64,7 @@ static void test_print_json_object(Arena *arena) {
 static void test_print_json_number(Arena *arena) {
     const char *json = "123.456";
     Json *root = json_parse(arena, &json);
-    char *printed = json_to_string(arena, root);
+    char *printed = JSON_TO_STR(arena, root);
     double val = atof(printed);
     assert(val == 123.456);
 }
@@ -73,7 +73,7 @@ static void test_print_json_number(Arena *arena) {
 static void test_print_json_string(Arena *arena) {
     const char *json = "\"test string\"";
     Json *root = json_parse(arena, &json);
-    char *printed = json_to_string(arena, root);
+    char *printed = JSON_TO_STR(arena, root);
     assert(strcmp(printed, "\"test string\"") == 0);
 }
 
@@ -99,12 +99,12 @@ static void test_nested_json_object(Arena *arena) {
 static void test_arena_reset_reuse(Arena *arena) {
     const char *json1 = "{\"key\":\"value\"}";
     Json *root1 = json_parse(arena, &json1);
-    char *printed1 = json_to_string(arena, root1);
+    char *printed1 = JSON_TO_STR(arena, root1);
     assert(strcmp(printed1, "{\"key\":\"value\"}") == 0);
     arena_reset(arena);
     const char *json2 = "\"another test\"";
     Json *root2 = json_parse(arena, &json2);
-    char *printed2 = json_to_string(arena, root2);
+    char *printed2 = JSON_TO_STR(arena, root2);
     assert(strcmp(printed2, "\"another test\"") == 0);
 }
 

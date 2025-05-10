@@ -14,14 +14,14 @@ PG_MODULE_MAGIC;
 
 #define INIT \
     logger_init(); \
-    logger_level(LOG_LEVEL_TRACE); \
     logger_set_file(LOG_FILE); \
     logger_set_output_mode(LOG_OUTPUT_BOTH); \
     Arena arena = arena_init(MEM_MiB);
 
 #define FREE \
+    DISPOSABLE_ARENA_FREE; \
     arena_free(&arena); \
-    logger_free();
+    logger_free(); 
 
 /* helper function to get a JSON value by key path */
 static Json *json_get_by_path(Arena *arena, const Json *context, const char *key_path) {
@@ -66,7 +66,7 @@ static char *json_value_to_string(Arena *arena, const Json *json) {
             return "";
         case JSON_ARRAY:
         case JSON_OBJECT:
-            return json_to_string(arena, json);
+            return JSON_TO_STR(arena, json);
         default:
             return "";
     }
@@ -81,7 +81,7 @@ static char *render_text_node(Arena *arena, const TemplateNode *node) {
         return "";
     }
     
-    return node->value.text.content;
+    return node->value->text.content;
 }
 
 /* Render an interpolation node */
@@ -93,7 +93,7 @@ static char *render_interpolation_node(Arena *arena, const TemplateNode *node, c
         return "";
     }
 
-    key = node->value.interpolate.key;
+    key = node->value->interpolate.key;
     value = json_get_by_path(arena, context, key);
     
     if (!value) {
@@ -129,9 +129,9 @@ static char *render_section_node(Arena *arena, const TemplateNode *node, const J
         return "";
     }
     
-    collection_key = node->value.section.collection;
-    iterator_name = node->value.section.iterator;
-    body = node->value.section.body;
+    collection_key = node->value->section.collection;
+    iterator_name = node->value->section.iterator;
+    body = node->value->section.body;
     
     collection = json_get_by_path(arena, context, collection_key);
     
@@ -191,7 +191,7 @@ static char *render_include_node(Arena *arena, const TemplateNode *node, const J
     if (!node || node->type != TEMPLATE_NODE_INCLUDE || !context) {
         return "";
     }
-    include_key = node->value.include.key;
+    include_key = node->value->include.key;
     include_value = json_get_by_path(arena, context, include_key);
 
     if (!include_value || include_value->type != JSON_ARRAY) {
@@ -213,7 +213,7 @@ static char *render_include_node(Arena *arena, const TemplateNode *node, const J
                 const char *template_str = template_json->value.string;
                 const Json *include_context = context_json ? context_json : context;
                 
-                TemplateConfig config = template_default_config();
+                TemplateConfig config = template_default_config(arena);
                 TemplateResult template_result = template_parse(arena, &template_str, &config);
                 
                 if (!IS_RESULT_ERROR(template_result)) {
@@ -290,19 +290,6 @@ static char *render_template_node(Arena *arena, const TemplateNode *node, const 
         strcpy(output + output_pos, rendered);
         output_pos += rendered_len;
         
-        if (current->children) {
-            char *children_rendered = render_template_node(arena, current->children, context);
-            size_t children_len = strlen(children_rendered);
-            
-            if (output_pos + children_len + 1 > buffer_size) {
-                buffer_size = (output_pos + children_len + 1) * 2;
-                output = arena_realloc(arena, output, buffer_size / 2, buffer_size);
-            }
-            
-            strcpy(output + output_pos, children_rendered);
-            output_pos += children_len;
-        }
-        
         current = current->next;
     }
     
@@ -338,7 +325,6 @@ Datum pg_render(PG_FUNCTION_ARGS)
 
     TemplateNode root_node;
     TemplateResult template_result;
-    TemplateConfig config;
 
     Json *context;
 
@@ -349,6 +335,7 @@ Datum pg_render(PG_FUNCTION_ARGS)
     
     /* Parse the JSON context */
     const char *json_ptr = context_str;
+    TemplateConfig config = template_default_config(&arena);
     context = json_parse(&arena, &json_ptr);
     
     if (!context) {
@@ -359,7 +346,6 @@ Datum pg_render(PG_FUNCTION_ARGS)
     
     /* Parse the template text */
     template_ptr = template_str;
-    config = template_default_config();
     template_result = template_parse(&arena, &template_ptr, &config);
     
     if (IS_RESULT_ERROR(template_result)) {
@@ -411,13 +397,16 @@ PG_FUNCTION_INFO_V1(pg_template_parse);
 Datum pg_template_parse(PG_FUNCTION_ARGS) {
     INIT;
 
-    TemplateConfig config;
+    text *context_text = PG_GETARG_TEXT_PP(0);
+    char *content = text_to_cstring(context_text);
+
     const char *template_ptr;
     TemplateResult template_result;
+    TemplateConfig config = template_default_config(&arena);
 
-    template_ptr = "{{ name }}";
-    config = template_default_config();
+    raise_info("start parsing....");
     template_result = template_parse(&arena, &template_ptr, &config);
+    raise_info("parsing finished....");
 
     if (IS_RESULT_ERROR(template_result)) {
         FREE;
@@ -426,9 +415,18 @@ Datum pg_template_parse(PG_FUNCTION_ARGS) {
                         RESULT_ERROR_MESSAGE(template_result))));
     }
 
-    const char *json_str = "{\"a\": 1}";
-    Jsonb *jb = DatumGetJsonbP(DirectFunctionCall1(jsonb_in, CStringGetDatum(json_str)));
+    const char *json_str = TEMPLATE_NODE_TO_JSON_STR(&arena, &(RESULT_SOME_VALUE(template_result)));
+    Json *json = json_parse(&arena, &json_str); \
+
+    char *result_str = JSON_TO_STR(&arena, json);
+
+    raise_notice("%s", result_str);
+
+    char *result_str_clone = malloc(strlen(result_str) + 1);
+    if (result_str_clone) strcpy(result_str_clone, result_str);
 
     FREE;
-    PG_RETURN_VOID();
+
+    text *result = cstring_to_text(result_str_clone);
+    PG_RETURN_TEXT_P(result);
 }

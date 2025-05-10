@@ -40,7 +40,7 @@ RETURNS void
 AS 'hemar', 'pg_test_log_2'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION "hemar"."template_parse"(text)
-RETURNS void
+CREATE FUNCTION "hemar"."parse"("template" text)
+RETURNS text
 AS 'hemar', 'pg_template_parse'
 LANGUAGE C STRICT;

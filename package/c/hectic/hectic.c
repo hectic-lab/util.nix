@@ -1429,14 +1429,14 @@ Json *json_parse__(POSITION_INFO_DECLARATION, Arena *arena, const char **s) {
     return result;
 }
 
-char *json_to_string__(POSITION_INFO_DECLARATION, Arena *arena, const Json * const item) {
-    return json_to_string_with_opts__(POSITION_INFO, arena, item, JSON_NORAW);
+char *json_to_str__(POSITION_INFO_DECLARATION, Arena *arena, const Json * const item) {
+    return json_to_str_with_opts__(POSITION_INFO, arena, item, JSON_NORAW);
 }
 
 /* Minimal JSON printer with raw output option.
    When raw is non-zero and the item is a JSON_STRING, it is printed without quotes.
 */
-char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const Json * const item, JsonRawOpt raw) {
+char *json_to_str_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const Json * const item, JsonRawOpt raw) {
     // Function entry with DEBUG level
     raise_message(LOG_LEVEL_DEBUG, POSITION_INFO, 
                   "FORMAT: Starting JSON conversion to string (item: %p, raw_mode: %s)", 
@@ -1479,7 +1479,7 @@ char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const 
         
         while (child) {
             ptr += sprintf(ptr, "\"%s\":", child->key ? child->key : "");
-            char *child_str = json_to_string_with_opts__(POSITION_INFO, arena, child, raw);
+            char *child_str = json_to_str_with_opts__(POSITION_INFO, arena, child, raw);
             if (child_str) {
                 ptr += sprintf(ptr, "%s", child_str);
             } else {
@@ -1509,7 +1509,7 @@ char *json_to_string_with_opts__(POSITION_INFO_DECLARATION, Arena *arena, const 
                       "FORMAT: Processing JSON array elements");
         
         while (child) {
-            char *child_str = json_to_string_with_opts__(POSITION_INFO, arena, child, raw);
+            char *child_str = json_to_str_with_opts__(POSITION_INFO, arena, child, raw);
             if (child_str) {
                 ptr += sprintf(ptr, "%s", child_str);
             } else {
@@ -2280,8 +2280,8 @@ TemplateConfig template_default_config__(POSITION_INFO_DECLARATION, Arena *arena
       },
       .Section = {
         .control = string_to_view_ptr__(POSITION_INFO, arena, "for "),
-        .source = string_to_view_ptr__(POSITION_INFO, arena, " in "),
-        .begin = string_to_view_ptr__(POSITION_INFO, arena, " do ")
+        .source = string_to_view_ptr__(POSITION_INFO, arena, "in "),
+        .begin = string_to_view_ptr__(POSITION_INFO, arena, "do ")
       },
       .Interpolate = {
         .invoke = string_to_view_ptr__(POSITION_INFO, arena, "")
@@ -2860,6 +2860,84 @@ char *template_node_to_json_str__(POSITION_INFO_DECLARATION, Arena *arena, const
     // Copy the final string to arena-allocated memory
     char *result = arena_strncpy__(POSITION_INFO, arena, temp_buf, len);
     return result;
+}
+
+// ----------
+// -- diff --
+// ----------
+
+//int diff_str__(POSITION_INFO_DECLARATION, Arena *arena, const char **str1, const char **str2) {
+//    if (!str1 || !str2) {
+//        return 0;
+//    }
+//
+//    const char *s1 = *str1;
+//    const char *s2 = *str2;
+//
+//    int diff = 0;
+//
+//    while (*s1 && *s2) {
+//        if (*s1 != *s2) {
+//            diff++;
+//        }
+//        s1++;
+//        s2++;
+//    }
+//
+//    return diff;
+//}
+
+// --------------
+// -- Colorize --
+// --------------
+
+char *colorize_partial_patterns(char *output, const char *input, PatternHighlight *patterns, size_t pattern_count) {
+    size_t len = strlen(input);
+    if (!output) return NULL;
+    size_t out_idx = 0;
+
+    for (size_t i = 0; i < len;) {
+        int matched = 0;
+        for (size_t j = 0; j < pattern_count; j++) {
+            size_t pat_len = strlen(patterns[j].pattern);
+            if (strncmp(&input[i], patterns[j].pattern, pat_len) == 0) {
+                const char *pre = &input[i];
+                const char *hl_start = &input[i + patterns[j].highlight_start];
+                const char *hl_end = &input[i + patterns[j].highlight_start + patterns[j].highlight_len];
+
+                // Copy pre-highlight part
+                size_t pre_len = patterns[j].highlight_start;
+                memcpy(&output[out_idx], pre, pre_len);
+                out_idx += pre_len;
+
+                // Add color code and highlighted part
+                size_t color_len = strlen(patterns[j].color);
+                memcpy(&output[out_idx], patterns[j].color, color_len);
+                out_idx += color_len;
+
+                memcpy(&output[out_idx], hl_start, patterns[j].highlight_len);
+                out_idx += patterns[j].highlight_len;
+
+                memcpy(&output[out_idx], "\033[0m", 4);
+                out_idx += 4;
+
+                // Copy post-highlight part
+                size_t post_len = pat_len - patterns[j].highlight_start - patterns[j].highlight_len;
+                memcpy(&output[out_idx], hl_end, post_len);
+                out_idx += post_len;
+
+                i += pat_len;
+                matched = 1;
+                break;
+            }
+        }
+        if (!matched) {
+            output[out_idx++] = input[i++];
+        }
+    }
+
+    output[out_idx] = '\0';
+    return output;
 }
 
 // ---------
