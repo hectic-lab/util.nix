@@ -22,8 +22,11 @@
 /* Forward declarations */
 static char *get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found);
 static Datum get_jsonb_array(Datum jsonb_context, const char *path, bool *found);
+static Datum direct_array_check(Datum jsonb_context, const char *path, bool *found);
 static int get_jsonb_array_length(Datum jsonb_array);
+static int direct_array_length(Datum jsonb_array);
 static Datum get_jsonb_array_element(Datum jsonb_array, int index);
+static Datum direct_array_element(Datum jsonb_array, int index);
 static Datum create_iterator_context(Datum parent_context, const char *iterator_name, Datum item_context);
 static Datum get_jsonb_include_template(Datum jsonb_context, const char *key, bool *found);
 static void get_include_data(Datum include_data, char **template_out, Datum *context_out);
@@ -351,6 +354,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     
     iterator_len = *s - iterator_start;
     node->value->section.iterator = MemoryContextStrdup(context, pnstrdup(iterator_start, iterator_len));
+    elog(DEBUG1, "Parsed section iterator: %s", node->value->section.iterator);
     
     /* Find the collection name */
     *s = skip_whitespace(*s);
@@ -394,6 +398,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     
     collection_len = *s - collection_start;
     node->value->section.collection = MemoryContextStrdup(context, pnstrdup(collection_start, collection_len));
+    elog(DEBUG1, "Parsed section collection: %s", node->value->section.collection);
     
     /* Check for 'do' keyword */
     *s = skip_whitespace(*s);
@@ -412,33 +417,51 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
     {
         /* Empty section body */
+        elog(DEBUG1, "Parsed empty section body");
         *s_ptr = *s + strlen(config->Syntax.Braces.close);
         node->value->section.body = NULL;
         return node;
     }
+
+    /* Parse the body as a normal template */
+    const char *body_start = *s;
+    const char *original_s = *s;
     
-    /* Parse the body */
-    body_node = template_parse(context, s, config, true, error_code);
-    if (!body_node)
+    /* Find the end of the section */
+    while (**s && strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
+        (*s)++;
+    
+    if (!**s)
     {
-        template_free_node(node);
-        return NULL;
-    }
-    
-    node->value->section.body = body_node;
-    
-    /* Skip to the end of the section */
-    *s = skip_whitespace(*s);
-    
-    /* Check for closing brace */
-    if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
-    {
+        /* Unexpected end of string before closing brace */
         if (error_code)
             *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
         template_free_node(node);
         return NULL;
     }
     
+    /* Extract the body content */
+    size_t body_len = *s - body_start;
+    char *body_content = pnstrdup(body_start, body_len);
+    
+    elog(DEBUG1, "Section body content: %s", body_content);
+    
+    /* Parse the body content as a template */
+    const char *body_ptr = body_content;
+    body_node = template_parse(context, &body_ptr, config, false, error_code);
+    
+    if (!body_node)
+    {
+        elog(WARNING, "Failed to parse section body: %s", body_content);
+        pfree(body_content);
+        template_free_node(node);
+        return NULL;
+    }
+    
+    pfree(body_content);
+    node->value->section.body = body_node;
+    
+    /* Set the pointer to after the closing brace */
     *s_ptr = *s + strlen(config->Syntax.Braces.close);
     
     return node;
@@ -918,11 +941,20 @@ template_render(MemoryContext context, TemplateNode *node, Datum jsonb_context, 
                             {
                                 elog(DEBUG1, "Processing section with collection path: %s", collection_path);
                                 
-                                /* Get array from context */
+                                /* First try with the standard function */
                                 array_value = get_jsonb_array(jsonb_context, collection_path, &found);
+                                
+                                /* If not found, try direct check */
+                                if (!found)
+                                {
+                                    elog(DEBUG1, "Standard array check failed, trying direct check");
+                                    array_value = direct_array_check(jsonb_context, collection_path, &found);
+                                }
                                 
                                 if (found)
                                 {
+                                    elog(DEBUG1, "Found array for section: %s", collection_path);
+                                    
                                     /* Make sure we have a valid array */
                                     Jsonb *array_jb = (Jsonb *) DatumGetPointer(array_value);
                                     if (!array_jb || !is_jsonb_container_valid(&array_jb->root))
@@ -931,7 +963,17 @@ template_render(MemoryContext context, TemplateNode *node, Datum jsonb_context, 
                                         break;
                                     }
                                     
+                                    /* First try with standard array length function */
                                     array_length = get_jsonb_array_length(array_value);
+                                    elog(DEBUG1, "Standard array length for %s: %d", collection_path, array_length);
+                                    
+                                    /* If that fails, try direct approach */
+                                    if (array_length <= 0)
+                                    {
+                                        array_length = direct_array_length(array_value);
+                                        elog(DEBUG1, "Direct array length for %s: %d", collection_path, array_length);
+                                    }
+                                    
                                     elog(DEBUG1, "Found array with length: %d", array_length);
                                     debug_jsonb_value(array_value, "Section Array");
                                     
@@ -948,7 +990,19 @@ template_render(MemoryContext context, TemplateNode *node, Datum jsonb_context, 
                                         elog(DEBUG1, "Section body is empty, skipping");
                                         break;
                                     }
-                                        
+                                    
+                                    elog(DEBUG1, "Rendering section body for each array element");
+                                    
+                                    /* Log the section body structure for debugging */
+                                    if (current->value->section.body)
+                                    {
+                                        StringInfoData section_info;
+                                        initStringInfo(&section_info);
+                                        template_node_to_string(current->value->section.body, &section_info, 0);
+                                        elog(DEBUG1, "Section body structure: %s", section_info.data);
+                                        pfree(section_info.data);
+                                    }
+                                    
                                     for (i = 0; i < array_length; i++)
                                     {
                                         item_context = (Datum) 0;
@@ -959,7 +1013,16 @@ template_render(MemoryContext context, TemplateNode *node, Datum jsonb_context, 
                                         /* Safely get array element with error handling */
                                         PG_TRY();
                                         {
+                                            /* First try standard method */
                                             item_context = get_jsonb_array_element(array_value, i);
+                                            
+                                            /* If that fails, try direct approach */
+                                            if (item_context == (Datum) 0)
+                                            {
+                                                elog(DEBUG1, "Standard array element extraction failed, trying direct method");
+                                                item_context = direct_array_element(array_value, i);
+                                            }
+                                            
                                             /* Validate we got a valid item back */
                                             if (item_context != (Datum) 0)
                                             {
@@ -1327,6 +1390,8 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
     /* Handle simple top-level key */
     if (strchr(path, '.') == NULL)
     {
+        elog(DEBUG1, "Looking for array at path: %s", path);
+        
         /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
         PG_TRY();
         {
@@ -1338,8 +1403,13 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
             
             if (jbv_result)
             {
+                elog(DEBUG1, "Found value for key %s (type=%d)", path, jbv_result->type);
+                
                 if (jbv_result->type == jbvBinary)
                 {
+                    /* Get more details about the binary data */
+                    elog(DEBUG1, "Binary value found, trying to examine structure");
+                    
                     /* Validate the binary container before iterating */
                     if (!is_jsonb_container_valid((JsonbContainer *)&jbv_result->val.binary))
                     {
@@ -1347,20 +1417,52 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
                         return result;
                     }
                     
-                    it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
-                    token = JsonbIteratorNext(&it, &v, false);
-                    
-                    if (token == WJB_BEGIN_ARRAY)
+                    /* Try to initialize the iterator */
+                    PG_TRY();
                     {
-                        *found = true;
-                        result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
-                        elog(DEBUG1, "Found array at path %s", path);
-                        debug_jsonb_value(result, "Array");
+                        /* Log raw pointer for debugging */
+                        elog(DEBUG1, "Binary container address: %p", &jbv_result->val.binary);
+                        
+                        /* Try to get the first 4 bytes of the binary data */
+                        uint32 header = *(uint32 *)&jbv_result->val.binary;
+                        elog(DEBUG1, "Binary container header: %u", header);
+                        
+                        /* Initialize the iterator with careful error handling */
+                        elog(DEBUG1, "Initializing iterator for binary container");
+                        it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
+                        elog(DEBUG1, "Iterator initialized successfully");
+                        
+                        elog(DEBUG1, "Getting first token");
+                        token = JsonbIteratorNext(&it, &v, false);
+                        elog(DEBUG1, "First token retrieved: %d", token);
+                        
+                        if (token == WJB_BEGIN_ARRAY)
+                        {
+                            /* It's a valid array */
+                            *found = true;
+                            result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
+                            elog(DEBUG1, "Found array at path %s (result=%p)", path, DatumGetPointer(result));
+                            debug_jsonb_value(result, "Array");
+                            return result;
+                        }
+                        else
+                        {
+                            elog(DEBUG1, "Path %s exists but is not an array (token type: %d)", path, token);
+                        }
                     }
-                    else
+                    PG_CATCH();
                     {
-                        elog(DEBUG1, "Path %s exists but is not an array (token type: %d)", path, token);
+                        elog(WARNING, "Error initializing JSON iterator for path %s", path);
+                        /* Get more details about the error */
+                        ErrorData *edata = CopyErrorData();
+                        elog(WARNING, "Error message: %s", edata->message);
+                        elog(WARNING, "Error detail: %s", edata->detail ? edata->detail : "none");
+                        elog(WARNING, "Error hint: %s", edata->hint ? edata->hint : "none");
+                        elog(WARNING, "Error context: %s", edata->context ? edata->context : "none");
+                        FreeErrorData(edata);
+                        FlushErrorState();
                     }
+                    PG_END_TRY();
                 }
                 else
                 {
@@ -1375,8 +1477,10 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
         PG_CATCH();
         {
             elog(WARNING, "Exception while processing array at path %s", path);
+            ErrorData *edata = CopyErrorData();
+            elog(WARNING, "Error message: %s", edata->message);
+            FreeErrorData(edata);
             FlushErrorState();
-            return result;
         }
         PG_END_TRY();
     }
@@ -1512,25 +1616,153 @@ get_jsonb_array_length(Datum jsonb_array)
         return 0;
     }
     
-    it = JsonbIteratorInit((JsonbContainer *)&jb->root);
-    
-    /* Skip the WJB_BEGIN_ARRAY token */
-    token = JsonbIteratorNext(&it, &v, false);
-    
-    if (token != WJB_BEGIN_ARRAY)
+    /* Use PG_TRY/PG_CATCH to handle errors during iteration */
+    PG_TRY();
     {
-        elog(DEBUG1, "JSONB value is not an array (token=%d)", token);
+        it = JsonbIteratorInit((JsonbContainer *)&jb->root);
+        
+        /* Skip the WJB_BEGIN_ARRAY token */
+        token = JsonbIteratorNext(&it, &v, false);
+        
+        if (token != WJB_BEGIN_ARRAY)
+        {
+            elog(DEBUG1, "JSONB value is not an array (token=%d)", token);
+            return 0;
+        }
+        
+        elog(DEBUG1, "Counting array elements");
+        
+        /* Count array elements */
+        while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+        {
+            if (token == WJB_ELEM)
+            {
+                count++;
+                elog(DEBUG1, "Found array element %d", count);
+            }
+        }
+    }
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception while counting array length");
+        FlushErrorState();
+        return 0;
+    }
+    PG_END_TRY();
+    
+    elog(DEBUG1, "Final array length: %d", count);
+    return count;
+}
+
+static int
+direct_array_length(Datum jsonb_array)
+{
+    Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_array);
+    int count = 0;
+    
+    if (!jb)
+    {
+        elog(DEBUG1, "Null JSONB array passed to direct_array_length");
         return 0;
     }
     
-    /* Count array elements */
-    while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+    /* Use direct approach to count array elements */
+    PG_TRY();
     {
-        if (token == WJB_ELEM)
-            count++;
+        /* Convert to text and count array elements */
+        text *json_text = DatumGetTextP(DirectFunctionCall1(jsonb_out, PointerGetDatum(jb)));
+        
+        if (json_text)
+        {
+            char *json_str = text_to_cstring(json_text);
+            elog(DEBUG1, "JSON array string: %s", json_str);
+            
+            /* Skip whitespace */
+            while (*json_str && isspace((unsigned char)*json_str))
+                json_str++;
+            
+            /* Check if it's an array */
+            if (*json_str == '[')
+            {
+                /* Skip the opening bracket */
+                json_str++;
+                
+                /* Skip whitespace */
+                while (*json_str && isspace((unsigned char)*json_str))
+                    json_str++;
+                
+                /* Empty array check */
+                if (*json_str == ']')
+                {
+                    elog(DEBUG1, "Empty array, length 0");
+                    pfree(text_to_cstring(json_text));
+                    return 0;
+                }
+                
+                /* Count commas to determine array length */
+                count = 1; /* Start with 1 for the first element */
+                int in_string = 0;
+                int in_object = 0;
+                int in_array = 0;
+                
+                while (*json_str && *json_str != ']')
+                {
+                    if (!in_string)
+                    {
+                        if (*json_str == '"')
+                        {
+                            in_string = 1;
+                        }
+                        else if (*json_str == '{')
+                        {
+                            in_object++;
+                        }
+                        else if (*json_str == '}')
+                        {
+                            in_object--;
+                        }
+                        else if (*json_str == '[')
+                        {
+                            in_array++;
+                        }
+                        else if (*json_str == ']')
+                        {
+                            in_array--;
+                        }
+                        else if (*json_str == ',' && in_object == 0 && in_array == 0)
+                        {
+                            count++;
+                        }
+                    }
+                    else if (*json_str == '"' && *(json_str-1) != '\\')
+                    {
+                        in_string = 0;
+                    }
+                    
+                    json_str++;
+                }
+                
+                elog(DEBUG1, "Direct array length: %d", count);
+            }
+            else
+            {
+                elog(DEBUG1, "Not an array, length 0");
+            }
+            
+            pfree(text_to_cstring(json_text));
+        }
     }
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception in direct_array_length");
+        ErrorData *edata = CopyErrorData();
+        elog(WARNING, "Error message: %s", edata->message);
+        FreeErrorData(edata);
+        FlushErrorState();
+        return 0;
+    }
+    PG_END_TRY();
     
-    elog(DEBUG1, "Array length: %d", count);
     return count;
 }
 
@@ -1638,6 +1870,195 @@ get_jsonb_array_element(Datum jsonb_array, int index)
     {
         elog(DEBUG1, "Array element at index %d not found (array length = %d)", index, current_index);
     }
+    
+    return result;
+}
+
+static Datum
+direct_array_element(Datum jsonb_array, int index)
+{
+    Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_array);
+    Datum result = (Datum) 0;
+    
+    if (!jb || index < 0)
+    {
+        elog(DEBUG1, "Invalid array or index: array=%p, index=%d", jb, index);
+        return result;
+    }
+    
+    /* Use direct approach to extract array element */
+    PG_TRY();
+    {
+        /* Convert entire array to JSON string */
+        text *json_text = DatumGetTextP(DirectFunctionCall1(jsonb_out, PointerGetDatum(jb)));
+        
+        if (json_text)
+        {
+            char *json_str = text_to_cstring(json_text);
+            elog(DEBUG1, "JSON array for element extraction: %s", json_str);
+            
+            /* Skip whitespace */
+            while (*json_str && isspace((unsigned char)*json_str))
+                json_str++;
+            
+            /* Check if it's an array */
+            if (*json_str == '[')
+            {
+                /* Extract elements from JSON array */
+                int current_index = 0;
+                int nesting = 0;
+                char *element_start = NULL;
+                char *element_end = NULL;
+                int in_string = 0;
+                int object_nesting = 0;
+                int array_nesting = 0;
+                
+                /* Skip opening bracket */
+                json_str++;
+                
+                /* Skip leading whitespace */
+                while (*json_str && isspace((unsigned char)*json_str))
+                    json_str++;
+                
+                /* Empty array check */
+                if (*json_str == ']')
+                {
+                    elog(DEBUG1, "Empty array");
+                    pfree(text_to_cstring(json_text));
+                    return result;
+                }
+                
+                element_start = json_str;
+                
+                /* Find the element at the specified index */
+                while (*json_str)
+                {
+                    if (!in_string)
+                    {
+                        if (*json_str == '"')
+                        {
+                            in_string = 1;
+                        }
+                        else if (*json_str == '{')
+                        {
+                            object_nesting++;
+                        }
+                        else if (*json_str == '}')
+                        {
+                            object_nesting--;
+                        }
+                        else if (*json_str == '[')
+                        {
+                            array_nesting++;
+                        }
+                        else if (*json_str == ']')
+                        {
+                            if (array_nesting == 0)
+                            {
+                                /* End of array */
+                                if (current_index == index)
+                                {
+                                    element_end = json_str;
+                                    break;
+                                }
+                                else
+                                {
+                                    elog(DEBUG1, "Index %d out of bounds (max: %d)", index, current_index);
+                                    break;
+                                }
+                            }
+                            array_nesting--;
+                        }
+                        else if (*json_str == ',' && object_nesting == 0 && array_nesting == 0)
+                        {
+                            if (current_index == index)
+                            {
+                                element_end = json_str;
+                                break;
+                            }
+                            
+                            current_index++;
+                            element_start = json_str + 1;
+                            
+                            /* Skip whitespace after comma */
+                            while (*(element_start) && isspace((unsigned char)*(element_start)))
+                                element_start++;
+                        }
+                    }
+                    else if (*json_str == '"' && *(json_str-1) != '\\')
+                    {
+                        in_string = 0;
+                    }
+                    
+                    json_str++;
+                }
+                
+                /* Check if we found the element */
+                if (element_start && element_end && current_index == index)
+                {
+                    /* Create a string with just the array element */
+                    size_t element_len = element_end - element_start;
+                    char *element_str = pnstrdup(element_start, element_len);
+                    
+                    elog(DEBUG1, "Extracted element %d: %s", index, element_str);
+                    
+                    /* If it's a string, we need to wrap it in JSON object */
+                    if (*element_str == '"')
+                    {
+                        StringInfoData object_str;
+                        initStringInfo(&object_str);
+                        appendStringInfo(&object_str, "{\"value\": %s}", element_str);
+                        pfree(element_str);
+                        element_str = object_str.data;
+                        elog(DEBUG1, "Wrapped element in object: %s", element_str);
+                    }
+                    /* If it's a number, boolean, or null, we need to wrap it */
+                    else if (*element_str != '{' && *element_str != '[')
+                    {
+                        StringInfoData object_str;
+                        initStringInfo(&object_str);
+                        appendStringInfo(&object_str, "{\"value\": %s}", element_str);
+                        pfree(element_str);
+                        element_str = object_str.data;
+                        elog(DEBUG1, "Wrapped scalar element in object: %s", element_str);
+                    }
+                    
+                    /* Parse the element string as JSONB */
+                    text *element_text = cstring_to_text(element_str);
+                    Datum jsonb_element = DirectFunctionCall1(jsonb_in, PointerGetDatum(element_text));
+                    
+                    pfree(element_str);
+                    pfree(element_text);
+                    
+                    if (jsonb_element)
+                    {
+                        result = jsonb_element;
+                        elog(DEBUG1, "Successfully extracted array element %d", index);
+                    }
+                }
+                else
+                {
+                    elog(DEBUG1, "Element at index %d not found", index);
+                }
+            }
+            else
+            {
+                elog(DEBUG1, "Not an array");
+            }
+            
+            pfree(text_to_cstring(json_text));
+        }
+    }
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception in direct_array_element for index %d", index);
+        ErrorData *edata = CopyErrorData();
+        elog(WARNING, "Error message: %s", edata->message);
+        elog(WARNING, "Error detail: %s", edata->detail ? edata->detail : "none");
+        FreeErrorData(edata);
+        FlushErrorState();
+    }
+    PG_END_TRY();
     
     return result;
 }
@@ -2180,4 +2601,83 @@ template_node_to_string(TemplateNode *node, StringInfo result, int indent)
         
         current = current->next;
     }
-} 
+}
+
+/* Direct array check function to handle arrays without using JsonbIterator */
+static Datum
+direct_array_check(Datum jsonb_context, const char *path, bool *found)
+{
+    Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_context);
+    JsonbValue *jbv_result;
+    JsonbValue key;
+    Datum result = (Datum) 0;
+    
+    *found = false;
+    
+    if (!jb || !path)
+        return result;
+    
+    /* Use direct approach without iterators */
+    PG_TRY();
+    {
+        key.type = jbvString;
+        key.val.string.val = (char *) path;
+        key.val.string.len = strlen(path);
+        
+        jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
+        
+        if (jbv_result)
+        {
+            elog(DEBUG1, "Direct check: Found value for key %s (type=%d)", path, jbv_result->type);
+            
+            /* Method 1: Convert to text and check for array start */
+            text *json_text = NULL;
+            Jsonb *value_jsonb = JsonbValueToJsonb(jbv_result);
+            
+            if (value_jsonb)
+            {
+                /* Convert to text and check if it starts with '[' */
+                json_text = DatumGetTextP(DirectFunctionCall1(jsonb_out, PointerGetDatum(value_jsonb)));
+                
+                if (json_text)
+                {
+                    char *json_str = text_to_cstring(json_text);
+                    elog(DEBUG1, "JSON string representation: %s", json_str);
+                    
+                    /* Skip whitespace */
+                    while (*json_str && isspace((unsigned char)*json_str))
+                        json_str++;
+                    
+                    if (*json_str == '[')
+                    {
+                        elog(DEBUG1, "Direct check: Value is an array");
+                        *found = true;
+                        result = PointerGetDatum(value_jsonb);
+                    }
+                    else
+                    {
+                        elog(DEBUG1, "Direct check: Value is not an array");
+                    }
+                    
+                    pfree(json_str);
+                }
+            }
+        }
+        else
+        {
+            elog(DEBUG1, "Direct check: Path %s not found in JSONB", path);
+        }
+    }
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception in direct_array_check for path %s", path);
+        ErrorData *edata = CopyErrorData();
+        elog(WARNING, "Error message: %s", edata->message);
+        FreeErrorData(edata);
+        FlushErrorState();
+    }
+    PG_END_TRY();
+    
+    return result;
+}
+  
