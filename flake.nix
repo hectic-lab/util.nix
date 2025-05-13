@@ -297,6 +297,8 @@
                 ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrbBG+U07f7OKvOxYIGYCaNvyozzxQF+I9Fb5TYZErK yukkop vm-postgres''
               ];
 
+
+
               services.postgresql =
 	      let
 	        package = pkgs.postgresql_15;
@@ -318,12 +320,16 @@
                 initialScript = pkgs.writeText "init-sql-script" ''
                   CREATE EXTENSION "hemar";
 
-		  SELECT hemar.parse('{% zalupa %}');
-		  SELECT hemar.parse('{% zalupa %}');
+		  -- SELECT hemar.parse('{% zalupa %}');
+		  -- SELECT hemar.parse('{% zalupa %}');
+		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
+		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
+		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
+		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
                 '';
               };                   
  
-              environment.systemPackages = with pkgs; [ ];
+              environment.systemPackages =  with pkgs; [ gdb ];
               programs.zsh.shellAliases = self.lib.sharedShellAliases // {
 	        conn = "sudo su postgres -c 'psql -p 64317'";
 	        check = "journalctl -u postgresql";
