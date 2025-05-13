@@ -326,6 +326,7 @@
               environment.systemPackages = with pkgs; [ ];
               programs.zsh.shellAliases = self.lib.sharedShellAliases // {
 	        conn = "sudo su postgres -c 'psql -p 64317'";
+	        check = "journalctl -u postgresql";
 	      };
 
               virtualisation = {

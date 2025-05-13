@@ -6,6 +6,29 @@
 #include <errno.h>
 #include <setjmp.h>
 
+MemoryAllocator default_allocator = {
+    .malloc = malloc,
+    .free = free
+};
+
+void init_default_allocator(void) {
+    default_allocator.malloc = malloc;
+    default_allocator.free = free;
+}
+
+void set_memory_allocator(MemoryAllocator allocator) {
+    default_allocator = allocator;
+}
+
+// TODO(yukkop): rename without arena_ prefix
+void* arena_memory_alloc(size_t size) {
+    return default_allocator.malloc(size);
+}
+
+void arena_memory_free(void* ptr) {
+    default_allocator.free(ptr);
+}
+
 // On systems without strsep, provide a custom implementation
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE 1
@@ -231,7 +254,7 @@ void logger_level(LogLevel level) {
 
 // NOTE(yukkop): This function not uses POSITION_INFO because it's not have a user error. All possible errors are realization errors.
 void logger_init(void) {
-    log_rules_arena = malloc(sizeof(Arena));
+    log_rules_arena = arena_memory_alloc(sizeof(Arena));
     if (!log_rules_arena) {
         fprintf(stderr, "INIT: Failed to allocate memory for logger arena\n");
         exit(1);
@@ -682,7 +705,7 @@ Arena arena_init__(POSITION_INFO_DECLARATION, size_t size) {
         "ARENA INIT: Creating arena (size: %zu bytes)", size);
     
     Arena arena;
-    arena.begin = malloc(size);
+    arena.begin = arena_memory_alloc(size);
     
     // Check for allocation failure
     if (!arena.begin) {
@@ -725,7 +748,7 @@ void* arena_alloc_or_null__(POSITION_INFO_DECLARATION, Arena *arena, size_t size
             raise_message(LOG_LEVEL_WARN, POSITION_INFO,
                 "ARENA ALLOC: Expanding arena (old: %zu, new: %zu)", arena->capacity, new_capacity);
 
-            void *new_mem = malloc(new_capacity);
+            void *new_mem = arena_memory_alloc(new_capacity);
             if (!new_mem) {
                 raise_message(LOG_LEVEL_WARN, POSITION_INFO,
                     "ARENA ALLOC: Failed to expand arena (requested: %zu bytes)", new_capacity);
@@ -733,7 +756,7 @@ void* arena_alloc_or_null__(POSITION_INFO_DECLARATION, Arena *arena, size_t size
             }
 
             memcpy(new_mem, arena->begin, used);
-            free(arena->begin);
+            arena_memory_free(arena->begin);
             arena->begin = new_mem;
             arena->current = (char *)new_mem + used;
             arena->capacity = new_capacity;
@@ -840,7 +863,7 @@ void arena_free__(POSITION_INFO_DECLARATION, Arena *arena) {
   size_t used = (size_t)arena->current - (size_t)arena->begin;
   
   // Free the memory
-  free(arena->begin);
+  arena_memory_free(arena->begin);
   
   // Success logging
   raise_message(LOG_LEVEL_LOG, POSITION_INFO,

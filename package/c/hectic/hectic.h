@@ -365,6 +365,25 @@ void substr_clone__(const char *file, const char *func, int line, const char * c
 
 #define ARENA_DEFAULT_SIZE MEM_MiB
 
+// Memory allocation interface
+typedef struct {
+    void* (*malloc)(size_t size);
+    void (*free)(void* ptr);
+} MemoryAllocator;
+
+// Global memory allocator
+extern MemoryAllocator default_allocator;
+
+// Initialize default allocator with system malloc
+void init_default_allocator(void);
+
+// Set custom memory allocator
+void set_memory_allocator(MemoryAllocator allocator);
+
+// Memory allocation functions that use current allocator
+void* arena_memory_alloc(size_t size);
+void arena_memory_free(void* ptr);
+
 typedef struct {
   void *begin;
   void *current;
