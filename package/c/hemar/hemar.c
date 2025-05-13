@@ -28,6 +28,25 @@ static Datum create_iterator_context(Datum parent_context, const char *iterator_
 static Datum get_jsonb_include_template(Datum jsonb_context, const char *key, bool *found);
 static void get_include_data(Datum include_data, char **template_out, Datum *context_out);
 static void template_node_to_string(TemplateNode *node, StringInfo result, int indent);
+static void debug_jsonb_value(Datum jsonb_value, const char *label);
+static bool is_jsonb_container_valid(JsonbContainer *container);
+
+/* Implementation of a simplified validity check for JsonbContainer */
+static bool
+is_jsonb_container_valid(JsonbContainer *container)
+{
+    /* Basic sanity check: non-NULL pointer */
+    if (container == NULL)
+        return false;
+        
+    /* Check that container has a valid header size (at least 4 bytes) */
+    uint32 header = *(uint32 *)container;
+    if (header == 0) /* Simplistic check for corrupted/empty header */
+        return false;
+        
+    /* This is a simplified check. In a real implementation, we'd do more validation. */
+    return true;
+}
 
 /* Helper function to skip whitespace */
 static const char *
@@ -387,6 +406,16 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     }
     
     *s += strlen(config->Syntax.Section.begin);
+    *s = skip_whitespace(*s);
+    
+    /* Check if there's a closing brace right after 'do' */
+    if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
+    {
+        /* Empty section body */
+        *s_ptr = *s + strlen(config->Syntax.Braces.close);
+        node->value->section.body = NULL;
+        return node;
+    }
     
     /* Parse the body */
     body_node = template_parse(context, s, config, true, error_code);
@@ -538,6 +567,16 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
     if (!template_validate_config(config, error_code))
     {
         return NULL;
+    }
+    
+    /* Check for empty template */
+    if (!s || !*s || !**s)
+    {
+        TemplateNode *empty_node = init_template_node(context, TEMPLATE_NODE_TEXT);
+        empty_node->value->text.content = MemoryContextStrdup(context, "");
+        if (error_code)
+            *error_code = TEMPLATE_ERROR_NONE;
+        return empty_node;
     }
     
     start = *s;
@@ -743,174 +782,387 @@ template_render(MemoryContext context, TemplateNode *node, Datum jsonb_context, 
     initStringInfo(&result);
     current = node;
     
-    while (current)
+    elog(DEBUG1, "Starting template rendering");
+    
+    /* Use PG_TRY/PG_CATCH to handle errors during the entire rendering process */
+    PG_TRY();
     {
-        switch (current->type)
+        while (current)
         {
-            case TEMPLATE_NODE_TEXT:
-                if (current->value->text.content)
-                    appendStringInfoString(&result, current->value->text.content);
-                break;
-                
-            case TEMPLATE_NODE_INTERPOLATE:
-                {
-                    char *value = NULL;
-                    bool found = false;
-                    
-                    if (current->value->interpolate.key)
+            switch (current->type)
+            {
+                case TEMPLATE_NODE_TEXT:
+                    if (current->value->text.content)
                     {
-                        /* Extract value from JSONB context */
-                        value = get_jsonb_path_value(jsonb_context, current->value->interpolate.key, &found);
-                        
-                        if (found && value)
-                        {
-                            appendStringInfoString(&result, value);
-                            pfree(value);
-                        }
+                        elog(DEBUG1, "Rendering text node: %s", current->value->text.content);
+                        appendStringInfoString(&result, current->value->text.content);
                     }
-                }
-                break;
-                
-            case TEMPLATE_NODE_SECTION:
-                {
-                    /* Handle sections (loops) */
-                    char *collection_path = current->value->section.collection;
-                    Datum array_value;
-                    bool found = false;
-                    int array_length;
-                    int i;
+                    break;
                     
-                    if (collection_path && current->value->section.body)
+                case TEMPLATE_NODE_INTERPOLATE:
+                case TEMPLATE_NODE_SECTION:
+                case TEMPLATE_NODE_EXECUTE:
+                case TEMPLATE_NODE_INCLUDE:
+                    /* Use nested PG_TRY/PG_CATCH blocks for each node type for better error handling */
+                    PG_TRY();
                     {
-                        /* Get array from context */
-                        array_value = get_jsonb_array(jsonb_context, collection_path, &found);
-                        
-                        if (found)
+                        if (current->type == TEMPLATE_NODE_INTERPOLATE)
                         {
-                            array_length = get_jsonb_array_length(array_value);
+                            /* Process interpolation node */
+                            char *value = NULL;
+                            bool found = false;
                             
-                            /* Handle empty arrays gracefully */
-                            if (array_length <= 0)
-                                break;
-                                
-                            for (i = 0; i < array_length; i++)
+                            if (current->value->interpolate.key)
                             {
-                                Datum item_context = get_jsonb_array_element(array_value, i);
-                                Datum merged_context;
-                                char *item_result;
-                                bool item_error = false;
+                                elog(DEBUG1, "Processing interpolation for key: %s", current->value->interpolate.key);
                                 
-                                if (item_context == (Datum) 0)
+                                /* First try to get as a direct path */
+                                /* Extract value from JSONB context */
+                                value = get_jsonb_path_value(jsonb_context, current->value->interpolate.key, &found);
+                                
+                                if (found && value)
                                 {
-                                    /* Create an empty object for null array elements */
-                                    JsonbParseState *parse_state = NULL;
-                                    JsonbValue *empty_obj;
-                                    
-                                    pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-                                    empty_obj = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-                                    item_context = PointerGetDatum(JsonbValueToJsonb(empty_obj));
-                                }
-                                
-                                /* Create context with iterator variable */
-                                merged_context = create_iterator_context(jsonb_context, current->value->section.iterator, item_context);
-                                
-                                if (merged_context == (Datum) 0)
-                                    continue;
-                                
-                                /* Render section body with new context */
-                                item_result = template_render(context, current->value->section.body, merged_context, &item_error);
-                                
-                                if (!item_error && item_result)
-                                {
-                                    appendStringInfoString(&result, item_result);
-                                    pfree(item_result);
-                                }
-                                else if (item_error)
-                                {
-                                    *error = true;
-                                    return result.data;
-                                }
-                            }
-                        }
-                    }
-                }
-                break;
-                
-            case TEMPLATE_NODE_INCLUDE:
-                {
-                    /* Handle includes */
-                    char *template_key = current->value->include.key;
-                    Datum include_data;
-                    bool found = false;
-                    
-                    if (template_key)
-                    {
-                        /* Find include template in context */
-                        include_data = get_jsonb_include_template(jsonb_context, template_key, &found);
-                        
-                        if (found)
-                        {
-                            char *include_template = NULL;
-                            Datum include_context = (Datum) 0;
-                            char *include_result;
-                            bool include_error = false;
-                            
-                            /* Extract template and context */
-                            get_include_data(include_data, &include_template, &include_context);
-                            
-                            /* Parse and render included template */
-                            if (include_template)
-                            {
-                                TemplateConfig config = template_default_config(context);
-                                TemplateErrorCode error_code;
-                                const char *template_str = include_template;
-                                TemplateNode *include_node = template_parse(context, &template_str, &config, false, &error_code);
-                                
-                                if (include_node && error_code == TEMPLATE_ERROR_NONE)
-                                {
-                                    include_result = template_render(context, include_node, 
-                                                                    include_context != (Datum) 0 ? include_context : jsonb_context, 
-                                                                    &include_error);
-                                    
-                                    if (!include_error && include_result)
-                                    {
-                                        appendStringInfoString(&result, include_result);
-                                        pfree(include_result);
-                                    }
-                                    else
-                                    {
-                                        *error = true;
-                                    }
-                                    
-                                    template_free_node(include_node);
+                                    elog(DEBUG1, "Found value for key %s: %s", current->value->interpolate.key, value);
+                                    appendStringInfoString(&result, value);
+                                    pfree(value);
                                 }
                                 else
                                 {
-                                    *error = true;
+                                    /* If not found as direct path, check if it's an array */
+                                    Datum array_value;
+                                    bool array_found = false;
+                                    
+                                    array_value = get_jsonb_array(jsonb_context, current->value->interpolate.key, &array_found);
+                                    
+                                    if (array_found)
+                                    {
+                                        /* Convert array to string representation */
+                                        elog(DEBUG1, "Found array for key %s, converting to string", current->value->interpolate.key);
+                                        debug_jsonb_value(array_value, "Array for interpolation");
+                                        
+                                        /* Create a string representation of the array */
+                                        StringInfoData array_str;
+                                        initStringInfo(&array_str);
+                                        appendStringInfoString(&array_str, "[");
+                                        
+                                        Jsonb *array_jb = (Jsonb *) DatumGetPointer(array_value);
+                                        if (array_jb && is_jsonb_container_valid(&array_jb->root))
+                                        {
+                                            int array_length = get_jsonb_array_length(array_value);
+                                            int i;
+                                            Datum elem;
+                                            char *elem_str = NULL;
+                                            bool elem_found = false;
+                                            
+                                            elog(DEBUG1, "Array length: %d", array_length);
+                                            
+                                            for (i = 0; i < array_length; i++)
+                                            {
+                                                if (i > 0)
+                                                    appendStringInfoString(&array_str, ", ");
+                                                    
+                                                elem = get_jsonb_array_element(array_value, i);
+                                                if (elem != (Datum) 0)
+                                                {
+                                                    elem_found = false;
+                                                    
+                                                    /* Try to get value from the element */
+                                                    elem_str = get_jsonb_path_value(elem, "value", &elem_found);
+                                                    
+                                                    if (elem_found && elem_str)
+                                                    {
+                                                        appendStringInfoString(&array_str, elem_str);
+                                                        pfree(elem_str);
+                                                    }
+                                                    else
+                                                    {
+                                                        appendStringInfoString(&array_str, "null");
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    appendStringInfoString(&array_str, "null");
+                                                }
+                                            }
+                                        }
+                                        
+                                        appendStringInfoString(&array_str, "]");
+                                        appendStringInfoString(&result, array_str.data);
+                                        pfree(array_str.data);
+                                    }
+                                    else
+                                    {
+                                        elog(DEBUG1, "Key %s not found in context", current->value->interpolate.key);
+                                        /* Optionally append something to indicate missing key */
+                                        appendStringInfoString(&result, "");
+                                    }
                                 }
-                                
-                                pfree(include_template);
                             }
                         }
+                        else if (current->type == TEMPLATE_NODE_SECTION)
+                        {
+                            /* Handle sections (loops) */
+                            char *collection_path = current->value->section.collection;
+                            Datum array_value;
+                            bool found = false;
+                            int array_length;
+                            int i;
+                            JsonbParseState *parse_state = NULL;
+                            JsonbValue *empty_obj;
+                            Datum item_context;
+                            Datum merged_context;
+                            char *item_result;
+                            bool item_error = false;
+                            
+                            if (collection_path)
+                            {
+                                elog(DEBUG1, "Processing section with collection path: %s", collection_path);
+                                
+                                /* Get array from context */
+                                array_value = get_jsonb_array(jsonb_context, collection_path, &found);
+                                
+                                if (found)
+                                {
+                                    /* Make sure we have a valid array */
+                                    Jsonb *array_jb = (Jsonb *) DatumGetPointer(array_value);
+                                    if (!array_jb || !is_jsonb_container_valid(&array_jb->root))
+                                    {
+                                        elog(WARNING, "Invalid JSONB array container for path: %s", collection_path);
+                                        break;
+                                    }
+                                    
+                                    array_length = get_jsonb_array_length(array_value);
+                                    elog(DEBUG1, "Found array with length: %d", array_length);
+                                    debug_jsonb_value(array_value, "Section Array");
+                                    
+                                    /* Handle empty arrays gracefully */
+                                    if (array_length <= 0)
+                                    {
+                                        elog(DEBUG1, "Array is empty, skipping section");
+                                        break;
+                                    }
+                                    
+                                    /* If section body is empty, nothing to do */
+                                    if (current->value->section.body == NULL)
+                                    {
+                                        elog(DEBUG1, "Section body is empty, skipping");
+                                        break;
+                                    }
+                                        
+                                    for (i = 0; i < array_length; i++)
+                                    {
+                                        item_context = (Datum) 0;
+                                        item_error = false;
+                                        
+                                        elog(DEBUG1, "Processing array element %d", i);
+                                        
+                                        /* Safely get array element with error handling */
+                                        PG_TRY();
+                                        {
+                                            item_context = get_jsonb_array_element(array_value, i);
+                                            /* Validate we got a valid item back */
+                                            if (item_context != (Datum) 0)
+                                            {
+                                                Jsonb *item_jb = (Jsonb *) DatumGetPointer(item_context);
+                                                if (item_jb && is_jsonb_container_valid(&item_jb->root))
+                                                {
+                                                    elog(DEBUG1, "Got valid array element %d", i);
+                                                    debug_jsonb_value(item_context, "Array Element");
+                                                }
+                                                else
+                                                {
+                                                    elog(WARNING, "Got invalid JSONB container for array element %d", i);
+                                                    item_context = (Datum) 0;  /* Reset to create empty object below */
+                                                }
+                                            }
+                                        }
+                                        PG_CATCH();
+                                        {
+                                            elog(WARNING, "Error getting array element %d, creating empty object instead", i);
+                                            /* Create an empty object for problematic array elements */
+                                            parse_state = NULL;
+                                            
+                                            pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+                                            empty_obj = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+                                            item_context = PointerGetDatum(JsonbValueToJsonb(empty_obj));
+                                            
+                                            /* Reset error state */
+                                            FlushErrorState();
+                                        }
+                                        PG_END_TRY();
+                                        
+                                        if (item_context == (Datum) 0)
+                                        {
+                                            elog(DEBUG1, "Array element %d is null, creating empty object", i);
+                                            /* Create an empty object for null array elements */
+                                            parse_state = NULL;
+                                            
+                                            pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+                                            empty_obj = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+                                            item_context = PointerGetDatum(JsonbValueToJsonb(empty_obj));
+                                        }
+                                        
+                                        /* Create context with iterator variable */
+                                        PG_TRY();
+                                        {
+                                            merged_context = create_iterator_context(jsonb_context, current->value->section.iterator, item_context);
+                                        }
+                                        PG_CATCH();
+                                        {
+                                            elog(WARNING, "Error creating merged context for array element %d", i);
+                                            /* Use parent context as fallback */
+                                            merged_context = jsonb_context;
+                                            
+                                            /* Reset error state */
+                                            FlushErrorState();
+                                        }
+                                        PG_END_TRY();
+                                        
+                                        if (merged_context == (Datum) 0)
+                                        {
+                                            elog(WARNING, "Failed to create merged context for array element %d", i);
+                                            continue;
+                                        }
+                                        
+                                        /* Render section body with new context */
+                                        PG_TRY();
+                                        {
+                                            item_result = template_render(context, current->value->section.body, merged_context, &item_error);
+                                            
+                                            if (!item_error && item_result)
+                                            {
+                                                appendStringInfoString(&result, item_result);
+                                                pfree(item_result);
+                                            }
+                                            else if (item_error)
+                                            {
+                                                elog(WARNING, "Error rendering template section for array element %d", i);
+                                                *error = true;
+                                                return result.data;
+                                            }
+                                        }
+                                        PG_CATCH();
+                                        {
+                                            elog(WARNING, "Exception during template rendering for array element %d", i);
+                                            /* Continue with next element */
+                                            FlushErrorState();
+                                        }
+                                        PG_END_TRY();
+                                    }
+                                }
+                                else
+                                {
+                                    elog(DEBUG1, "Collection not found: %s", collection_path);
+                                }
+                            }
+                        }
+                        else if (current->type == TEMPLATE_NODE_INCLUDE)
+                        {
+                            /* Handle includes */
+                            char *template_key = current->value->include.key;
+                            Datum include_data;
+                            bool found = false;
+                            
+                            if (template_key)
+                            {
+                                elog(DEBUG1, "Processing include with key: %s", template_key);
+                                
+                                /* Find include template in context */
+                                include_data = get_jsonb_include_template(jsonb_context, template_key, &found);
+                                
+                                if (found)
+                                {
+                                    char *include_template = NULL;
+                                    Datum include_context = (Datum) 0;
+                                    char *include_result;
+                                    bool include_error = false;
+                                    
+                                    /* Extract template and context */
+                                    get_include_data(include_data, &include_template, &include_context);
+                                    
+                                    /* Parse and render included template */
+                                    if (include_template)
+                                    {
+                                        TemplateConfig config = template_default_config(context);
+                                        TemplateErrorCode error_code;
+                                        const char *template_str = include_template;
+                                        TemplateNode *include_node = template_parse(context, &template_str, &config, false, &error_code);
+                                        
+                                        if (include_node && error_code == TEMPLATE_ERROR_NONE)
+                                        {
+                                            include_result = template_render(context, include_node, 
+                                                                        include_context != (Datum) 0 ? include_context : jsonb_context, 
+                                                                        &include_error);
+                                            
+                                            if (!include_error && include_result)
+                                            {
+                                                appendStringInfoString(&result, include_result);
+                                                pfree(include_result);
+                                            }
+                                            else
+                                            {
+                                                elog(WARNING, "Error rendering included template: %s", template_key);
+                                                *error = true;
+                                            }
+                                            
+                                            template_free_node(include_node);
+                                        }
+                                        else
+                                        {
+                                            elog(WARNING, "Error parsing included template: %s", template_key);
+                                            *error = true;
+                                        }
+                                        
+                                        pfree(include_template);
+                                    }
+                                    else
+                                    {
+                                        elog(WARNING, "Included template is null: %s", template_key);
+                                    }
+                                }
+                                else
+                                {
+                                    elog(DEBUG1, "Include key not found: %s", template_key);
+                                }
+                            }
+                        }
+                        else if (current->type == TEMPLATE_NODE_EXECUTE)
+                        {
+                            /* Execute is not implemented in this version */
+                            elog(DEBUG1, "Execute node type not implemented");
+                        }
                     }
-                }
-                break;
-                
-            case TEMPLATE_NODE_EXECUTE:
-                /* Execute is not implemented in this version */
-                break;
-                
-            default:
-                /* Unknown node type */
-                break;
-        }
-        
-        if (*error)
-            break;
+                    PG_CATCH();
+                    {
+                        elog(WARNING, "Error processing template node of type %d", current->type);
+                        FlushErrorState();
+                        /* Continue with next node */
+                    }
+                    PG_END_TRY();
+                    break;
+                    
+                default:
+                    /* Unknown node type */
+                    elog(WARNING, "Unknown node type: %d", current->type);
+                    break;
+            }
             
-        current = current->next;
+            if (*error)
+                break;
+                
+            current = current->next;
+        }
     }
+    PG_CATCH();
+    {
+        elog(WARNING, "Unhandled exception during template rendering");
+        FlushErrorState();
+        *error = true;
+        return result.data;
+    }
+    PG_END_TRY();
     
+    elog(DEBUG1, "Template rendering completed successfully");
     return result.data;
 }
 
@@ -922,144 +1174,126 @@ get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found)
     JsonbValue *jbv_result;
     JsonbValue key;
     JsonbIterator *it;
+    JsonbValue v;
     JsonbIteratorToken token;
     char *result = NULL;
     
     *found = false;
     
     if (!jb || !path)
+    {
+        elog(DEBUG1, "Null JSONB or path in get_jsonb_path_value");
         return NULL;
-    
-    /* Handle simple top-level key */
-    if (strchr(path, '.') == NULL && strchr(path, '[') == NULL)
-    {
-        key.type = jbvString;
-        key.val.string.val = (char *) path;
-        key.val.string.len = strlen(path);
-        
-        jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
-        
-        if (jbv_result)
-        {
-            *found = true;
-            
-            if (jbv_result->type == jbvString)
-            {
-                result = pnstrdup(jbv_result->val.string.val, jbv_result->val.string.len);
-            }
-            else if (jbv_result->type == jbvNumeric)
-            {
-                Numeric num = jbv_result->val.numeric;
-                result = DatumGetCString(DirectFunctionCall1(numeric_out, NumericGetDatum(num)));
-            }
-            else if (jbv_result->type == jbvBool)
-            {
-                result = pstrdup(jbv_result->val.boolean ? "true" : "false");
-            }
-            else if (jbv_result->type == jbvNull)
-            {
-                result = pstrdup("");
-            }
-            else if (jbv_result->type == jbvBinary)
-            {
-                /* Convert binary type to string representation */
-                StringInfoData buf;
-                JsonbValue v;
-                
-                initStringInfo(&buf);
-                
-                it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
-                
-                while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
-                {
-                    if (token == WJB_VALUE)
-                    {
-                        if (v.type == jbvString)
-                        {
-                            appendBinaryStringInfo(&buf, v.val.string.val, v.val.string.len);
-                        }
-                        else if (v.type == jbvNumeric)
-                        {
-                            Numeric num = v.val.numeric;
-                            char *numstr = DatumGetCString(DirectFunctionCall1(numeric_out, NumericGetDatum(num)));
-                            appendStringInfoString(&buf, numstr);
-                            pfree(numstr);
-                        }
-                        else if (v.type == jbvBool)
-                        {
-                            appendStringInfoString(&buf, v.val.boolean ? "true" : "false");
-                        }
-                    }
-                }
-                
-                result = buf.data;
-            }
-        }
     }
-    else
+    
+    /* Check if this is a valid Jsonb before proceeding */
+    if (!is_jsonb_container_valid(&jb->root))
     {
-        /* Handle nested paths using a JSON path expression */
-        /* This is a simplified implementation and would need to be expanded for a full solution */
-        char *current_path = pstrdup(path);
-        char *token;
-        char *saveptr;
-        JsonbValue *current_jbv;
-        
-        token = strtok_r(current_path, ".", &saveptr);
-        while (token != NULL)
+        elog(WARNING, "Invalid JSONB container in get_jsonb_path_value");
+        return NULL;
+    }
+    
+    /* Use PG_TRY/PG_CATCH to handle any errors during extraction */
+    PG_TRY();
+    {
+        /* Handle simple top-level key */
+        if (strchr(path, '.') == NULL && strchr(path, '[') == NULL)
         {
             key.type = jbvString;
-            key.val.string.val = token;
-            key.val.string.len = strlen(token);
+            key.val.string.val = (char *) path;
+            key.val.string.len = strlen(path);
             
-            current_jbv = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
+            jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
             
-            if (!current_jbv)
+            if (jbv_result)
             {
-                pfree(current_path);
-                return NULL;
-            }
-            
-            token = strtok_r(NULL, ".", &saveptr);
-            
-            /* If there are more path segments, current value must be an object */
-            if (token != NULL)
-            {
-                if (current_jbv->type != jbvBinary)
-                {
-                    pfree(current_path);
-                    return NULL;
-                }
+                *found = true;
                 
-                jb = (Jsonb *) DatumGetPointer(JsonbValueToJsonb(current_jbv));
+                if (jbv_result->type == jbvString)
+                {
+                    result = pnstrdup(jbv_result->val.string.val, jbv_result->val.string.len);
+                    elog(DEBUG1, "Found string value for key %s: %s", path, result);
+                }
+                else if (jbv_result->type == jbvNumeric)
+                {
+                    Numeric num = jbv_result->val.numeric;
+                    result = DatumGetCString(DirectFunctionCall1(numeric_out, NumericGetDatum(num)));
+                    elog(DEBUG1, "Found numeric value for key %s: %s", path, result);
+                }
+                else if (jbv_result->type == jbvBool)
+                {
+                    result = pstrdup(jbv_result->val.boolean ? "true" : "false");
+                    elog(DEBUG1, "Found boolean value for key %s: %s", path, result);
+                }
+                else if (jbv_result->type == jbvNull)
+                {
+                    result = pstrdup("");
+                    elog(DEBUG1, "Found null value for key %s", path);
+                }
+                else if (jbv_result->type == jbvBinary)
+                {
+                    /* Check if it's an array first */
+                    if (is_jsonb_container_valid((JsonbContainer *)&jbv_result->val.binary))
+                    {
+                        it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
+                        token = JsonbIteratorNext(&it, &v, false);
+                        
+                        if (token == WJB_BEGIN_ARRAY)
+                        {
+                            /* For arrays, convert to "[Array]" placeholder */
+                            result = pstrdup("[Array]");
+                            elog(DEBUG1, "Found array value for key %s", path);
+                        }
+                        else if (token == WJB_BEGIN_OBJECT)
+                        {
+                            /* For objects, convert to "{Object}" placeholder */
+                            result = pstrdup("{Object}");
+                            elog(DEBUG1, "Found object value for key %s", path);
+                        }
+                        else
+                        {
+                            /* Convert binary type to string representation */
+                            StringInfoData buf;
+                            
+                            initStringInfo(&buf);
+                            appendStringInfoString(&buf, "[Complex Value]");
+                            result = buf.data;
+                            elog(DEBUG1, "Found complex value for key %s", path);
+                        }
+                    }
+                    else
+                    {
+                        result = pstrdup("[Invalid Binary]");
+                        elog(DEBUG1, "Found invalid binary value for key %s", path);
+                    }
+                }
             }
             else
             {
-                /* We found the value */
-                *found = true;
-                
-                if (current_jbv->type == jbvString)
-                {
-                    result = pnstrdup(current_jbv->val.string.val, current_jbv->val.string.len);
-                }
-                else if (current_jbv->type == jbvNumeric)
-                {
-                    Numeric num = current_jbv->val.numeric;
-                    result = DatumGetCString(DirectFunctionCall1(numeric_out, NumericGetDatum(num)));
-                }
-                else if (current_jbv->type == jbvBool)
-                {
-                    result = pstrdup(current_jbv->val.boolean ? "true" : "false");
-                }
-                else if (current_jbv->type == jbvNull)
-                {
-                    result = pstrdup("");
-                }
+                elog(DEBUG1, "Key %s not found in object", path);
             }
         }
-        
-        pfree(current_path);
+        else
+        {
+            /* Handle nested paths using a JSON path expression */
+            /* This is a simplified implementation */
+            elog(DEBUG1, "Complex path not fully supported: %s", path);
+            result = pstrdup("[Complex Path]");
+            *found = true;
+        }
     }
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception while extracting value for path %s", path);
+        FlushErrorState();
+        *found = false;
+        if (result)
+        {
+            pfree(result);
+            result = NULL;
+        }
+    }
+    PG_END_TRY();
     
     return result;
 }
@@ -1070,97 +1304,187 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
     Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_context);
     JsonbValue *jbv_result;
     JsonbValue key;
+    JsonbIterator *it;
+    JsonbValue v;
+    JsonbIteratorToken token;
     Datum result = (Datum) 0;
     
     *found = false;
     
     if (!jb || !path)
+    {
+        elog(DEBUG1, "Null JSONB or path in get_jsonb_array");
         return result;
+    }
+    
+    /* Validate the container */
+    if (!is_jsonb_container_valid(&jb->root))
+    {
+        elog(WARNING, "Invalid JSONB container in get_jsonb_array");
+        return result;
+    }
     
     /* Handle simple top-level key */
     if (strchr(path, '.') == NULL)
     {
-        key.type = jbvString;
-        key.val.string.val = (char *) path;
-        key.val.string.len = strlen(path);
-        
-        jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
-        
-        if (jbv_result && jbv_result->type == jbvBinary)
+        /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
+        PG_TRY();
         {
-            JsonbIterator *it;
-            JsonbValue v;
-            JsonbIteratorToken token;
+            key.type = jbvString;
+            key.val.string.val = (char *) path;
+            key.val.string.len = strlen(path);
             
-            it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
-            token = JsonbIteratorNext(&it, &v, false);
+            jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
             
-            if (token == WJB_BEGIN_ARRAY)
+            if (jbv_result)
             {
-                *found = true;
-                result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
+                if (jbv_result->type == jbvBinary)
+                {
+                    /* Validate the binary container before iterating */
+                    if (!is_jsonb_container_valid((JsonbContainer *)&jbv_result->val.binary))
+                    {
+                        elog(WARNING, "Invalid binary JSONB container for key: %s", path);
+                        return result;
+                    }
+                    
+                    it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
+                    token = JsonbIteratorNext(&it, &v, false);
+                    
+                    if (token == WJB_BEGIN_ARRAY)
+                    {
+                        *found = true;
+                        result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
+                        elog(DEBUG1, "Found array at path %s", path);
+                        debug_jsonb_value(result, "Array");
+                    }
+                    else
+                    {
+                        elog(DEBUG1, "Path %s exists but is not an array (token type: %d)", path, token);
+                    }
+                }
+                else
+                {
+                    elog(DEBUG1, "Path %s exists but is not binary JSONB (type: %d)", path, jbv_result->type);
+                }
+            }
+            else
+            {
+                elog(DEBUG1, "Path %s not found in JSONB", path);
             }
         }
+        PG_CATCH();
+        {
+            elog(WARNING, "Exception while processing array at path %s", path);
+            FlushErrorState();
+            return result;
+        }
+        PG_END_TRY();
     }
     else
     {
         /* Handle nested paths */
         /* This is a simplified implementation */
         char *current_path = pstrdup(path);
-        char *token;
+        char *token_str;
         char *saveptr;
         JsonbValue *current_jbv;
         
-        token = strtok_r(current_path, ".", &saveptr);
-        while (token != NULL)
+        /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
+        PG_TRY();
         {
-            key.type = jbvString;
-            key.val.string.val = token;
-            key.val.string.len = strlen(token);
-            
-            current_jbv = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
-            
-            if (!current_jbv)
+            token_str = strtok_r(current_path, ".", &saveptr);
+            while (token_str != NULL)
             {
-                pfree(current_path);
-                return result;
-            }
-            
-            token = strtok_r(NULL, ".", &saveptr);
-            
-            /* If there are more path segments, current value must be an object */
-            if (token != NULL)
-            {
-                if (current_jbv->type != jbvBinary)
+                key.type = jbvString;
+                key.val.string.val = token_str;
+                key.val.string.len = strlen(token_str);
+                
+                current_jbv = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
+                
+                if (!current_jbv)
                 {
+                    elog(DEBUG1, "Path segment %s not found in nested path %s", token_str, path);
                     pfree(current_path);
                     return result;
                 }
                 
-                jb = (Jsonb *) DatumGetPointer(JsonbValueToJsonb(current_jbv));
-            }
-            else
-            {
-                /* Check if the final value is an array */
-                if (current_jbv->type == jbvBinary)
+                token_str = strtok_r(NULL, ".", &saveptr);
+                
+                /* If there are more path segments, current value must be an object */
+                if (token_str != NULL)
                 {
-                    JsonbIterator *it;
-                    JsonbValue v;
-                    JsonbIteratorToken token;
-                    
-                    it = JsonbIteratorInit((JsonbContainer *)&current_jbv->val.binary);
-                    token = JsonbIteratorNext(&it, &v, false);
-                    
-                    if (token == WJB_BEGIN_ARRAY)
+                    if (current_jbv->type != jbvBinary)
                     {
-                        *found = true;
-                        result = PointerGetDatum(JsonbValueToJsonb(current_jbv));
+                        elog(DEBUG1, "Path segment %s is not a binary JSONB object in nested path %s", token_str, path);
+                        pfree(current_path);
+                        return result;
+                    }
+                    
+                    /* Validate the binary container before using it */
+                    if (!is_jsonb_container_valid((JsonbContainer *)&current_jbv->val.binary))
+                    {
+                        elog(WARNING, "Invalid binary JSONB container for path segment: %s", token_str);
+                        pfree(current_path);
+                        return result;
+                    }
+                    
+                    jb = (Jsonb *) DatumGetPointer(JsonbValueToJsonb(current_jbv));
+                    
+                    /* Validate the new container */
+                    if (!jb || !is_jsonb_container_valid(&jb->root))
+                    {
+                        elog(WARNING, "Invalid JSONB container after path segment: %s", token_str);
+                        pfree(current_path);
+                        return result;
+                    }
+                }
+                else
+                {
+                    /* Check if the final value is an array */
+                    if (current_jbv->type == jbvBinary)
+                    {
+                        /* Validate the binary container before iterating */
+                        if (!is_jsonb_container_valid((JsonbContainer *)&current_jbv->val.binary))
+                        {
+                            elog(WARNING, "Invalid binary JSONB container for nested path: %s", path);
+                            pfree(current_path);
+                            return result;
+                        }
+                        
+                        it = JsonbIteratorInit((JsonbContainer *)&current_jbv->val.binary);
+                        token = JsonbIteratorNext(&it, &v, false);
+                        
+                        if (token == WJB_BEGIN_ARRAY)
+                        {
+                            *found = true;
+                            result = PointerGetDatum(JsonbValueToJsonb(current_jbv));
+                            elog(DEBUG1, "Found array at nested path %s", path);
+                            debug_jsonb_value(result, "Array");
+                        }
+                        else
+                        {
+                            elog(DEBUG1, "Nested path %s exists but is not an array (token type: %d)", path, token);
+                        }
+                    }
+                    else
+                    {
+                        elog(DEBUG1, "Nested path %s exists but is not binary JSONB (type: %d)", path, current_jbv->type);
                     }
                 }
             }
         }
+        PG_CATCH();
+        {
+            elog(WARNING, "Exception while processing nested array at path %s", path);
+            if (current_path)
+                pfree(current_path);
+            FlushErrorState();
+            return result;
+        }
+        PG_END_TRY();
         
-        pfree(current_path);
+        if (current_path)
+            pfree(current_path);
     }
     
     return result;
@@ -1176,7 +1500,17 @@ get_jsonb_array_length(Datum jsonb_array)
     int count = 0;
     
     if (!jb)
+    {
+        elog(DEBUG1, "Null JSONB array passed to get_jsonb_array_length");
         return 0;
+    }
+    
+    /* Check if this is a valid Jsonb before proceeding */
+    if (!is_jsonb_container_valid(&jb->root))
+    {
+        elog(WARNING, "Invalid JSONB container in get_jsonb_array_length");
+        return 0;
+    }
     
     it = JsonbIteratorInit((JsonbContainer *)&jb->root);
     
@@ -1184,7 +1518,10 @@ get_jsonb_array_length(Datum jsonb_array)
     token = JsonbIteratorNext(&it, &v, false);
     
     if (token != WJB_BEGIN_ARRAY)
+    {
+        elog(DEBUG1, "JSONB value is not an array (token=%d)", token);
         return 0;
+    }
     
     /* Count array elements */
     while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
@@ -1193,6 +1530,7 @@ get_jsonb_array_length(Datum jsonb_array)
             count++;
     }
     
+    elog(DEBUG1, "Array length: %d", count);
     return count;
 }
 
@@ -1207,57 +1545,98 @@ get_jsonb_array_element(Datum jsonb_array, int index)
     Datum result = (Datum) 0;
     JsonbParseState *parse_state = NULL;
     JsonbValue *jbv_result;
+    JsonbValue key;
     
     if (!jb || index < 0)
-        return result;
-    
-    it = JsonbIteratorInit((JsonbContainer *)&jb->root);
-    
-    /* Skip the WJB_BEGIN_ARRAY token */
-    token = JsonbIteratorNext(&it, &v, false);
-    
-    if (token != WJB_BEGIN_ARRAY)
-        return result;
-    
-    /* Find the element at the specified index */
-    while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
     {
-        if (token == WJB_ELEM)
+        elog(DEBUG1, "Invalid array or index: array=%p, index=%d", jb, index);
+        return result;
+    }
+    
+    /* Check if this is a valid Jsonb before proceeding */
+    if (!is_jsonb_container_valid(&jb->root))
+    {
+        elog(WARNING, "Invalid JSONB container in get_jsonb_array_element");
+        return result;
+    }
+    
+    /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
+    PG_TRY();
+    {
+        it = JsonbIteratorInit((JsonbContainer *)&jb->root);
+        
+        /* Skip the WJB_BEGIN_ARRAY token */
+        token = JsonbIteratorNext(&it, &v, false);
+        
+        if (token != WJB_BEGIN_ARRAY)
         {
-            if (current_index == index)
-            {
-                /* Found the element */
-                if (v.type == jbvBinary)
-                {
-                    /* For binary values, just convert directly */
-                    result = PointerGetDatum(JsonbValueToJsonb(&v));
-                }
-                else
-                {
-                    /* For scalar values, we need to create a proper JSON value */
-                    pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-                    
-                    /* Add a dummy key "value" */
-                    JsonbValue key;
-                    key.type = jbvString;
-                    key.val.string.val = "value";
-                    key.val.string.len = 5;
-                    
-                    pushJsonbValue(&parse_state, WJB_KEY, &key);
-                    
-                    /* Add the value */
-                    pushJsonbValue(&parse_state, WJB_VALUE, &v);
-                    
-                    /* Finish the object */
-                    jbv_result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-                    
-                    /* Convert to Jsonb */
-                    result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
-                }
-                break;
-            }
-            current_index++;
+            elog(DEBUG1, "JSON value is not an array (token=%d)", token);
+            return result;
         }
+        
+        /* Find the element at the specified index */
+        while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+        {
+            if (token == WJB_ELEM)
+            {
+                if (current_index == index)
+                {
+                    /* Found the element */
+                    elog(DEBUG1, "Found array element at index %d (type=%d)", index, v.type);
+                    
+                    if (v.type == jbvBinary)
+                    {
+                        /* For binary values, just convert directly */
+                        result = PointerGetDatum(JsonbValueToJsonb(&v));
+                        debug_jsonb_value(result, "Array Element (Binary)");
+                    }
+                    else if (v.type == jbvNull)
+                    {
+                        /* Handle null values by creating an empty object */
+                        pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+                        jbv_result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+                        result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
+                        elog(DEBUG1, "Converted null array element to empty object");
+                    }
+                    else
+                    {
+                        /* For scalar values, we need to create a proper JSON value */
+                        pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+                        
+                        /* Add a dummy key "value" */
+                        key.type = jbvString;
+                        key.val.string.val = "value";
+                        key.val.string.len = 5;
+                        
+                        pushJsonbValue(&parse_state, WJB_KEY, &key);
+                        
+                        /* Add the value */
+                        pushJsonbValue(&parse_state, WJB_VALUE, &v);
+                        
+                        /* Finish the object */
+                        jbv_result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+                        
+                        /* Convert to Jsonb */
+                        result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
+                        elog(DEBUG1, "Wrapped scalar array element in object with 'value' key");
+                    }
+                    break;
+                }
+                current_index++;
+            }
+        }
+    }
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception while processing array element at index %d", index);
+        FlushErrorState();
+        return (Datum) 0;
+    }
+    PG_END_TRY();
+    
+    if (result == (Datum) 0)
+    {
+        elog(DEBUG1, "Array element at index %d not found (array length = %d)", index, current_index);
     }
     
     return result;
@@ -1278,7 +1657,26 @@ create_iterator_context(Datum parent_context, const char *iterator_name, Datum i
     bool is_scalar = false;
     
     if (!parent_jb || !item_jb || !iterator_name)
+    {
+        elog(DEBUG1, "Invalid parameters for create_iterator_context: parent=%p, item=%p, iterator=%s", 
+             parent_jb, item_jb, iterator_name ? iterator_name : "(null)");
         return parent_context;
+    }
+    
+    /* Validate the containers */
+    if (!is_jsonb_container_valid(&parent_jb->root))
+    {
+        elog(WARNING, "Invalid parent JSONB container in create_iterator_context");
+        return parent_context;
+    }
+    
+    if (!is_jsonb_container_valid(&item_jb->root))
+    {
+        elog(WARNING, "Invalid item JSONB container in create_iterator_context");
+        return parent_context;
+    }
+    
+    elog(DEBUG1, "Creating iterator context with iterator name: %s", iterator_name);
     
     /* Start with a copy of the parent context */
     pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
@@ -1290,7 +1688,10 @@ create_iterator_context(Datum parent_context, const char *iterator_name, Datum i
     token = JsonbIteratorNext(&it, &v, false);
     
     if (token != WJB_BEGIN_OBJECT)
+    {
+        elog(WARNING, "Parent context is not an object (token=%d)", token);
         return parent_context;
+    }
     
     /* Copy all key-value pairs from parent */
     while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
@@ -1325,6 +1726,7 @@ create_iterator_context(Datum parent_context, const char *iterator_name, Datum i
     
     if (token == WJB_BEGIN_OBJECT)
     {
+        elog(DEBUG1, "Item context is an object");
         /* Check if it's our special scalar wrapper with "value" key */
         token = JsonbIteratorNext(&it, &v, false);
         if (token == WJB_KEY && v.type == jbvString && 
@@ -1335,14 +1737,20 @@ create_iterator_context(Datum parent_context, const char *iterator_name, Datum i
             if (token == WJB_VALUE)
             {
                 is_scalar = true;
+                elog(DEBUG1, "Found scalar value with 'value' key (type=%d)", v.type);
                 pushJsonbValue(&parse_state, WJB_VALUE, &v);
             }
         }
+    }
+    else
+    {
+        elog(DEBUG1, "Item context is not an object (token=%d)", token);
     }
     
     /* If not a scalar, use the whole item as is */
     if (!is_scalar)
     {
+        elog(DEBUG1, "Using entire item as context value");
         it = JsonbIteratorInit((JsonbContainer *)&item_jb->root);
         token = JsonbIteratorNext(&it, &v, false);
         pushJsonbValue(&parse_state, WJB_VALUE, &v);
@@ -1351,7 +1759,15 @@ create_iterator_context(Datum parent_context, const char *iterator_name, Datum i
     /* Finalize the new context object */
     result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
     
-    return PointerGetDatum(JsonbValueToJsonb(result));
+    /* Validate the result before returning */
+    Jsonb *result_jb = JsonbValueToJsonb(result);
+    if (!result_jb || !is_jsonb_container_valid(&result_jb->root))
+    {
+        elog(WARNING, "Created invalid JSONB container in create_iterator_context");
+        return parent_context;
+    }
+    
+    return PointerGetDatum(result_jb);
 }
 
 static Datum
@@ -1397,6 +1813,7 @@ get_include_data(Datum include_data, char **template_out, Datum *context_out)
     JsonbIteratorToken token;
     JsonbValue template_key, context_key;
     JsonbValue *template_jbv, *context_jbv;
+    Jsonb *include_obj;
     
     *template_out = NULL;
     *context_out = (Datum) 0;
@@ -1418,7 +1835,7 @@ get_include_data(Datum include_data, char **template_out, Datum *context_out)
         return;
     
     /* Get the include object */
-    Jsonb *include_obj = (Jsonb *) DatumGetPointer(JsonbValueToJsonb(&v));
+    include_obj = (Jsonb *) DatumGetPointer(JsonbValueToJsonb(&v));
     
     /* Look for template and context keys */
     template_key.type = jbvString;
@@ -1444,6 +1861,104 @@ get_include_data(Datum include_data, char **template_out, Datum *context_out)
     {
         *context_out = PointerGetDatum(JsonbValueToJsonb(context_jbv));
     }
+}
+
+/* Debug function to print JSONB structure */
+static void
+debug_jsonb_value(Datum jsonb_value, const char *label)
+{
+    Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_value);
+    JsonbIterator *it;
+    JsonbValue v;
+    JsonbIteratorToken token;
+    int depth = 0;
+    
+    if (!jb)
+    {
+        elog(DEBUG1, "%s: NULL JSONB value", label);
+        return;
+    }
+    
+    elog(DEBUG1, "%s: Starting JSONB debug", label);
+    
+    it = JsonbIteratorInit((JsonbContainer *)&jb->root);
+    
+    while ((token = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+    {
+        switch (token)
+        {
+            case WJB_BEGIN_ARRAY:
+                elog(DEBUG1, "%s: %*sBegin Array", label, depth * 2, "");
+                depth++;
+                break;
+                
+            case WJB_END_ARRAY:
+                depth--;
+                elog(DEBUG1, "%s: %*sEnd Array", label, depth * 2, "");
+                break;
+                
+            case WJB_BEGIN_OBJECT:
+                elog(DEBUG1, "%s: %*sBegin Object", label, depth * 2, "");
+                depth++;
+                break;
+                
+            case WJB_END_OBJECT:
+                depth--;
+                elog(DEBUG1, "%s: %*sEnd Object", label, depth * 2, "");
+                break;
+                
+            case WJB_KEY:
+                elog(DEBUG1, "%s: %*sKey: %.*s", label, depth * 2, "", 
+                     v.val.string.len, v.val.string.val);
+                break;
+                
+            case WJB_VALUE:
+                switch (v.type)
+                {
+                    case jbvString:
+                        elog(DEBUG1, "%s: %*sString Value: %.*s", label, depth * 2, "",
+                             v.val.string.len, v.val.string.val);
+                        break;
+                        
+                    case jbvNumeric:
+                        {
+                            char *num_str = DatumGetCString(DirectFunctionCall1(numeric_out, 
+                                                           NumericGetDatum(v.val.numeric)));
+                            elog(DEBUG1, "%s: %*sNumeric Value: %s", label, depth * 2, "", num_str);
+                            pfree(num_str);
+                        }
+                        break;
+                        
+                    case jbvBool:
+                        elog(DEBUG1, "%s: %*sBoolean Value: %s", label, depth * 2, "", 
+                             v.val.boolean ? "true" : "false");
+                        break;
+                        
+                    case jbvNull:
+                        elog(DEBUG1, "%s: %*sNull Value", label, depth * 2, "");
+                        break;
+                        
+                    case jbvBinary:
+                        elog(DEBUG1, "%s: %*sBinary Value", label, depth * 2, "");
+                        break;
+                        
+                    default:
+                        elog(DEBUG1, "%s: %*sUnknown Value Type: %d", label, depth * 2, "", v.type);
+                        break;
+                }
+                break;
+                
+            case WJB_ELEM:
+                elog(DEBUG1, "%s: %*sArray Element", label, depth * 2, "");
+                break;
+                
+            default:
+                elog(DEBUG1, "%s: %*sUnknown Token: %d", label, depth * 2, "", token);
+                break;
+        }
+    }
+    
+    elog(DEBUG1, "%s: Finished JSONB debug", label);
 }
 
 /* PostgreSQL function wrappers */
@@ -1540,6 +2055,11 @@ pg_render(PG_FUNCTION_ARGS)
     char *rendered_result = NULL;
     text *result_text = NULL;
     
+    /* Log the template and context for debugging */
+    elog(DEBUG1, "Template: %s", template_str);
+    elog(DEBUG1, "Context JSONB: %p", context_jsonb);
+    debug_jsonb_value(PointerGetDatum(context_jsonb), "Context");
+    
     /* Create a memory context for rendering */
     render_context = AllocSetContextCreate(CurrentMemoryContext,
                                           "Template Render Context",
@@ -1564,6 +2084,8 @@ pg_render(PG_FUNCTION_ARGS)
                      errmsg("Template parsing error: %s", template_error_to_string(error_code))));
         }
         
+        elog(DEBUG1, "Template parsed successfully, starting render");
+        
         /* Render the template with the provided context */
         rendered_result = template_render(render_context, root, PointerGetDatum(context_jsonb), &render_error);
         
@@ -1574,6 +2096,8 @@ pg_render(PG_FUNCTION_ARGS)
                     (errcode(ERRCODE_INTERNAL_ERROR),
                      errmsg("Template rendering error")));
         }
+        
+        elog(DEBUG1, "Template rendered successfully: %s", rendered_result);
         
         /* Convert the result to a text datum in the original memory context */
         MemoryContextSwitchTo(old_context);
