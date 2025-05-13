@@ -171,6 +171,19 @@ static void simplest_test_template_parse(Arena *arena, TemplateConfig *config) {
     "]") == 0);
 }
 
+static void simplest_interpolation_that_crash_db_test_template_parse(Arena *arena, TemplateConfig *config) {
+    const char *template_str = "zalupa {% her %} davalka";
+
+    template_parse(arena, &template_str, config);
+    arena_reset(arena);
+    template_parse(arena, &template_str, config);
+    template_parse(arena, &template_str, config);
+    arena_reset(arena);
+    template_parse(arena, &template_str, config);
+    template_parse(arena, &template_str, config);
+    template_parse(arena, &template_str, config);
+}
+
 static void simplest_interpolation_test_template_parse(Arena *arena, TemplateConfig *config) {
     const char *template_str = "{% name %} {% name2 %}";
 
@@ -345,12 +358,16 @@ int main(void) {
     printf("%sTest 3: simplest_interpolation_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     arena_reset(&arena);
 
+    simplest_interpolation_that_crash_db_test_template_parse(&arena, &config);
+    printf("%sTest 4: simplest_interpolation_that_crash_db_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    arena_reset(&arena);
+
     simplest_separator_test_template_parse(&arena, &config);
-    printf("%sTest 4: simplest_separator_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    printf("%sTest 5: simplest_separator_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     arena_reset(&arena);
 
     simplest_execute_test_template_parse(&arena, &config);
-    printf("%sTest 5: simplest_execute_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
+    printf("%sTest 6: simplest_execute_test_template_parse passed%s\n", OPTIONAL_COLOR(COLOR_GREEN), OPTIONAL_COLOR(COLOR_RESET));
     arena_reset(&arena);
 
     logger_free();

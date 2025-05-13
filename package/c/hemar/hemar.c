@@ -14,6 +14,9 @@
 #include "utils/memutils.h"
 #include "utils/regproc.h"
 #include <string.h>
+
+#define PRECOMPILED_LOG_LEVEL LOG_LEVEL_EXCEPTION
+
 #include "hectic.h"
 
 #ifdef PG_MODULE_MAGIC
@@ -27,9 +30,10 @@ static MemoryContext HemarContext = NULL;
 #define INIT \
     MemoryContext oldctx; \
     oldctx = MemoryContextSwitchTo(HemarContext); \
-    logger_init(); \
+    /* logger_init(); \
+    logger_level(LOG_LEVEL_TRACE); \
     logger_set_file(LOG_FILE); \
-    logger_set_output_mode(LOG_OUTPUT_BOTH); \
+    logger_set_output_mode(LOG_OUTPUT_BOTH);*/ \
     Arena arena = arena_init(MEM_MiB);
 
 
@@ -37,6 +41,7 @@ static MemoryContext HemarContext = NULL;
     /*DISPOSABLE_ARENA_FREE*/; \
     /*arena_free(&arena);*/ \
     /*logger_free();*/ \
+    arena_reset(&arena); \
     MemoryContextSwitchTo(oldctx); \
     MemoryContextReset(HemarContext);
 
@@ -65,7 +70,7 @@ Datum pg_template_parse(PG_FUNCTION_ARGS) {
 
     text *template_text = PG_GETARG_TEXT_PP(0);
     const char *template_str = text_to_cstring(template_text);
-    raise_notice("%s", template_str);
+    raise_notice("template_str: %s", template_str);
 
     TemplateResult template_result;
     TemplateConfig config = template_default_config(&arena);

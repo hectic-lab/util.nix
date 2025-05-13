@@ -299,6 +299,48 @@ char* raise_message(LogLevel level, const char *file, const char *func, int line
 #endif
 
 #if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_TRACE
+#define raise_trace__(...) ((void)0)  // log removed at compile time
+#else
+#define raise_trace__(file, func, line, ...) raise_message(LOG_LEVEL_TRACE, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_DEBUG
+#define raise_debug__(...) ((void)0)
+#else
+#define raise_debug__(file, func, line, ...) raise_message(LOG_LEVEL_DEBUG, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_LOG
+#define raise_log__(...) ((void)0)
+#else
+#define raise_log__(file, func, line, ...) raise_message(LOG_LEVEL_LOG, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_INFO
+#define raise_info__(...) ((void)0)
+#else
+#define raise_info__(file, func, line, ...) raise_message(LOG_LEVEL_INFO, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_NOTICE
+#define raise_notice__(...) ((void)0)
+#else
+#define raise_notice__(file, func, line, ...) raise_message(LOG_LEVEL_NOTICE, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_WARN
+#define raise_warn__(...) ((void)0)
+#else
+#define raise_warn__(file, func, line, ...) raise_message(LOG_LEVEL_WARN, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_EXCEPTION
+#define raise_exception__(...) ((void)0)
+#else
+#define raise_exception__(fine, func, line, ...) raise_message(LOG_LEVEL_EXCEPTION, file, func, line, ##__VA_ARGS__)
+#endif
+
+#if PRECOMPILED_LOG_LEVEL > LOG_LEVEL_TRACE
 #define raise_trace(...) ((void)0)  // log removed at compile time
 #else
 #define raise_trace(...) raise_message(LOG_LEVEL_TRACE, __FILE__, __func__, __LINE__, ##__VA_ARGS__)
