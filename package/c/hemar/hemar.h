@@ -15,9 +15,13 @@
 typedef enum {
     TEMPLATE_ERROR_NONE = 0,
     TEMPLATE_ERROR_UNKNOWN_TAG,
+    TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_CONTROLE,
+    TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_SOURCE,
+    TEMPLATE_ERROR_UNEXPECTED_INTERPOLATION_END,
+    TEMPLATE_ERROR_NO_SOURSE_IN_SECTION,
     TEMPLATE_ERROR_NESTED_INTERPOLATION,
-    TEMPLATE_ERROR_NESTED_SECTION_ITERATOR,
     TEMPLATE_ERROR_UNEXPECTED_SECTION_END,
+    TEMPLATE_ERROR_NO_BEGIN_IN_SECTION,
     TEMPLATE_ERROR_NESTED_INCLUDE,
     TEMPLATE_ERROR_NESTED_EXECUTE,
     TEMPLATE_ERROR_INVALID_CONFIG,
@@ -106,6 +110,6 @@ TemplateConfig template_default_config(MemoryContext context);
 bool template_validate_config(const TemplateConfig *config, TemplateErrorCode *error_code);
 TemplateNode *template_parse(MemoryContext context, const char **s, const TemplateConfig *config, bool inner_parse, TemplateErrorCode *error_code);
 void template_free_node(TemplateNode *node);
-const char *template_error_to_string(TemplateErrorCode code);
+const char *template_error_to_string(TemplateErrorCode code, TemplateConfig *config);
 
 #endif /* HEMAR_TEMPLATE_H */ 

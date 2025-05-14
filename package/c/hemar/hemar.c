@@ -33,6 +33,7 @@ static void get_include_data(Datum include_data, char **template_out, Datum *con
 static void template_node_to_string(TemplateNode *node, StringInfo result, int indent);
 static void debug_jsonb_value(Datum jsonb_value, const char *label);
 static bool is_jsonb_container_valid(JsonbContainer *container);
+static JsonbValue *get_jsonb_value_by_path(Jsonb *jb, const char *path, bool *found);
 
 /* Implementation of a simplified validity check for JsonbContainer */
 static bool
@@ -121,8 +122,9 @@ init_template_node(MemoryContext context, TemplateNodeType type)
 
 /* Error code to string conversion */
 const char *
-template_error_to_string(TemplateErrorCode code)
+template_error_to_string(TemplateErrorCode code, TemplateConfig *config)
 {
+    char *message = "";
     switch (code)
     {
         case TEMPLATE_ERROR_NONE:
@@ -131,8 +133,32 @@ template_error_to_string(TemplateErrorCode code)
             return "Unknown tag";
         case TEMPLATE_ERROR_NESTED_INTERPOLATION:
             return "Nested interpolation";
-        case TEMPLATE_ERROR_NESTED_SECTION_ITERATOR:
-            return "Nested section iterator";
+        case TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_CONTROLE:
+	    message = "Found `";
+	    strcat(message, config->Syntax.Braces.open);
+	    strcat(message, "` in `");
+	    strcat(message, config->Syntax.Section.control);
+	    strcat(message, "` in section block");
+            return message;
+        case TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_SOURCE:
+	    message = "Found `";
+	    strcat(message, config->Syntax.Braces.open);
+	    strcat(message, "` in `");
+	    strcat(message, config->Syntax.Section.source);
+	    strcat(message, "` in section block");
+            return message;
+        case TEMPLATE_ERROR_UNEXPECTED_INTERPOLATION_END:
+            return "Unexpected interpolation end";
+        case TEMPLATE_ERROR_NO_SOURSE_IN_SECTION:
+	    message = "Not found `";
+	    strcat(message, config->Syntax.Section.source);
+	    strcat(message, "` keyword in section block");
+	    return message;
+        case TEMPLATE_ERROR_NO_BEGIN_IN_SECTION:
+	    message = "Not found `";
+	    strcat(message, config->Syntax.Section.begin);
+	    strcat(message, "` keyword in section block");
+	    return message;
         case TEMPLATE_ERROR_UNEXPECTED_SECTION_END:
             return "Unexpected section end";
         case TEMPLATE_ERROR_NESTED_INCLUDE:
@@ -298,6 +324,7 @@ template_parse_interpolation(MemoryContext context, const char **s_ptr,
     
     key_len = *s - key_start;
     node->value->interpolate.key = MemoryContextStrdup(context, pnstrdup(key_start, key_len));
+    elog(DEBUG1, "Parsing: %s", node->value->interpolate.key);
     
     *s = skip_whitespace(*s);
     
@@ -305,7 +332,7 @@ template_parse_interpolation(MemoryContext context, const char **s_ptr,
     if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
     {
         if (error_code)
-            *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
+            *error_code = TEMPLATE_ERROR_UNEXPECTED_INTERPOLATION_END;
         template_free_node(node);
         return NULL;
     }
@@ -345,7 +372,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
         if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
         {
             if (error_code)
-                *error_code = TEMPLATE_ERROR_NESTED_SECTION_ITERATOR;
+                *error_code = TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_CONTROLE;
             template_free_node(node);
             return NULL;
         }
@@ -353,7 +380,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
         if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
         {
             if (error_code)
-                *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
+                *error_code = TEMPLATE_ERROR_NO_SOURSE_IN_SECTION;
             template_free_node(node);
             return NULL;
         }
@@ -371,7 +398,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     if (strncmp(*s, config->Syntax.Section.source, strlen(config->Syntax.Section.source)) != 0)
     {
         if (error_code)
-            *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
+            *error_code = TEMPLATE_ERROR_NO_SOURSE_IN_SECTION;
         template_free_node(node);
         return NULL;
     }
@@ -389,7 +416,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
         if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
         {
             if (error_code)
-                *error_code = TEMPLATE_ERROR_NESTED_SECTION_ITERATOR;
+                *error_code = TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_SOURCE;
             template_free_node(node);
             return NULL;
         }
@@ -397,7 +424,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
         if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
         {
             if (error_code)
-                *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
+                *error_code = TEMPLATE_ERROR_NO_BEGIN_IN_SECTION;
             template_free_node(node);
             return NULL;
         }
@@ -411,10 +438,11 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     
     /* Check for 'do' keyword */
     *s = skip_whitespace(*s);
+    // TODO: why check begin second time, first in while
     if (strncmp(*s, config->Syntax.Section.begin, strlen(config->Syntax.Section.begin)) != 0)
     {
         if (error_code)
-            *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
+            *error_code = TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_SOURCE;
         template_free_node(node);
         return NULL;
     }
@@ -435,10 +463,29 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     /* Parse the body as a normal template */
     const char *body_start = *s;
     const char *original_s = *s;
+
+    int inner_braces_opened_count = 0;
     
     /* Find the end of the section */
-    while (**s && strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
+    while (**s) {
+	// s = {% a %} %}
+        elog(DEBUG1, "Step, braces opened: %d, s: %s", inner_braces_opened_count, *s);
+        if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0) {
+            elog(DEBUG1, "inner_braces_opened_count++");
+	    inner_braces_opened_count++;
+	}
+        if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
+            if (inner_braces_opened_count > 0) {
+                elog(DEBUG1, "inner_braces_opened_count--");
+	        inner_braces_opened_count--;
+	    }
+	    else {
+                elog(DEBUG1, "exit");
+                break;
+	    }
+	}
         (*s)++;
+    }
     
     if (!**s)
     {
@@ -1243,7 +1290,6 @@ get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found)
 {
     Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_context);
     JsonbValue *jbv_result;
-    JsonbValue key;
     JsonbIterator *it;
     JsonbValue v;
     JsonbIteratorToken token;
@@ -1266,89 +1312,73 @@ get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found)
     
     PG_TRY();
     {
-        /* Handle simple top-level key */
-        if (strchr(path, '.') == NULL && strchr(path, '[') == NULL)
+        /* Use the new path traversal function */
+        jbv_result = get_jsonb_value_by_path(jb, path, found);
+        
+        if (*found && jbv_result)
         {
-            key.type = jbvString;
-            key.val.string.val = (char *) path;
-            key.val.string.len = strlen(path);
-            
-            jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
-            
-            if (jbv_result)
+            if (jbv_result->type == jbvString)
             {
-                *found = true;
-                
-                if (jbv_result->type == jbvString)
+                result = pnstrdup(jbv_result->val.string.val, jbv_result->val.string.len);
+                elog(DEBUG1, "Found string value for key %s: %s", path, result);
+            }
+            else if (jbv_result->type == jbvNumeric)
+            {
+                Numeric num = jbv_result->val.numeric;
+                result = DatumGetCString(DirectFunctionCall1(numeric_out, NumericGetDatum(num)));
+                elog(DEBUG1, "Found numeric value for key %s: %s", path, result);
+            }
+            else if (jbv_result->type == jbvBool)
+            {
+                result = pstrdup(jbv_result->val.boolean ? "true" : "false");
+                elog(DEBUG1, "Found boolean value for key %s: %s", path, result);
+            }
+            else if (jbv_result->type == jbvNull)
+            {
+                result = pstrdup("");
+                elog(DEBUG1, "Found null value for key %s", path);
+            }
+            else if (jbv_result->type == jbvBinary)
+            {
+                /* Check if it's an array first */
+                if (is_jsonb_container_valid((JsonbContainer *)jbv_result->val.binary.data))
                 {
-                    result = pnstrdup(jbv_result->val.string.val, jbv_result->val.string.len);
-                    elog(DEBUG1, "Found string value for key %s: %s", path, result);
-                }
-                else if (jbv_result->type == jbvNumeric)
-                {
-                    Numeric num = jbv_result->val.numeric;
-                    result = DatumGetCString(DirectFunctionCall1(numeric_out, NumericGetDatum(num)));
-                    elog(DEBUG1, "Found numeric value for key %s: %s", path, result);
-                }
-                else if (jbv_result->type == jbvBool)
-                {
-                    result = pstrdup(jbv_result->val.boolean ? "true" : "false");
-                    elog(DEBUG1, "Found boolean value for key %s: %s", path, result);
-                }
-                else if (jbv_result->type == jbvNull)
-                {
-                    result = pstrdup("");
-                    elog(DEBUG1, "Found null value for key %s", path);
-                }
-                else if (jbv_result->type == jbvBinary)
-                {
-                    /* Check if it's an array first */
-                    if (is_jsonb_container_valid((JsonbContainer *)&jbv_result->val.binary))
+                    it = JsonbIteratorInit((JsonbContainer *)jbv_result->val.binary.data);
+                    token = JsonbIteratorNext(&it, &v, false);
+                    
+                    if (token == WJB_BEGIN_ARRAY)
                     {
-                        it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
-                        token = JsonbIteratorNext(&it, &v, false);
-                        
-                        if (token == WJB_BEGIN_ARRAY)
-                        {
-                            /* For arrays, convert to "[Array]" placeholder */
-                            result = pstrdup("[Array]");
-                            elog(DEBUG1, "Found array value for key %s", path);
-                        }
-                        else if (token == WJB_BEGIN_OBJECT)
-                        {
-                            /* For objects, convert to "{Object}" placeholder */
-                            result = pstrdup("{Object}");
-                            elog(DEBUG1, "Found object value for key %s", path);
-                        }
-                        else
-                        {
-                            /* Convert binary type to string representation */
-                            StringInfoData buf;
-                            
-                            initStringInfo(&buf);
-                            appendStringInfoString(&buf, "[Complex Value]");
-                            result = buf.data;
-                            elog(DEBUG1, "Found complex value for key %s", path);
-                        }
+                        /* For arrays, convert to "[Array]" placeholder */
+                        result = pstrdup("[Array]");
+                        elog(DEBUG1, "Found array value for key %s", path);
+                    }
+                    else if (token == WJB_BEGIN_OBJECT)
+                    {
+                        /* For objects, convert to "{Object}" placeholder */
+                        result = pstrdup("{Object}");
+                        elog(DEBUG1, "Found object value for key %s", path);
                     }
                     else
                     {
-                        result = pstrdup("[Invalid Binary]");
-                        elog(DEBUG1, "Found invalid binary value for key %s", path);
+                        /* Convert binary type to string representation */
+                        StringInfoData buf;
+                        
+                        initStringInfo(&buf);
+                        appendStringInfoString(&buf, "[Complex Value]");
+                        result = buf.data;
+                        elog(DEBUG1, "Found complex value for key %s", path);
                     }
                 }
-            }
-            else
-            {
-                elog(DEBUG1, "Key %s not found in object", path);
+                else
+                {
+                    result = pstrdup("[Invalid Binary]");
+                    elog(DEBUG1, "Found invalid binary value for key %s", path);
+                }
             }
         }
         else
         {
-            /* Handle nested paths using a JSON path expression */
-            elog(DEBUG1, "Complex path not fully supported: %s", path);
-            result = pstrdup("[Complex Path]");
-            *found = true;
+            elog(DEBUG1, "Path %s not found in object", path);
         }
     }
     PG_CATCH();
@@ -1372,7 +1402,6 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
 {
     Jsonb *jb = (Jsonb *) DatumGetPointer(jsonb_context);
     JsonbValue *jbv_result;
-    JsonbValue key;
     JsonbIterator *it;
     JsonbValue v;
     JsonbIteratorToken token;
@@ -1393,109 +1422,98 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
         return result;
     }
     
-    /* Handle simple top-level key */
-    if (strchr(path, '.') == NULL)
+    elog(DEBUG1, "Looking for array at path: %s", path);
+    
+    /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
+    PG_TRY();
     {
-        elog(DEBUG1, "Looking for array at path: %s", path);
+        /* Use the new path traversal function */
+        bool path_found = false;
+        jbv_result = get_jsonb_value_by_path(jb, path, &path_found);
         
-        /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
-        PG_TRY();
+        if (path_found && jbv_result)
         {
-            key.type = jbvString;
-            key.val.string.val = (char *) path;
-            key.val.string.len = strlen(path);
+            elog(DEBUG1, "Found value for key %s (type=%d)", path, jbv_result->type);
             
-            jbv_result = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
-            
-            if (jbv_result)
+            if (jbv_result->type == jbvBinary)
             {
-                elog(DEBUG1, "Found value for key %s (type=%d) value=%s", path, jbv_result->type, jbv_result->val.string.val);
+                /* Get more details about the binary data */
+                elog(DEBUG1, "Binary value found, trying to examine structure");
                 
-                if (jbv_result->type == jbvBinary)
+                /* Validate the binary container before iterating */
+                if (!is_jsonb_container_valid(jbv_result->val.binary.data))
                 {
-                    /* Get more details about the binary data */
-                    elog(DEBUG1, "Binary value found, trying to examine structure");
+                    elog(WARNING, "Invalid binary JSONB container for key: %s", path);
+                    return result;
+                }
+                
+                elog(DEBUG1, "Trying to initialize the iterator...");
+                /* Try to initialize the iterator */
+                PG_TRY();
+                {
+                    /* Log raw pointer for debugging */
+                    elog(DEBUG1, "Binary container address: %p", jbv_result->val.binary.data);
                     
-                    /* Validate the binary container before iterating */
-                    if (!is_jsonb_container_valid(jbv_result->val.binary.data))
+                    /* Try to get the first 4 bytes of the binary data */
+                    uint32 header = *(uint32 *)jbv_result->val.binary.data;
+                    elog(DEBUG1, "Binary container header: %u", header);
+                    
+                    /* Initialize the iterator with careful error handling */
+                    elog(DEBUG1, "Initializing iterator for binary container");
+                    it = JsonbIteratorInit(jbv_result->val.binary.data);
+                    elog(DEBUG1, "Iterator initialized successfully");
+                    
+                    elog(DEBUG1, "Getting first token");
+                    token = JsonbIteratorNext(&it, &v, false);
+                    elog(DEBUG1, "First token retrieved: %d", token);
+                    
+                    if (token == WJB_BEGIN_ARRAY)
                     {
-                        elog(WARNING, "Invalid binary JSONB container for key: %s", path);
+                        /* It's a valid array */
+                        *found = true;
+                        result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
+                        elog(DEBUG1, "Found array at path %s (result=%p)", path, DatumGetPointer(result));
+                        debug_jsonb_value(result, "Array");
                         return result;
                     }
-                    
-                    elog(DEBUG1, "Trying to initialize the iterator...");
-                    /* Try to initialize the iterator */
-                    PG_TRY();
+                    else
                     {
-                        /* Log raw pointer for debugging */
-                        elog(DEBUG1, "Binary container address: %p", &jbv_result->val.binary);
-                        
-                        /* Try to get the first 4 bytes of the binary data */
-                        uint32 header = *(uint32 *)&jbv_result->val.binary;
-                        elog(DEBUG1, "Binary container header: %u", header);
-                        
-                        /* Initialize the iterator with careful error handling */
-                        elog(DEBUG1, "Initializing iterator for binary container");
-                        it = JsonbIteratorInit(jbv_result->val.binary.data);
-                        elog(DEBUG1, "Iterator initialized successfully");
-                        
-                        elog(DEBUG1, "Getting first token");
-                        token = JsonbIteratorNext(&it, &v, false);
-                        elog(DEBUG1, "First token retrieved: %d", token);
-                        
-                        if (token == WJB_BEGIN_ARRAY)
-                        {
-                            /* It's a valid array */
-                            *found = true;
-                            result = PointerGetDatum(JsonbValueToJsonb(jbv_result));
-                            elog(DEBUG1, "Found array at path %s (result=%p)", path, DatumGetPointer(result));
-                            debug_jsonb_value(result, "Array");
-                            return result;
-                        }
-                        else
-                        {
-                            elog(DEBUG1, "Path %s exists but is not an array (token type: %d)", path, token);
-                        }
+                        elog(DEBUG1, "Path %s exists but is not an array (token type: %d)", path, token);
                     }
-                    PG_CATCH();
-                    {
-                        elog(WARNING, "Error initializing JSON iterator for path %s", path);
-                        /* Get more details about the error */
-                        ErrorData *edata = CopyErrorData();
-                        elog(WARNING, "Error message: %s", edata->message);
-                        elog(WARNING, "Error detail: %s", edata->detail ? edata->detail : "none");
-                        elog(WARNING, "Error hint: %s", edata->hint ? edata->hint : "none");
-                        elog(WARNING, "Error context: %s", edata->context ? edata->context : "none");
-                        FreeErrorData(edata);
-                        FlushErrorState();
-                    }
-                    PG_END_TRY();
                 }
-                else
+                PG_CATCH();
                 {
-                    elog(DEBUG1, "Path %s exists but is not binary JSONB (type: %d)", path, jbv_result->type);
+                    elog(WARNING, "Error initializing JSON iterator for path %s", path);
+                    /* Get more details about the error */
+                    ErrorData *edata = CopyErrorData();
+                    elog(WARNING, "Error message: %s", edata->message);
+                    elog(WARNING, "Error detail: %s", edata->detail ? edata->detail : "none");
+                    elog(WARNING, "Error hint: %s", edata->hint ? edata->hint : "none");
+                    elog(WARNING, "Error context: %s", edata->context ? edata->context : "none");
+                    FreeErrorData(edata);
+                    FlushErrorState();
                 }
+                PG_END_TRY();
             }
             else
             {
-                elog(DEBUG1, "Path %s not found in JSONB", path);
+                elog(DEBUG1, "Path %s exists but is not binary JSONB (type: %d)", path, jbv_result->type);
             }
         }
-        PG_CATCH();
+        else
         {
-            elog(WARNING, "Exception while processing array at path %s", path);
-            ErrorData *edata = CopyErrorData();
-            elog(WARNING, "Error message: %s", edata->message);
-            FreeErrorData(edata);
-            FlushErrorState();
+            elog(DEBUG1, "Path %s not found in JSONB", path);
         }
-        PG_END_TRY();
     }
-    else {
-        elog(DEBUG1, "Complex path not fully supported: %s", path);
-        result = pstrdup("[Complex Path]");
-        *found = true;
+    PG_CATCH();
+    {
+        elog(WARNING, "Exception while processing array at path %s", path);
+        ErrorData *edata = CopyErrorData();
+        elog(WARNING, "Error message: %s", edata->message);
+        FreeErrorData(edata);
+        FlushErrorState();
     }
+    PG_END_TRY();
     
     return result;
 }
@@ -2327,7 +2345,7 @@ pg_template_parse(PG_FUNCTION_ARGS)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_SYNTAX_ERROR),
-                     errmsg("Template parsing error: %s", template_error_to_string(error_code))));
+                     errmsg("Template parsing error: %s", template_error_to_string(error_code, &config))));
         }
         
         /* Convert the parsed template to a string representation for debugging */
@@ -2408,7 +2426,7 @@ pg_render(PG_FUNCTION_ARGS)
         {
             ereport(ERROR,
                     (errcode(ERRCODE_SYNTAX_ERROR),
-                     errmsg("Template parsing error: %s", template_error_to_string(error_code))));
+                     errmsg("Template parsing error: %s", template_error_to_string(error_code, &config))));
         }
         
         elog(DEBUG1, "Template parsed successfully, starting render");
@@ -2584,6 +2602,87 @@ direct_array_check(Datum jsonb_context, const char *path, bool *found)
     }
     PG_END_TRY();
     
+    return result;
+}
+
+/* Function to get JsonbValue by dot-separated path */
+static JsonbValue *
+get_jsonb_value_by_path(Jsonb *jb, const char *path, bool *found)
+{
+    JsonbValue *result = NULL;
+    char *path_copy, *token, *saveptr;
+    JsonbValue key;
+    JsonbContainer *container;
+    
+    *found = false;
+    
+    if (!jb || !path || !is_jsonb_container_valid(&jb->root))
+    {
+        elog(DEBUG1, "Invalid JSONB or path in get_jsonb_value_by_path");
+        return NULL;
+    }
+    
+    /* Make a copy of the path to tokenize */
+    path_copy = pstrdup(path);
+    container = &jb->root;
+    
+    /* Use strtok_r to split the path by dots */
+    token = strtok_r(path_copy, ".", &saveptr);
+    
+    while (token != NULL)
+    {
+        /* Check if we're still working with an object (?) */
+        if (!(container->header & JB_FOBJECT))
+        {
+            elog(DEBUG1, "Path segment '%s' cannot be applied to non-object", token);
+            pfree(path_copy);
+            return NULL;
+        }
+        
+        /* Set up the key to search for */
+        key.type = jbvString;
+        key.val.string.val = token;
+        key.val.string.len = strlen(token);
+        
+        /* Find the value for this key */
+        result = findJsonbValueFromContainer(container, JB_FOBJECT, &key);
+        
+        if (!result)
+        {
+            elog(DEBUG1, "Key '%s' not found in object", token);
+            pfree(path_copy);
+            return NULL;
+        }
+        
+        /* If there are more path segments, we need to continue with the next container */
+        token = strtok_r(NULL, ".", &saveptr);
+        
+        if (token != NULL)
+        {
+            /* We need to go deeper, so the current result must be a container */
+            if (result->type != jbvBinary)
+            {
+                elog(DEBUG1, "Path segment '%s' points to a non-container value", token);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* Move to the next container */
+            container = (JsonbContainer *)result->val.binary.data;
+            
+            /* Validate the container */
+            if (!is_jsonb_container_valid(container))
+            {
+                elog(WARNING, "Invalid JSONB container during path traversal");
+                pfree(path_copy);
+                return NULL;
+            }
+        }
+    }
+    
+    /* If we got here, we found the value */
+    *found = true;
+    pfree(path_copy);
     return result;
 }
   
