@@ -318,14 +318,13 @@
                   "host  sameuser    all     ::1/128 scram-sha-256"
                 ];
                 initialScript = pkgs.writeText "init-sql-script" ''
+                  SET log_min_messages TO DEBUG1;
+                  ALTER DATABASE postgres SET log_min_messages TO DEBUG1;
                   CREATE EXTENSION "hemar";
 
 		  -- SELECT hemar.parse('{% zalupa %}');
-		  -- SELECT hemar.parse('{% zalupa %}');
-		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
-		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
-		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
-		  -- SELECT hemar.parse('zalupa {% her %} davalka')::JSON;
+		  SELECT hemar.render('{"a": "b"}'::JSONB, 'a {% a %}');
+		  SELECT hemar.render('{"a": ["b", "c"]}'::JSONB, 'a {% for i in a do text %}');
                 '';
               };                   
  
