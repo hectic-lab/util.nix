@@ -1429,7 +1429,7 @@ get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found)
         
         if (*found && jbv_result)
         {
-            elog(DEBUG1, "GJVB: Found element (type=%d)", jbv_result->type);
+            elog(DEBUG1, "GJVB: Found element (type=%s)", jbv_type_to_string(jbv_result->type));
             if (jbv_result->type == jbvString)
             {
                 result = pnstrdup(jbv_result->val.string.val, jbv_result->val.string.len);
@@ -2195,8 +2195,10 @@ get_jsonb_value_by_path(Jsonb *jb, const char *path, bool *found)
 {
     JsonbValue *result = NULL;
     char *path_copy, *token, *saveptr;
+    char *array_index_start, *array_index_end;
     JsonbValue key;
     JsonbContainer *container;
+    int array_index;
     
     *found = false;
     
@@ -2215,53 +2217,200 @@ get_jsonb_value_by_path(Jsonb *jb, const char *path, bool *found)
     
     while (token != NULL)
     {
-        /* Check if we're still working with an object (?) */
-        if (!(container->header & JB_FOBJECT))
+        elog(DEBUG1, "GJVB: Processing token: %s", token);
+        
+        /* Check if we're dealing with an array index: something[N] */
+        array_index_start = strchr(token, '[');
+        
+        elog(DEBUG1, "GJVB: Token: %s, array_index_start: %s", token, array_index_start);
+        
+        if (array_index_start != NULL)
         {
-            elog(DEBUG1, "Path segment '%s' cannot be applied to non-object", token);
-            pfree(path_copy);
-            return NULL;
+            /* We have an array index pattern */
+            array_index_end = strchr(array_index_start, ']');
+            
+            if (array_index_end == NULL || array_index_end <= array_index_start + 1)
+            {
+                elog(DEBUG1, "GJVB: Invalid array index syntax in '%s'", token);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* Extract the property name before the [ */
+            *array_index_start = '\0';
+            
+            /* If we have a property name before the [, get that object first */
+            if (token[0] != '\0')
+            {
+                /* Check if we're still working with an object */
+                if (!(container->header & JB_FOBJECT))
+                {
+                    elog(DEBUG1, "GJVB: Path segment '%s' cannot be applied to non-object", token);
+                    pfree(path_copy);
+                    return NULL;
+                }
+                
+                /* Set up the key to search for */
+                key.type = jbvString;
+                key.val.string.val = token;
+                key.val.string.len = strlen(token);
+                
+                /* Find the value for this key */
+                result = findJsonbValueFromContainer(container, JB_FOBJECT, &key);
+                
+                if (!result)
+                {
+                    elog(DEBUG1, "GJVB: Key '%s' not found in object", token);
+                    pfree(path_copy);
+                    return NULL;
+                }
+                
+                /* We need to go deeper, so the current result must be a container */
+                if (result->type != jbvBinary)
+                {
+                    elog(DEBUG1, "GJVB: Path segment '%s' points to a non-container value", token);
+                    pfree(path_copy);
+                    return NULL;
+                }
+                
+                /* Move to the next container, which should be an array for the index */
+                container = (JsonbContainer *)result->val.binary.data;
+                
+                /* Validate the container */
+                if (!is_jsonb_container_valid(container))
+                {
+                    elog(WARNING, "GJVB: Invalid JSONB container during path traversal");
+                    pfree(path_copy);
+                    return NULL;
+                }
+            }
+            
+            /* Now get the array index */
+            *array_index_end = '\0';
+            array_index = atoi(array_index_start + 1);
+            elog(DEBUG1, "GJVB: Array index: %d", array_index);
+            
+            /* Check if container is an array */
+            if (!(container->header & JB_FARRAY))
+            {
+                elog(DEBUG1, "GJVB: Path segment '%s[%d]' cannot be applied to non-array", token, array_index);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            if (array_index < 0)
+            {
+                elog(DEBUG1, "GJVB: Invalid negative array index %d", array_index);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* Get array element by index using iterator */
+            JsonbIterator *it = JsonbIteratorInit(container);
+            JsonbValue v;
+            JsonbIteratorToken itToken;
+            int current_index = 0;
+            
+            /* Skip the WJB_BEGIN_ARRAY token */
+            itToken = JsonbIteratorNext(&it, &v, false);
+            if (itToken != WJB_BEGIN_ARRAY)
+            {
+                elog(DEBUG1, "GJVB: Expected array start token but got %d", itToken);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* Find the element at the specified index */
+            result = NULL;
+            while ((itToken = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+            {
+                if (itToken == WJB_ELEM)
+                {
+                    if (current_index == array_index)
+                    {
+                        /* We found our element */
+                        result = palloc(sizeof(JsonbValue));
+                        *result = v;
+                        break;
+                    }
+                    current_index++;
+                }
+            }
+            
+            if (!result)
+            {
+                elog(DEBUG1, "GJVB: Array index %d out of bounds (max: %d)", array_index, current_index - 1);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* If the result is a binary container, update our container for next segment */
+            if (result->type == jbvBinary)
+            {
+                container = (JsonbContainer *)result->val.binary.data;
+                
+                /* Validate the container */
+                if (!is_jsonb_container_valid(container))
+                {
+                    elog(WARNING, "GJVB: Invalid JSONB container during path traversal");
+                    pfree(path_copy);
+                    return NULL;
+                }
+            }
         }
-        
-        /* Set up the key to search for */
-        key.type = jbvString;
-        key.val.string.val = token;
-        key.val.string.len = strlen(token);
-        
-        /* Find the value for this key */
-        result = findJsonbValueFromContainer(container, JB_FOBJECT, &key);
-        
-        if (!result)
+        else
         {
-            elog(DEBUG1, "GJVB: Key '%s' not found in object", token);
-            pfree(path_copy);
-            return NULL;
+            /* Standard property access */
+            /* Check if we're still working with an object */
+            if (!(container->header & JB_FOBJECT))
+            {
+                elog(DEBUG1, "GJVB: Path segment '%s' cannot be applied to non-object", token);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* Set up the key to search for */
+            key.type = jbvString;
+            key.val.string.val = token;
+            key.val.string.len = strlen(token);
+            
+            /* Find the value for this key */
+            result = findJsonbValueFromContainer(container, JB_FOBJECT, &key);
+            
+            if (!result)
+            {
+                elog(DEBUG1, "GJVB: Key '%s' not found in object", token);
+                pfree(path_copy);
+                return NULL;
+            }
+            
+            /* If this isn't the last token, prepare for the next path segment */
+            if (saveptr && *saveptr != '\0')
+            {
+                /* We need to go deeper, so the current result must be a container */
+                if (result->type != jbvBinary)
+                {
+                    elog(DEBUG1, "GJVB: Path segment '%s' points to a non-container value", token);
+                    pfree(path_copy);
+                    return NULL;
+                }
+                
+                /* Move to the next container */
+                container = (JsonbContainer *)result->val.binary.data;
+                
+                /* Validate the container */
+                if (!is_jsonb_container_valid(container))
+                {
+                    elog(WARNING, "GJVB: Invalid JSONB container during path traversal");
+                    pfree(path_copy);
+                    return NULL;
+                }
+            }
         }
-        
-        /* If there are more path segments, we need to continue with the next container */
+
+        /* Get next token */
         token = strtok_r(NULL, ".", &saveptr);
-        
-        if (token != NULL)
-        {
-            /* We need to go deeper, so the current result must be a container */
-            if (result->type != jbvBinary)
-            {
-                elog(DEBUG1, "GJVB: Path segment '%s' points to a non-container value", token);
-                pfree(path_copy);
-                return NULL;
-            }
-            
-            /* Move to the next container */
-            container = (JsonbContainer *)result->val.binary.data;
-            
-            /* Validate the container */
-            if (!is_jsonb_container_valid(container))
-            {
-                elog(WARNING, "GJVB: Invalid JSONB container during path traversal");
-                pfree(path_copy);
-                return NULL;
-            }
-        }
+        elog(DEBUG1, "GJVB: Next token: %s", token ? token : "NULL");
     }
     
     /* If we got here, we found the value */
