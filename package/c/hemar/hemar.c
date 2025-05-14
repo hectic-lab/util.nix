@@ -38,16 +38,25 @@ static bool is_jsonb_container_valid(JsonbContainer *container);
 static bool
 is_jsonb_container_valid(JsonbContainer *container)
 {
-    /* Basic sanity check: non-NULL pointer */
+    PG_TRY();
+    {
+        container->header;
+        container->children;
+    }
+    PG_CATCH();
+    {
+        elog(ERROR, "Invalid JSONB container");
+        return false;
+    }
+    PG_END_TRY();
+    
     if (container == NULL)
         return false;
-        
-    /* Check that container has a valid header size (at least 4 bytes) */
+            
     uint32 header = *(uint32 *)container;
-    if (header == 0) /* Simplistic check for corrupted/empty header */
+    if (header == 0)
         return false;
-        
-    /* This is a simplified check. In a real implementation, we'd do more validation. */
+
     return true;
 }
 
@@ -826,7 +835,6 @@ template_render(MemoryContext context, TemplateNode *node, Datum jsonb_context, 
                 case TEMPLATE_NODE_SECTION:
                 case TEMPLATE_NODE_EXECUTE:
                 case TEMPLATE_NODE_INCLUDE:
-                    /* Use nested PG_TRY/PG_CATCH blocks for each node type for better error handling */
                     PG_TRY();
                     {
                         if (current->type == TEMPLATE_NODE_INTERPOLATE)
@@ -1256,7 +1264,6 @@ get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found)
         return NULL;
     }
     
-    /* Use PG_TRY/PG_CATCH to handle any errors during extraction */
     PG_TRY();
     {
         /* Handle simple top-level key */
@@ -1339,7 +1346,6 @@ get_jsonb_path_value(Datum jsonb_context, const char *path, bool *found)
         else
         {
             /* Handle nested paths using a JSON path expression */
-            /* This is a simplified implementation */
             elog(DEBUG1, "Complex path not fully supported: %s", path);
             result = pstrdup("[Complex Path]");
             *found = true;
@@ -1403,7 +1409,7 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
             
             if (jbv_result)
             {
-                elog(DEBUG1, "Found value for key %s (type=%d)", path, jbv_result->type);
+                elog(DEBUG1, "Found value for key %s (type=%d) value=%s", path, jbv_result->type, jbv_result->val.string.val);
                 
                 if (jbv_result->type == jbvBinary)
                 {
@@ -1411,12 +1417,13 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
                     elog(DEBUG1, "Binary value found, trying to examine structure");
                     
                     /* Validate the binary container before iterating */
-                    if (!is_jsonb_container_valid((JsonbContainer *)&jbv_result->val.binary))
+                    if (!is_jsonb_container_valid(jbv_result->val.binary.data))
                     {
                         elog(WARNING, "Invalid binary JSONB container for key: %s", path);
                         return result;
                     }
                     
+                    elog(DEBUG1, "Trying to initialize the iterator...");
                     /* Try to initialize the iterator */
                     PG_TRY();
                     {
@@ -1429,7 +1436,7 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
                         
                         /* Initialize the iterator with careful error handling */
                         elog(DEBUG1, "Initializing iterator for binary container");
-                        it = JsonbIteratorInit((JsonbContainer *)&jbv_result->val.binary);
+                        it = JsonbIteratorInit(jbv_result->val.binary.data);
                         elog(DEBUG1, "Iterator initialized successfully");
                         
                         elog(DEBUG1, "Getting first token");
@@ -1484,111 +1491,10 @@ get_jsonb_array(Datum jsonb_context, const char *path, bool *found)
         }
         PG_END_TRY();
     }
-    else
-    {
-        /* Handle nested paths */
-        /* This is a simplified implementation */
-        char *current_path = pstrdup(path);
-        char *token_str;
-        char *saveptr;
-        JsonbValue *current_jbv;
-        
-        /* Use PG_TRY/PG_CATCH to handle any errors during iteration */
-        PG_TRY();
-        {
-            token_str = strtok_r(current_path, ".", &saveptr);
-            while (token_str != NULL)
-            {
-                key.type = jbvString;
-                key.val.string.val = token_str;
-                key.val.string.len = strlen(token_str);
-                
-                current_jbv = findJsonbValueFromContainer(&jb->root, JB_FOBJECT, &key);
-                
-                if (!current_jbv)
-                {
-                    elog(DEBUG1, "Path segment %s not found in nested path %s", token_str, path);
-                    pfree(current_path);
-                    return result;
-                }
-                
-                token_str = strtok_r(NULL, ".", &saveptr);
-                
-                /* If there are more path segments, current value must be an object */
-                if (token_str != NULL)
-                {
-                    if (current_jbv->type != jbvBinary)
-                    {
-                        elog(DEBUG1, "Path segment %s is not a binary JSONB object in nested path %s", token_str, path);
-                        pfree(current_path);
-                        return result;
-                    }
-                    
-                    /* Validate the binary container before using it */
-                    if (!is_jsonb_container_valid((JsonbContainer *)&current_jbv->val.binary))
-                    {
-                        elog(WARNING, "Invalid binary JSONB container for path segment: %s", token_str);
-                        pfree(current_path);
-                        return result;
-                    }
-                    
-                    jb = (Jsonb *) DatumGetPointer(JsonbValueToJsonb(current_jbv));
-                    
-                    /* Validate the new container */
-                    if (!jb || !is_jsonb_container_valid(&jb->root))
-                    {
-                        elog(WARNING, "Invalid JSONB container after path segment: %s", token_str);
-                        pfree(current_path);
-                        return result;
-                    }
-                }
-                else
-                {
-                    /* Check if the final value is an array */
-                    if (current_jbv->type == jbvBinary)
-                    {
-                        /* Validate the binary container before iterating */
-                        if (!is_jsonb_container_valid((JsonbContainer *)&current_jbv->val.binary))
-                        {
-                            elog(WARNING, "Invalid binary JSONB container for nested path: %s", path);
-                            pfree(current_path);
-                            return result;
-                        }
-                        
-                        it = JsonbIteratorInit((JsonbContainer *)&current_jbv->val.binary);
-                        token = JsonbIteratorNext(&it, &v, false);
-                        
-                        if (token == WJB_BEGIN_ARRAY)
-                        {
-                            *found = true;
-                            result = PointerGetDatum(JsonbValueToJsonb(current_jbv));
-                            elog(DEBUG1, "Found array at nested path %s", path);
-                            debug_jsonb_value(result, "Array");
-                        }
-                        else
-                        {
-                            elog(DEBUG1, "Nested path %s exists but is not an array (token type: %d)", path, token);
-                        }
-                    }
-                    else
-                    {
-                        elog(DEBUG1, "Nested path %s exists but is not binary JSONB (type: %d)", path, current_jbv->type);
-                    }
-                }
-            }
-        }
-        PG_CATCH();
-        {
-            elog(WARNING, "Exception while processing nested array at path %s", path);
-            if (current_path)
-                pfree(current_path);
-            FlushErrorState();
-            return result;
-        }
-        PG_END_TRY();
-        
-        if (current_path)
-            pfree(current_path);
+    else {
+        elog(DEBUG1, "Complex path not fully supported: %s", path);
+        result = pstrdup("[Complex Path]");
+        *found = true;
     }
     
     return result;
