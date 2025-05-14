@@ -319,12 +319,16 @@
                 ];
                 initialScript = pkgs.writeText "init-sql-script" ''
                   SET log_min_messages TO DEBUG1;
+                  SET client_min_messages TO DEBUG1;
                   ALTER DATABASE postgres SET log_min_messages TO DEBUG1;
+                  ALTER DATABASE postgres SET client_min_messages TO DEBUG1;
                   CREATE EXTENSION "hemar";
 
 		  -- SELECT hemar.parse('{% zalupa %}');
 		  SELECT hemar.render('{"a": "b"}'::JSONB, 'a {% a %}');
 		  SELECT hemar.render('{"a": ["b", "c"]}'::JSONB, 'a {% for i in a do text %}');
+		  SELECT hemar.render('{"a": {"g": ["b", "c"]}}'::JSONB, 'a {% for i in a.g do {% i %} %}');
+		  SELECT hemar.render('{"a": {"g": ["b", "c"], "b": [{"c": "a"}, {"c": "b"}]}}'::JSONB, 'a {% for i in a.b do {% i.c %} %}');
                 '';
               };                   
  
