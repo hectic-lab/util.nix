@@ -168,12 +168,9 @@ template_error_to_string(TemplateErrorCode code, TemplateConfig *config)
 	    strcat(message, "` keyword in section block");
 	    return message;
         case TEMPLATE_ERROR_NO_BEGIN_IN_SECTION:
-	    message = "Not found `";
-	    strcat(message, config->Syntax.Section.begin);
-	    strcat(message, "` keyword in section block");
-	    return message;
+            return "Missing end tag for section";
         case TEMPLATE_ERROR_UNEXPECTED_SECTION_END:
-            return "Unexpected section end";
+            return "Unexpected section end or missing end tag";
         case TEMPLATE_ERROR_NESTED_INCLUDE:
             return "Nested include";
         case TEMPLATE_ERROR_NESTED_EXECUTE:
@@ -201,7 +198,7 @@ template_default_config(MemoryContext context)
     config.Syntax.Braces.close = "}}";
     config.Syntax.Section.control = "for ";
     config.Syntax.Section.source = "in ";
-    config.Syntax.Section.begin = "do ";
+    config.Syntax.Section.begin = "";  /* No longer used, but keep for backward compatibility */
     config.Syntax.Interpolate.invoke = "";
     config.Syntax.Include.invoke = "include ";
     config.Syntax.Execute.invoke = "exec ";
@@ -336,6 +333,11 @@ template_parse_interpolation(MemoryContext context, const char **s_ptr,
     }
     
     key_len = *s - key_start;
+    
+    /* Trim trailing whitespace if it was terminated by whitespace */
+    while (key_len > 0 && isspace((unsigned char)key_start[key_len - 1]))
+        key_len--;
+    
     node->value->interpolate.key = MemoryContextStrdup(context, pnstrdup(key_start, key_len));
     elog(DEBUG1, "TPI: Parsing: %s", node->value->interpolate.key);
     
@@ -423,21 +425,13 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     while (**s != '\0')
     {
         if (isspace((unsigned char)**s) || 
-            strncmp(*s, config->Syntax.Section.begin, strlen(config->Syntax.Section.begin)) == 0)
+            strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
             break;
             
         if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
         {
             if (error_code)
                 *error_code = TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_SOURCE;
-            template_free_node(node);
-            return NULL;
-        }
-        
-        if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
-        {
-            if (error_code)
-                *error_code = TEMPLATE_ERROR_NO_BEGIN_IN_SECTION;
             template_free_node(node);
             return NULL;
         }
@@ -449,60 +443,72 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     node->value->section.collection = MemoryContextStrdup(context, pnstrdup(collection_start, collection_len));
     elog(DEBUG1, "TPS: Parsed section collection: %s", node->value->section.collection);
     
-    /* Check for 'do' keyword */
+    /* Skip whitespace before closing brace */
     *s = skip_whitespace(*s);
-    // TODO: why check begin second time, first in while
-    if (strncmp(*s, config->Syntax.Section.begin, strlen(config->Syntax.Section.begin)) != 0)
+    
+    /* Check for closing brace */
+    if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
     {
         if (error_code)
-            *error_code = TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_SOURCE;
+            *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
         template_free_node(node);
         return NULL;
     }
     
-    *s += strlen(config->Syntax.Section.begin);
-    *s = skip_whitespace(*s);
+    /* Move past the closing brace */
+    *s += strlen(config->Syntax.Braces.close);
     
-    /* Check if there's a closing brace right after 'do' */
-    if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
-    {
-        /* Empty section body */
-        elog(DEBUG1, "TPS: Parsed empty section body");
-        *s_ptr = *s + strlen(config->Syntax.Braces.close);
-        node->value->section.body = NULL;
-        return node;
-    }
-
-    /* Parse the body as a normal template */
+    /* Start of the body content */
     const char *body_start = *s;
-    const char *original_s = *s;
-
-    int inner_braces_opened_count = 0;
+    const char *end_tag_start = NULL;
+    int nesting_level = 1;  /* Start at 1, our current section */
     
-    /* Find the end of the section */
-    while (**s) {
-	// s = {% a %} %}
-        elog(DEBUG2, "TPS: Step, braces opened: %d, s: %s", inner_braces_opened_count, *s);
-            if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0) {
-                elog(DEBUG2, "TPS: inner_braces_opened_count++");
-	        inner_braces_opened_count++;
-	    }
-        if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
-            if (inner_braces_opened_count > 0) {
-                elog(DEBUG2, "TPS: inner_braces_opened_count--");
-	            inner_braces_opened_count--;
-	        }
-	        else {
-                elog(DEBUG2, "TPS: exit");
-                break;
-	        }
-	    }
+    elog(DEBUG1, "TPS: Starting to parse section body at position: %s", body_start);
+    elog(DEBUG1, "TPS: Looking for end tag");
+    
+    /* Find the matching end tag, accounting for nested sections */
+    while (**s != '\0')
+    {
+        if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
+        {
+            /* We found an opening brace */
+            const char *tag_start = *s + strlen(config->Syntax.Braces.open);
+            const char *tag_ptr = tag_start;
+            
+            /* Skip whitespace after opening brace */
+            while (*tag_ptr && isspace((unsigned char)*tag_ptr))
+                tag_ptr++;
+            
+            /* Check if this is a new section tag */
+            if (strncmp(tag_ptr, config->Syntax.Section.control, strlen(config->Syntax.Section.control)) == 0)
+            {
+                /* Found a nested section, increase nesting level */
+                nesting_level++;
+                elog(DEBUG1, "TPS: Found nested section, nesting level: %d, at position: %s", nesting_level, *s);
+            }
+            /* Check if this is an end tag */
+            else if (strncmp(tag_ptr, "end", 3) == 0)
+            {
+                /* Found an end tag, decrease nesting level */
+                nesting_level--;
+                elog(DEBUG1, "TPS: Found end tag, nesting level: %d, at position: %s", nesting_level, *s);
+                
+                if (nesting_level == 0)
+                {
+                    /* This is our matching end tag */
+                    end_tag_start = *s;
+                    break;
+                }
+            }
+        }
+        
         (*s)++;
     }
     
-    if (!**s)
+    /* Check if we found a matching end tag */
+    if (nesting_level > 0 || !end_tag_start)
     {
-        /* Unexpected end of string before closing brace */
+        elog(WARNING, "TPS: No matching end tag found for section, nesting level: %d", nesting_level);
         if (error_code)
             *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
         template_free_node(node);
@@ -510,7 +516,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     }
     
     /* Extract the body content */
-    size_t body_len = *s - body_start;
+    size_t body_len = end_tag_start - body_start;
     char *body_content = pnstrdup(body_start, body_len);
     
     elog(DEBUG1, "TPS: Section body content: %s", body_content);
@@ -530,8 +536,26 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     pfree(body_content);
     node->value->section.body = body_node;
     
+    /* Skip past the end tag */
+    *s = end_tag_start;
+    *s += strlen(config->Syntax.Braces.open);
+    *s = skip_whitespace(*s);
+    *s += 3; /* Skip "end" */
+    *s = skip_whitespace(*s);
+    
+    /* Check for closing brace of end tag */
+    if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
+    {
+        elog(WARNING, "TPS: No closing brace for end tag at position: %s", *s);
+        if (error_code)
+            *error_code = TEMPLATE_ERROR_UNEXPECTED_SECTION_END;
+        template_free_node(node);
+        return NULL;
+    }
+    
     /* Set the pointer to after the closing brace */
     *s_ptr = *s + strlen(config->Syntax.Braces.close);
+    elog(DEBUG1, "TPS: Successfully parsed section, returning at position: %s", *s_ptr);
     
     return node;
 }
@@ -574,6 +598,11 @@ template_parse_include(MemoryContext context, const char **s_ptr,
     }
     
     include_len = *s - include_start;
+    
+    /* Trim trailing whitespace if it was terminated by whitespace */
+    while (include_len > 0 && isspace((unsigned char)include_start[include_len - 1]))
+        include_len--;
+    
     node->value->include.key = MemoryContextStrdup(context, pnstrdup(include_start, include_len));
     
     *s = skip_whitespace(*s);
@@ -612,23 +641,55 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
     *s = skip_whitespace(*s);
     code_start = *s;
     
+    /* Track quote state to handle SQL content properly */
+    bool in_single_quote = false;
+    bool in_double_quote = false;
+    bool escaped = false;
+    
     while (**s != '\0')
     {
-        if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
-            break;
-            
-        if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
-        {
-            if (error_code)
-                *error_code = TEMPLATE_ERROR_NESTED_EXECUTE;
-            template_free_node(node);
-            return NULL;
+        /* Handle escaping */
+        if (**s == '\\') {
+            escaped = !escaped;
+            (*s)++;
+            continue;
         }
         
+        /* Handle quotes - only toggle quote state if not escaped */
+        if (!escaped) {
+            if (**s == '\'') {
+                in_single_quote = !in_single_quote;
+            } else if (**s == '"') {
+                in_double_quote = !in_double_quote;
+            }
+        }
+        
+        /* Only check for closing braces when not inside quotes */
+        if (!in_single_quote && !in_double_quote) {
+            if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
+                break;
+            }
+            
+            /* Check for nested opening braces */
+            if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0) {
+                if (error_code)
+                    *error_code = TEMPLATE_ERROR_NESTED_EXECUTE;
+                template_free_node(node);
+                return NULL;
+            }
+        }
+        
+        /* Reset escaped flag after processing a character */
+        escaped = false;
         (*s)++;
     }
     
     code_len = *s - code_start;
+    
+    /* Trim trailing whitespace */
+    while (code_len > 0 && isspace((unsigned char)code_start[code_len - 1]))
+        code_len--;
+    
     node->value->execute.code = MemoryContextStrdup(context, pnstrdup(code_start, code_len));
     
     /* Check for closing brace */
@@ -710,25 +771,52 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
             tag_prefix = *s + strlen(config->Syntax.Braces.open);
             tag_prefix = skip_whitespace(tag_prefix);
             
-            /* Determine tag type by prefix */
-            if (strncmp(tag_prefix, config->Syntax.Section.control, strlen(config->Syntax.Section.control)) == 0)
-            {
+            /* Find the longest matching prefix to determine tag type */
+            typedef struct {
+                const char *prefix;
+                int tag_type;
+            } PrefixMatch;
+            
+            PrefixMatch matches[] = {
+                {config->Syntax.Section.control, 1},
+                {config->Syntax.Include.invoke, 2},
+                {config->Syntax.Execute.invoke, 3},
+                {config->Syntax.Interpolate.invoke, 4}
+            };
+            
+            int matched_type = 0;
+            size_t max_length = 0;
+            
+            /* Find longest match (in case when one prefix is part of another) */
+            for (int i = 0; i < 4; i++) {
+                if (strncmp(tag_prefix, matches[i].prefix, strlen(matches[i].prefix)) == 0) {
+                    /* >= because one of the prefixes may be empty */
+                    if (strlen(matches[i].prefix) >= max_length) {
+                        max_length = strlen(matches[i].prefix);
+                        matched_type = matches[i].tag_type;
+                    }
+                }
+            }
+            
+            /* Choose the tag parser based on the matched type */
+            if (matched_type == 1) {
+                /* Section tag */
+                elog(LOG, "TPE: Parsing section tag at position: %.50s", *s);
                 tag_node = template_parse_section(context, s, config, error_code);
-            }
-            else if (strncmp(tag_prefix, config->Syntax.Include.invoke, strlen(config->Syntax.Include.invoke)) == 0)
-            {
+            } else if (matched_type == 2) {
+                /* Include tag */
+                elog(LOG, "TPE: Parsing include tag at position: %.50s", *s);
                 tag_node = template_parse_include(context, s, config, error_code);
-            }
-            else if (strncmp(tag_prefix, config->Syntax.Execute.invoke, strlen(config->Syntax.Execute.invoke)) == 0)
-            {
+            } else if (matched_type == 3) {
+                /* Execute tag */
+                elog(LOG, "TPE: Parsing include tag at position: %.50s", *s);
                 tag_node = template_parse_execute(context, s, config, error_code);
-            }
-            else if (strncmp(tag_prefix, config->Syntax.Interpolate.invoke, strlen(config->Syntax.Interpolate.invoke)) == 0)
-            {
+            } else if (matched_type == 4) {
+                /* Interpolation tag */
+                elog(LOG, "TPE: Parsing interpolation tag at position: %.50s", *s);
                 tag_node = template_parse_interpolation(context, s, config, error_code);
-            }
-            else
-            {
+            } else {
+                /* Unknown tag type */
                 if (error_code)
                     *error_code = TEMPLATE_ERROR_UNKNOWN_TAG;
                 template_free_node(root);
