@@ -478,7 +478,7 @@ BEGIN
         RAISE WARNING 'Test %: Empty array/object edge cases (path="%"): % | PASSED: % (expected: empty array)', 
             total_tests, current_path, result, passed;
     END IF;
-    
+        
     -- Print summary
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';
@@ -497,4 +497,4 @@ BEGIN
     IF passed_tests != total_tests THEN
       RAISE EXCEPTION 'Tests failed: % of % tests did not pass', (total_tests - passed_tests), total_tests;
     END IF;
-END $$;
+END $$; 
