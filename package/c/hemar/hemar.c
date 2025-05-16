@@ -196,12 +196,12 @@ template_default_config(MemoryContext context)
     
     config.Syntax.Braces.open = "{{";
     config.Syntax.Braces.close = "}}";
-    config.Syntax.Section.control = "for ";
-    config.Syntax.Section.source = "in ";
+    config.Syntax.Section.control = "for";
+    config.Syntax.Section.source = "in";
     config.Syntax.Section.begin = "";  /* No longer used, but keep for backward compatibility */
     config.Syntax.Interpolate.invoke = "";
-    config.Syntax.Include.invoke = "include ";
-    config.Syntax.Execute.invoke = "exec ";
+    config.Syntax.Include.invoke = "include";
+    config.Syntax.Execute.invoke = "exec";
     config.Syntax.nesting = "->";
     
     return config;
@@ -374,28 +374,21 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     *s = skip_whitespace(*s);
     *s += strlen(config->Syntax.Section.control);
     
-    /* Find the iterator name */
+    /* Skip whitespace after control keyword */
     *s = skip_whitespace(*s);
+    
+    /* Find the iterator name */
     iterator_start = *s;
     
     while (**s != '\0')
     {
-        if (isspace((unsigned char)**s) || 
-            strncmp(*s, config->Syntax.Section.source, strlen(config->Syntax.Section.source)) == 0)
+        if (isspace((unsigned char)**s))
             break;
             
         if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
         {
             if (error_code)
                 *error_code = TEMPLATE_UNEXPECTED_OPEN_BRACES_AFFTER_SECTION_CONTROLE;
-            template_free_node(node);
-            return NULL;
-        }
-        
-        if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
-        {
-            if (error_code)
-                *error_code = TEMPLATE_ERROR_NO_SOURSE_IN_SECTION;
             template_free_node(node);
             return NULL;
         }
@@ -407,7 +400,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     node->value->section.iterator = MemoryContextStrdup(context, pnstrdup(iterator_start, iterator_len));
     elog(DEBUG1, "TPS: Parsed section iterator: %s", node->value->section.iterator);
     
-    /* Find the collection name */
+    /* Find the source keyword "in" */
     *s = skip_whitespace(*s);
     
     if (strncmp(*s, config->Syntax.Section.source, strlen(config->Syntax.Section.source)) != 0)
@@ -419,7 +412,11 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     }
     
     *s += strlen(config->Syntax.Section.source);
+    
+    /* Skip whitespace after source keyword */
     *s = skip_whitespace(*s);
+    
+    /* Find the collection name */
     collection_start = *s;
     
     while (**s != '\0')
@@ -577,7 +574,9 @@ template_parse_include(MemoryContext context, const char **s_ptr,
     *s = skip_whitespace(*s);
     *s += strlen(config->Syntax.Include.invoke);
     
+    /* Skip whitespace after include keyword */
     *s = skip_whitespace(*s);
+    
     include_start = *s;
     
     while (**s != '\0')
@@ -638,7 +637,9 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
     *s = skip_whitespace(*s);
     *s += strlen(config->Syntax.Execute.invoke);
     
+    /* Skip whitespace after execute keyword */
     *s = skip_whitespace(*s);
+    
     code_start = *s;
     
     /* Track quote state to handle SQL content properly */
@@ -775,13 +776,14 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
             typedef struct {
                 const char *prefix;
                 int tag_type;
+                bool requires_space_after; /* Whether this prefix requires whitespace after it */
             } PrefixMatch;
             
             PrefixMatch matches[] = {
-                {config->Syntax.Section.control, 1},
-                {config->Syntax.Include.invoke, 2},
-                {config->Syntax.Execute.invoke, 3},
-                {config->Syntax.Interpolate.invoke, 4}
+                {config->Syntax.Section.control, 1, true},    /* "for" needs space after */
+                {config->Syntax.Include.invoke, 2, true},     /* "include" needs space after */
+                {config->Syntax.Execute.invoke, 3, true},     /* "exec" needs space after */
+                {config->Syntax.Interpolate.invoke, 4, false} /* Empty prefix doesn't need space */
             };
             
             int matched_type = 0;
@@ -790,8 +792,17 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
             /* Find longest match (in case when one prefix is part of another) */
             for (int i = 0; i < 4; i++) {
                 if (strncmp(tag_prefix, matches[i].prefix, strlen(matches[i].prefix)) == 0) {
-                    /* >= because one of the prefixes may be empty */
-                    if (strlen(matches[i].prefix) >= max_length) {
+                    /* Check if the match requires a space after it */
+                    bool valid_match = true;
+                    if (matches[i].requires_space_after) {
+                        /* If we need space after the prefix, verify it exists */
+                        const char *after_prefix = tag_prefix + strlen(matches[i].prefix);
+                        if (*after_prefix && !isspace((unsigned char)*after_prefix)) {
+                            valid_match = false;
+                        }
+                    }
+                    
+                    if (valid_match && strlen(matches[i].prefix) >= max_length) {
                         max_length = strlen(matches[i].prefix);
                         matched_type = matches[i].tag_type;
                     }
@@ -809,7 +820,7 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
                 tag_node = template_parse_include(context, s, config, error_code);
             } else if (matched_type == 3) {
                 /* Execute tag */
-                elog(LOG, "TPE: Parsing include tag at position: %.50s", *s);
+                elog(LOG, "TPE: Parsing execute tag at position: %.50s", *s);
                 tag_node = template_parse_execute(context, s, config, error_code);
             } else if (matched_type == 4) {
                 /* Interpolation tag */
