@@ -414,6 +414,31 @@ TEXT: "
         RAISE WARNING 'Test %: Execute with complex SQL and quotes - FAILED', total_tests;
     END IF;
     
+    -- Test 21: Execute tag with braces inside SQL code
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template21${{ exec 
+          -- SQL with curly braces in string literals and comments
+          /* Comment with {{ braces }} inside */
+          SELECT 
+            '{{ This is inside a string literal }}' AS braced_text,
+            $str$String with {{ and }} inside$str$ AS dollar_quoted,
+            regexp_replace('test', 'e(.)t', 'a$1z') AS regex_with_curly;
+        }}$template21$,
+        $expected21$EXECUTE: "-- SQL with curly braces in string literals and comments
+          /* Comment with {{ braces }} inside */
+          SELECT 
+            '{{ This is inside a string literal }}' AS braced_text,
+            $str$String with {{ and }} inside$str$ AS dollar_quoted,
+            regexp_replace('test', 'e(.)t', 'a$1z') AS regex_with_curly;"$expected21$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Execute tag with braces inside SQL code - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Execute tag with braces inside SQL code - FAILED', total_tests;
+    END IF;
+    
     -- Print summary
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';

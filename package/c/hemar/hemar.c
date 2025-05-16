@@ -642,10 +642,11 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
     
     code_start = *s;
     
-    /* Track quote state to handle SQL content properly */
+    /* Track quote state and brace level to handle SQL content properly */
     bool in_single_quote = false;
     bool in_double_quote = false;
     bool escaped = false;
+    int brace_level = 1;  /* Start with 1 for the opening braces we already consumed */
     
     while (**s != '\0')
     {
@@ -665,18 +666,23 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
             }
         }
         
-        /* Only check for closing braces when not inside quotes */
+        /* Only check for braces when not inside quotes */
         if (!in_single_quote && !in_double_quote) {
-            if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
-                break;
-            }
-            
             /* Check for nested opening braces */
             if (strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0) {
-                if (error_code)
-                    *error_code = TEMPLATE_ERROR_NESTED_EXECUTE;
-                template_free_node(node);
-                return NULL;
+                brace_level++;
+                *s += strlen(config->Syntax.Braces.open) - 1;  /* -1 because we'll increment s below */
+            }
+            /* Check for closing braces */
+            else if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
+                brace_level--;
+                
+                /* If we've reached the matching closing brace, we're done */
+                if (brace_level == 0) {
+                    break;
+                }
+                
+                *s += strlen(config->Syntax.Braces.close) - 1;  /* -1 because we'll increment s below */
             }
         }
         
@@ -694,7 +700,7 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
     node->value->execute.code = MemoryContextStrdup(context, pnstrdup(code_start, code_len));
     
     /* Check for closing brace */
-    if (strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
+    if (brace_level != 0 || strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) != 0)
     {
         if (error_code)
             *error_code = TEMPLATE_ERROR_UNEXPECTED_EXECUTE_END;
