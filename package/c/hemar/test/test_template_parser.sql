@@ -439,6 +439,628 @@ TEXT: "
         RAISE WARNING 'Test %: Execute tag with braces inside SQL code - FAILED', total_tests;
     END IF;
     
+    -- Test 22: Deeply nested sections with mixed content
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template22${{ for x in outer }}
+  Level 1: {{ x.name }}
+  {{ for y in x.items }}
+    Level 2: {{ y.title }}
+    {{ for z in y.subitems }}
+      Level 3: {{ z.label }} - {{ z.value }}
+      {{ for detail in z.details }}
+        Details: {{ detail }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}$template22$,
+        $expected22$Template parsed successfully. Structure:
+SECTION: iterator="x", collection="outer"
+  TEXT: "
+  Level 1: "
+  INTERPOLATE: "x.name"
+  TEXT: "
+  "
+  SECTION: iterator="y", collection="x.items"
+    TEXT: "
+    Level 2: "
+    INTERPOLATE: "y.title"
+    TEXT: "
+    "
+    SECTION: iterator="z", collection="y.subitems"
+      TEXT: "
+      Level 3: "
+      INTERPOLATE: "z.label"
+      TEXT: " - "
+      INTERPOLATE: "z.value"
+      TEXT: "
+      "
+      SECTION: iterator="detail", collection="z.details"
+        TEXT: "
+        Details: "
+        INTERPOLATE: "detail"
+        TEXT: "
+      "
+      TEXT: "
+    "
+    TEXT: "
+  "
+  TEXT: "
+"$expected22$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Deeply nested sections with mixed content - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Deeply nested sections with mixed content - FAILED', total_tests;
+    END IF;
+    
+    -- Test 23: Multiple tag types mixed with HTML
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template23$<div class="container">
+  <header>{{ page_title }}</header>
+  <nav>
+    {{ for item in menu_items }}
+      <a href="{{ item.url }}">{{ item.label }}</a>
+    {{ end }}
+  </nav>
+  <main>
+    {{ include content_template }}
+    {{ exec SELECT get_footer_text() AS footer_text; }}
+  </main>
+</div>$template23$,
+        $expected23$Template parsed successfully. Structure:
+TEXT: "<div class="container">
+  <header>"
+INTERPOLATE: "page_title"
+TEXT: "</header>
+  <nav>
+    "
+SECTION: iterator="item", collection="menu_items"
+  TEXT: "
+      <a href=""
+  INTERPOLATE: "item.url"
+  TEXT: "">"
+  INTERPOLATE: "item.label"
+  TEXT: "</a>
+    "
+TEXT: "
+  </nav>
+  <main>
+    "
+INCLUDE: "content_template"
+TEXT: "
+    "
+EXECUTE: "SELECT get_footer_text() AS footer_text;"
+TEXT: "
+  </main>
+</div>"$expected23$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Multiple tag types mixed with HTML - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Multiple tag types mixed with HTML - FAILED', total_tests;
+    END IF;
+    
+    -- Test 24: Section with complex iterator paths
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template24${{ for item.nested[0].value in collection[5].items[2].values }}
+  {{ item.nested[0].value }}
+{{ end }}$template24$,
+        $expected24$SECTION: iterator="item.nested[0].value", collection="collection[5].items[2].values"$expected24$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Section with complex iterator paths - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Section with complex iterator paths - FAILED', total_tests;
+    END IF;
+    
+    -- Test 25: Interpolation with Unicode characters
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template25${{ unicode_var_ẞαж한글💻🌍 }}$template25$,
+        $expected25$INTERPOLATE: "unicode_var_ẞαж한글💻🌍"$expected25$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Interpolation with Unicode characters - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Interpolation with Unicode characters - FAILED', total_tests;
+    END IF;
+    
+    -- Test 26: Multiple consecutive sections
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template26${{ for a in list_a }}{{ a }}{{ end }}{{ for b in list_b }}{{ b }}{{ end }}{{ for c in list_c }}{{ c }}{{ end }}$template26$,
+        $expected26$SECTION: iterator="a", collection="list_a"
+  INTERPOLATE: "a"
+SECTION: iterator="b", collection="list_b"
+  INTERPOLATE: "b"
+SECTION: iterator="c", collection="list_c"
+  INTERPOLATE: "c"$expected26$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Multiple consecutive sections - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Multiple consecutive sections - FAILED', total_tests;
+    END IF;
+    
+    -- Test 27: Includes with variable paths
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template27${{ include user.preferences.theme_template }}
+{{ include system.templates[user.template_index] }}$template27$,
+        $expected27$INCLUDE: "user.preferences.theme_template"
+TEXT: "
+"
+INCLUDE: "system.templates[user.template_index]"$expected27$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Includes with variable paths - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Includes with variable paths - FAILED', total_tests;
+    END IF;
+    
+    -- Test 28: Extremely long interpolation key
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template28${{ very_long_variable_name_with_many_parts.that_continues_for_a_while.with_multiple_segments.and_keeps_going.for_quite_some_time.until_it_becomes_quite_verbose }}$template28$,
+        $expected28$INTERPOLATE: "very_long_variable_name_with_many_parts.that_continues_for_a_while.with_multiple_segments.and_keeps_going.for_quite_some_time.until_it_becomes_quite_verbose"$expected28$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Extremely long interpolation key - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Extremely long interpolation key - FAILED', total_tests;
+    END IF;
+    
+    -- Test 29: Tags with extra whitespace
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template29${{   for   item   in   items   }}
+  {{   item.name   }}
+{{   end   }}$template29$,
+        $expected29$SECTION: iterator="item", collection="items"
+  TEXT: "
+  "
+  INTERPOLATE: "item.name"
+  TEXT: "
+"$expected29$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Tags with extra whitespace - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Tags with extra whitespace - FAILED', total_tests;
+    END IF;
+    
+    -- Test 30: Execute with PL/pgSQL code blocks
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template30${{ exec
+DECLARE
+  temp_var text;
+  counter int := 0;
+BEGIN
+  FOR i IN 1..10 LOOP
+    counter := counter + i;
+  END LOOP;
+  
+  IF counter > 50 THEN
+    temp_var := 'High';
+  ELSE
+    temp_var := 'Low';
+  END IF;
+  
+  RETURN json_build_object('result', temp_var, 'count', counter);
+END;
+}}$template30$,
+        $expected30$EXECUTE: "DECLARE
+  temp_var text;
+  counter int := 0;
+BEGIN
+  FOR i IN 1..10 LOOP
+    counter := counter + i;
+  END LOOP;
+  
+  IF counter > 50 THEN
+    temp_var := 'High';
+  ELSE
+    temp_var := 'Low';
+  END IF;
+  
+  RETURN json_build_object('result', temp_var, 'count', counter);
+END;"$expected30$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Execute with PL/pgSQL code blocks - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Execute with PL/pgSQL code blocks - FAILED', total_tests;
+    END IF;
+    
+    -- Test 31: Template with mixed indentation and newlines
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template31$<div>
+    {{ for item in items }}
+        <span>{{ item.name }}</span>
+    {{ end }}
+</div>$template31$,
+        $expected31$TEXT: "<div>
+    "
+SECTION: iterator="item", collection="items"
+  TEXT: "
+        <span>"
+  INTERPOLATE: "item.name"
+  TEXT: "</span>
+    "
+TEXT: "
+</div>"$expected31$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Template with mixed indentation and newlines - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Template with mixed indentation and newlines - FAILED', total_tests;
+    END IF;
+
+    -- Test 32: Execute with window functions and complex SQL
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template32${{ exec
+WITH recursive cte AS (
+  SELECT id, parent_id, name, 1 AS level
+  FROM categories
+  WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.id, c.parent_id, c.name, cte.level + 1
+  FROM categories c
+  JOIN cte ON c.parent_id = cte.id
+)
+SELECT 
+  id, 
+  repeat('  ', level - 1) || name AS indented_name,
+  row_number() OVER (PARTITION BY level ORDER BY name) AS row_num
+FROM cte
+ORDER BY level, name;
+}}$template32$,
+        $expected32$EXECUTE: "WITH recursive cte AS (
+  SELECT id, parent_id, name, 1 AS level
+  FROM categories
+  WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.id, c.parent_id, c.name, cte.level + 1
+  FROM categories c
+  JOIN cte ON c.parent_id = cte.id
+)
+SELECT 
+  id, 
+  repeat('  ', level - 1) || name AS indented_name,
+  row_number() OVER (PARTITION BY level ORDER BY name) AS row_num
+FROM cte
+ORDER BY level, name;"$expected32$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Execute with window functions and complex SQL - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Execute with window functions and complex SQL - FAILED', total_tests;
+    END IF;
+    
+    -- Test 33: Recursive template includes
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template33${{ include base_template }}
+{{ include dynamic_templates[index] }}
+{{ for template_name in available_templates }}
+  {{ include template_name }}
+{{ end }}$template33$,
+        $expected33$INCLUDE: "base_template"
+TEXT: "
+"
+INCLUDE: "dynamic_templates[index]"
+TEXT: "
+"
+SECTION: iterator="template_name", collection="available_templates"
+  TEXT: "
+  "
+  INCLUDE: "template_name"
+  TEXT: "
+"$expected33$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Recursive template includes - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Recursive template includes - FAILED', total_tests;
+    END IF;
+    
+    -- Test 34: Complex JSON manipulation in execute
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template34${{ exec
+WITH input_data AS (
+  SELECT '{"users": [
+    {"id": 1, "name": "Alice", "roles": ["admin", "editor"]},
+    {"id": 2, "name": "Bob", "roles": ["viewer"]},
+    {"id": 3, "name": "Charlie", "roles": ["editor", "contributor"]}
+  ]}'::jsonb AS data
+)
+SELECT 
+  jsonb_agg(
+    jsonb_build_object(
+      'name', user_data->>'name',
+      'roles', user_data->'roles',
+      'is_admin', user_data->'roles' ? 'admin'
+    )
+  ) AS result
+FROM input_data,
+jsonb_array_elements(data->'users') AS user_data;
+}}$template34$,
+        $expected34$EXECUTE: "WITH input_data AS (
+  SELECT '{"users": [
+    {"id": 1, "name": "Alice", "roles": ["admin", "editor"]},
+    {"id": 2, "name": "Bob", "roles": ["viewer"]},
+    {"id": 3, "name": "Charlie", "roles": ["editor", "contributor"]}
+  ]}'::jsonb AS data
+)
+SELECT 
+  jsonb_agg(
+    jsonb_build_object(
+      'name', user_data->>'name',
+      'roles', user_data->'roles',
+      'is_admin', user_data->'roles' ? 'admin'
+    )
+  ) AS result
+FROM input_data,
+jsonb_array_elements(data->'users') AS user_data;"$expected34$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Complex JSON manipulation in execute - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Complex JSON manipulation in execute - FAILED', total_tests;
+    END IF;
+    
+    -- Test 35: Tags at start/end without whitespace
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template35${{ var1 }}Text{{ var2 }}$template35$,
+        $expected35$INTERPOLATE: "var1"
+TEXT: "Text"
+INTERPOLATE: "var2"$expected35$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Tags at start/end without whitespace - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Tags at start/end without whitespace - FAILED', total_tests;
+    END IF;
+    
+    -- Test 36: Template with special characters in text
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template36$Special chars: <>!@#$%^&*()_+`-=[]{}|;':",./<>?\nAnd {{ variable }} insertion$template36$,
+        $expected36$TEXT: "Special chars: <>!@#$%^&*()_+`-=[]{}|;':",./<>?\nAnd "
+INTERPOLATE: "variable"
+TEXT: " insertion"$expected36$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Template with special characters in text - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Template with special characters in text - FAILED', total_tests;
+    END IF;
+    
+    -- Test 37: Complex execute with error handling
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template37${{ exec
+BEGIN
+  RETURN process_data(input_json);
+EXCEPTION
+  WHEN no_data_found THEN
+    RETURN jsonb_build_object('error', 'No data found', 'code', 404);
+  WHEN unique_violation THEN
+    RETURN jsonb_build_object('error', 'Duplicate entry', 'code', 409);
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'error', SQLERRM,
+      'code', SQLSTATE,
+      'severity', 'CRITICAL'
+    );
+END;
+}}$template37$,
+        $expected37$EXECUTE: "BEGIN
+  RETURN process_data(input_json);
+EXCEPTION
+  WHEN no_data_found THEN
+    RETURN jsonb_build_object('error', 'No data found', 'code', 404);
+  WHEN unique_violation THEN
+    RETURN jsonb_build_object('error', 'Duplicate entry', 'code', 409);
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'error', SQLERRM,
+      'code', SQLSTATE,
+      'severity', 'CRITICAL'
+    );
+END;"$expected37$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Complex execute with error handling - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Complex execute with error handling - FAILED', total_tests;
+    END IF;
+    
+    -- Test 38: Mixed nested sections and interpolations
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template38${{ for user in users }}
+  {{ user.name }}'s permissions:
+  {{ for permission in user.permissions }}
+    - {{ permission.name }}: {{ permission.status }}
+    {{ for scope in permission.scopes }}
+      * {{ scope.area }}: {{ scope.level }}
+    {{ end }}
+  {{ end }}
+{{ end }}$template38$,
+        $expected38$SECTION: iterator="user", collection="users"
+  TEXT: "
+  "
+  INTERPOLATE: "user.name"
+  TEXT: "'s permissions:
+  "
+  SECTION: iterator="permission", collection="user.permissions"
+    TEXT: "
+    - "
+    INTERPOLATE: "permission.name"
+    TEXT: ": "
+    INTERPOLATE: "permission.status"
+    TEXT: "
+    "
+    SECTION: iterator="scope", collection="permission.scopes"
+      TEXT: "
+      * "
+      INTERPOLATE: "scope.area"
+      TEXT: ": "
+      INTERPOLATE: "scope.level"
+      TEXT: "
+    "
+    TEXT: "
+  "
+  TEXT: "
+"$expected38$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Mixed nested sections and interpolations - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Mixed nested sections and interpolations - FAILED', total_tests;
+    END IF;
+    
+    -- Test 39: Execute with dynamic SQL generation
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template39${{ exec
+DECLARE
+  column_names text[] := ARRAY['id', 'name', 'created_at'];
+  table_name text := 'users';
+  conditions text[] := ARRAY['is_active = true', 'created_at > now() - interval ''1 month'''];
+  order_clause text := 'last_login DESC';
+  query text;
+BEGIN
+  query := 'SELECT ' || array_to_string(column_names, ', ') || 
+           ' FROM ' || table_name;
+           
+  IF array_length(conditions, 1) > 0 THEN
+    query := query || ' WHERE ' || array_to_string(conditions, ' AND ');
+  END IF;
+  
+  IF order_clause IS NOT NULL THEN
+    query := query || ' ORDER BY ' || order_clause;
+  END IF;
+  
+  EXECUTE query;
+  RETURN query;
+END;
+}}$template39$,
+        $expected39$EXECUTE: "DECLARE
+  column_names text[] := ARRAY['id', 'name', 'created_at'];
+  table_name text := 'users';
+  conditions text[] := ARRAY['is_active = true', 'created_at > now() - interval ''1 month'''];
+  order_clause text := 'last_login DESC';
+  query text;
+BEGIN
+  query := 'SELECT ' || array_to_string(column_names, ', ') || 
+           ' FROM ' || table_name;
+           
+  IF array_length(conditions, 1) > 0 THEN
+    query := query || ' WHERE ' || array_to_string(conditions, ' AND ');
+  END IF;
+  
+  IF order_clause IS NOT NULL THEN
+    query := query || ' ORDER BY ' || order_clause;
+  END IF;
+  
+  EXECUTE query;
+  RETURN query;
+END;"$expected39$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Execute with dynamic SQL generation - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Execute with dynamic SQL generation - FAILED', total_tests;
+    END IF;
+    
+    -- Test 40: Complex nested structure with all tag types
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $template40$<!DOCTYPE html>
+<html>
+<head>
+  <title>{{ page.title }}</title>
+  {{ include meta_tags }}
+</head>
+<body>
+  <header>{{ include header }}</header>
+  <main>
+    {{ for section in page.sections }}
+      <section id="{{ section.id }}">
+        <h2>{{ section.title }}</h2>
+        {{ for item in section.items }}
+          <div class="item {{ item.status }}">
+            {{ item.content }}
+            {{ include item.template }}
+            {{ exec
+              -- Get dynamic content for this item
+              SELECT get_dynamic_content(
+                '{{ item.id }}', 
+                '{{ section.id }}',
+                (SELECT context->'user'->'preferences')
+              );
+            }}
+          </div>
+        {{ end }}
+      </section>
+    {{ end }}
+  </main>
+  <footer>{{ include footer }}</footer>
+</body>
+</html>$template40$,
+        $expected40$TEXT: "<!DOCTYPE html>
+<html>
+<head>
+  <title>"
+INTERPOLATE: "page.title"
+TEXT: "</title>
+  "
+INCLUDE: "meta_tags"
+TEXT: "
+</head>
+<body>
+  <header>"
+INCLUDE: "header"
+TEXT: "</header>
+  <main>
+    "
+SECTION: iterator="section", collection="page.sections"$expected40$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Complex nested structure with all tag types - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Complex nested structure with all tag types - FAILED', total_tests;
+    END IF;
+    
     -- Print summary
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';
