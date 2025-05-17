@@ -1193,16 +1193,17 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
     TemplateNode *current = node;
     JsonbValue *value;
     char *str_value;
-    char *debug_msg = palloc(1024);
+    int debug_msg_size = 4096;
+    char *debug_msg = palloc(debug_msg_size);
     
     while (current)
     {
-        snprintf(debug_msg, 1024, "Rendering node type: %.50s", tnt_to_string(current->type));
+        snprintf(debug_msg, debug_msg_size, "Rendering node type: %.50s", tnt_to_string(current->type));
 
         switch (current->type)
         {
             case TEMPLATE_NODE_TEXT:
-                snprintf(debug_msg, 1024, "%s TEXT: %.50s", debug_msg, current->value->text.content);
+                snprintf(debug_msg, debug_msg_size, "%s TEXT: %.50s", debug_msg, current->value->text.content);
                 if (current->value->text.content)
                 {
                     /* Preserve whitespace in text nodes */
@@ -1211,10 +1212,11 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                 break;
                 
             case TEMPLATE_NODE_INTERPOLATE:
-                snprintf(debug_msg, 1024, "%s INTERPOLATE: %.50s", debug_msg, current->value->interpolate.key);
+                snprintf(debug_msg, debug_msg_size, "%s INTERPOLATE: %.50s", debug_msg, current->value->interpolate.key);
                 if (current->value->interpolate.key)
                 {
                     /* Get the value from the JSONB context using the path */
+                    elog(DEBUG1, "define: %s", JsonbToCString(NULL, &define->root, VARSIZE_ANY_EXHDR(define)));
                     value = jsonb_get_by_path_internal(define, current->value->interpolate.key, context);
                     
                     if (value != NULL)
@@ -1224,6 +1226,7 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                         {
                             case jbvString:
                                 /* Preserve whitespace in string values */
+                                snprintf(debug_msg, debug_msg_size, "%s VALUE: %.50s", debug_msg, value->val.string.val);
                                 appendStringInfoString(result, value->val.string.val);
                                 break;
                                 
@@ -1263,17 +1266,17 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                 break;
                 
             case TEMPLATE_NODE_EXECUTE:
-                snprintf(debug_msg, 1024, "%s EXECUTE: %.50s", debug_msg, current->value->execute.code);
+                snprintf(debug_msg, debug_msg_size, "%s EXECUTE: %.50s", debug_msg, current->value->execute.code);
                 render_execute_tag(current->value->execute.code, define, result, context);
                 break;
                 
             case TEMPLATE_NODE_SECTION:
-                snprintf(debug_msg, 1024, "%s SECTION: %.50s", debug_msg, current->value->section.iterator);
+                snprintf(debug_msg, debug_msg_size, "%s SECTION: %.50s", debug_msg, current->value->section.iterator);
                 /* We'll implement section rendering later */
                 break;
                 
             case TEMPLATE_NODE_INCLUDE:
-                snprintf(debug_msg, 1024, "%s INCLUDE: %.50s", debug_msg, current->value->include.key);
+                snprintf(debug_msg, debug_msg_size, "%s INCLUDE: %.50s", debug_msg, current->value->include.key);
                 /* We'll implement include rendering later */
                 break;
                 
@@ -1711,8 +1714,16 @@ jsonb_get_by_path_internal(Jsonb *jb, const char *path_str, MemoryContext contex
                         result = MemoryContextAlloc(context, sizeof(JsonbValue));
                         *result = v;
                         
+                        /* For string values, we need to make a copy of the string data */
+                        if (result->type == jbvString)
+                        {
+                            char *str_copy = palloc(result->val.string.len + 1);
+                            memcpy(str_copy, result->val.string.val, result->val.string.len);
+                            str_copy[result->val.string.len] = '\0';
+                            result->val.string.val = str_copy;
+                        }
                         /* Convert to a Jsonb container */
-                        if (result->type == jbvBinary)
+                        else if (result->type == jbvBinary)
                         {
                             tmp_val.type = jbvBinary;
                             tmp_val.val.binary.data = result->val.binary.data;
@@ -1843,8 +1854,16 @@ jsonb_get_by_path_internal(Jsonb *jb, const char *path_str, MemoryContext contex
                         result = MemoryContextAlloc(context, sizeof(JsonbValue));
                         *result = v;
                         
+                        /* For string values, we need to make a copy of the string data */
+                        if (result->type == jbvString)
+                        {
+                            char *str_copy = palloc(result->val.string.len + 1);
+                            memcpy(str_copy, result->val.string.val, result->val.string.len);
+                            str_copy[result->val.string.len] = '\0';
+                            result->val.string.val = str_copy;
+                        }
                         /* Convert to a Jsonb container */
-                        if (result->type == jbvBinary)
+                        else if (result->type == jbvBinary)
                         {
                             tmp_val.type = jbvBinary;
                             tmp_val.val.binary.data = result->val.binary.data;
