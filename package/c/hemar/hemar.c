@@ -25,6 +25,19 @@ static void render_template(TemplateNode *node, Jsonb *define, StringInfo result
 static void render_execute_tag(const char *code, Jsonb *define, StringInfo result, MemoryContext context);
 static JsonbValue *jsonb_get_by_path_internal(Jsonb *jb, const char *path_str, MemoryContext context);
 
+char *tnt_to_string(TemplateNodeType type) {
+  switch (type) {
+    case TEMPLATE_NODE_SECTION: return "SECTION";
+    case TEMPLATE_NODE_INTERPOLATE: return "INTERPOLATE";
+    case TEMPLATE_NODE_EXECUTE: return "EXECUTE";
+    case TEMPLATE_NODE_INCLUDE: return "INCLUDE";
+    case TEMPLATE_NODE_TEXT: return "TEXT";
+    default: { 
+        return "UNKNOWN";
+    };
+  }
+}
+
 static const char *
 jbt_type_to_string(JsonbIteratorToken type)
 {
@@ -1178,31 +1191,103 @@ static void
 render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryContext context)
 {
     TemplateNode *current = node;
+    JsonbValue *value;
+    char *str_value;
+    char *debug_msg = palloc(1024);
     
     while (current)
     {
+        snprintf(debug_msg, 1024, "Rendering node type: %.50s", tnt_to_string(current->type));
+
         switch (current->type)
         {
             case TEMPLATE_NODE_TEXT:
+                snprintf(debug_msg, 1024, "%s TEXT: %.50s", debug_msg, current->value->text.content);
                 if (current->value->text.content)
+                {
+                    /* Preserve whitespace in text nodes */
                     appendStringInfoString(result, current->value->text.content);
+                }
+                break;
+                
+            case TEMPLATE_NODE_INTERPOLATE:
+                snprintf(debug_msg, 1024, "%s INTERPOLATE: %.50s", debug_msg, current->value->interpolate.key);
+                if (current->value->interpolate.key)
+                {
+                    /* Get the value from the JSONB context using the path */
+                    value = jsonb_get_by_path_internal(define, current->value->interpolate.key, context);
+                    
+                    if (value != NULL)
+                    {
+                        /* Convert the value to a string based on its type */
+                        switch (value->type)
+                        {
+                            case jbvString:
+                                /* Preserve whitespace in string values */
+                                appendStringInfoString(result, value->val.string.val);
+                                break;
+                                
+                            case jbvNumeric:
+                                str_value = DatumGetCString(DirectFunctionCall1(numeric_out, 
+                                    NumericGetDatum(value->val.numeric)));
+                                appendStringInfoString(result, str_value);
+                                pfree(str_value);
+                                break;
+                                
+                            case jbvBool:
+                                appendStringInfoString(result, value->val.boolean ? "true" : "false");
+                                break;
+                                
+                            case jbvNull:
+                                /* For null values, we don't output anything */
+                                break;
+                                
+                            case jbvBinary:
+                                /* For complex types (objects/arrays), convert to JSON string */
+                                str_value = DatumGetCString(DirectFunctionCall1(jsonb_out,
+                                    JsonbPGetDatum(JsonbValueToJsonb(value))));
+                                appendStringInfoString(result, str_value);
+                                pfree(str_value);
+                                break;
+                                
+                            default:
+                                elog(WARNING, "Unsupported JSONB value type in interpolation: %s",
+                                     jbv_type_to_string(value->type));
+                                break;
+                        }
+                        
+                        /* Free the value since it was allocated in our context */
+                        pfree(value);
+                    }
+                }
                 break;
                 
             case TEMPLATE_NODE_EXECUTE:
+                snprintf(debug_msg, 1024, "%s EXECUTE: %.50s", debug_msg, current->value->execute.code);
                 render_execute_tag(current->value->execute.code, define, result, context);
                 break;
                 
-            /* We'll implement these later */
-            case TEMPLATE_NODE_INTERPOLATE:
             case TEMPLATE_NODE_SECTION:
+                snprintf(debug_msg, 1024, "%s SECTION: %.50s", debug_msg, current->value->section.iterator);
+                /* We'll implement section rendering later */
+                break;
+                
             case TEMPLATE_NODE_INCLUDE:
+                snprintf(debug_msg, 1024, "%s INCLUDE: %.50s", debug_msg, current->value->include.key);
+                /* We'll implement include rendering later */
+                break;
+                
             default:
-                /* Skip for now */
+                elog(WARNING, "Unknown template node type: %d", current->type);
                 break;
         }
-        
+
+        elog(DEBUG1, "%s", debug_msg);
+
         current = current->next;
     }
+
+    pfree(debug_msg);
 }
 
 /* Helper function to calculate a simple hash of a string */

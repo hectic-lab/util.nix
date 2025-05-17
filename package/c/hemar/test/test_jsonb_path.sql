@@ -479,6 +479,22 @@ BEGIN
             total_tests, current_path, result, passed;
     END IF;
         
+    -- Test nested object path parsing
+    total_tests := total_tests + 1;
+    result := hemar.jsonb_get_by_path(
+        '{"user": {"profile": {"name": "John", "age": 30}}}'::jsonb,
+        'user.profile.name'
+    );
+    passed := result = '"John"'::jsonb;
+    passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
+    IF passed THEN
+        RAISE NOTICE 'Test %: Nested object path parsing (path="%"): % | PASSED: %', 
+            total_tests, current_path, result, passed;
+    ELSE
+        RAISE WARNING 'Test %: Nested object path parsing (path="%"): % | PASSED: % (expected: "John")', 
+            total_tests, current_path, result, passed;
+    END IF;
+        
     -- Print summary
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';
