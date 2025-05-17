@@ -21,6 +21,8 @@
 
 /* Forward declarations */
 static void template_node_to_string(TemplateNode *node, StringInfo result, int indent);
+static void render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryContext context);
+static void render_execute_tag(const char *code, Jsonb *define, StringInfo result, MemoryContext context);
 
 static const char *
 jbt_type_to_string(JsonbIteratorToken type)
@@ -494,9 +496,9 @@ template_parse_section(MemoryContext context, const char **s_ptr,
                 {
                     /* This is our matching end tag */
                     end_tag_start = *s;
-                    break;
-                }
-            }
+                break;
+	        }
+	    }
         }
         
         (*s)++;
@@ -679,7 +681,7 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
                 
                 /* If we've reached the matching closing brace, we're done */
                 if (brace_level == 0) {
-                    break;
+            break;
                 }
                 
                 *s += strlen(config->Syntax.Braces.close) - 1;  /* -1 because we'll increment s below */
@@ -1092,6 +1094,258 @@ template_node_to_string(TemplateNode *node, StringInfo result, int indent)
         
         current = current->next;
     }
+}
+
+/* Template rendering function */
+PG_FUNCTION_INFO_V1(pg_template_render);
+Datum
+pg_template_render(PG_FUNCTION_ARGS)
+{
+    Jsonb *define = PG_GETARG_JSONB_P(0);
+    text *template_text = PG_GETARG_TEXT_PP(1);
+    char *template_str = text_to_cstring(template_text);
+    const char *template_ptr = template_str;
+    MemoryContext old_context, render_context;
+    TemplateConfig config;
+    TemplateNode *root = NULL;
+    TemplateErrorCode error_code = TEMPLATE_ERROR_NONE;
+    StringInfoData result;
+    text *result_text = NULL;
+    
+    /* Create a memory context for rendering */
+    render_context = AllocSetContextCreate(CurrentMemoryContext,
+                                         "Template Render Context",
+                                         ALLOCSET_DEFAULT_SIZES);
+    
+    /* Switch to the new context for rendering */
+    old_context = MemoryContextSwitchTo(render_context);
+    
+    /* Initialize default config */
+    config = template_default_config(render_context);
+    
+    PG_TRY();
+    {
+        /* Parse the template */
+        root = template_parse(render_context, &template_ptr, &config, false, &error_code);
+        
+        /* Check for parsing errors */
+        if (error_code != TEMPLATE_ERROR_NONE || !root)
+        {
+            ereport(ERROR,
+                    (errcode(ERRCODE_SYNTAX_ERROR),
+                     errmsg("Template parsing error: %s", template_error_to_string(error_code, &config))));
+        }
+        
+        /* Initialize the result buffer */
+        initStringInfo(&result);
+        
+        /* Render the template */
+        render_template(root, define, &result, render_context);
+        
+        /* Switch back to the original memory context */
+        MemoryContextSwitchTo(old_context);
+        
+        /* Return the result */
+        result_text = cstring_to_text(result.data);
+        pfree(result.data);
+    }
+    PG_CATCH();
+    {
+        /* Switch back to the original memory context for error handling */
+        MemoryContextSwitchTo(old_context);
+        
+        /* Clean up */
+        if (template_str)
+            pfree(template_str);
+        
+        /* Delete the render context */
+        MemoryContextDelete(render_context);
+        
+        PG_RE_THROW();
+    }
+    PG_END_TRY();
+    
+    /* Clean up */
+    MemoryContextDelete(render_context);
+    pfree(template_str);
+    
+    PG_RETURN_TEXT_P(result_text);
+}
+
+/* Helper function to render a template node */
+static void
+render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryContext context)
+{
+    TemplateNode *current = node;
+    
+    while (current)
+    {
+        switch (current->type)
+        {
+            case TEMPLATE_NODE_TEXT:
+                if (current->value->text.content)
+                    appendStringInfoString(result, current->value->text.content);
+                break;
+                
+            case TEMPLATE_NODE_EXECUTE:
+                render_execute_tag(current->value->execute.code, define, result, context);
+                break;
+                
+            /* We'll implement these later */
+            case TEMPLATE_NODE_INTERPOLATE:
+            case TEMPLATE_NODE_SECTION:
+            case TEMPLATE_NODE_INCLUDE:
+            default:
+                /* Skip for now */
+                break;
+        }
+        
+        current = current->next;
+    }
+}
+
+/* Helper function to calculate a simple hash of a string */
+static uint32_t
+calculate_string_hash(const char *str)
+{
+    uint32_t hash = 5381;
+    int c;
+    
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+    
+    return hash;
+}
+
+/* Helper function to render an execute tag */
+static void
+render_execute_tag(const char *code, Jsonb *define, StringInfo result, MemoryContext context)
+{
+    int ret;
+    StringInfoData query;
+    StringInfoData exec_result;
+    char *trimmed_code;
+    size_t code_len;
+    uint32_t code_hash;
+    char func_name[64];
+    bool isnull;
+    bool function_exists;
+    
+    /* Connect to SPI */
+    if ((ret = SPI_connect()) < 0)
+        ereport(ERROR,
+                (errcode(ERRCODE_CONNECTION_EXCEPTION),
+                 errmsg("SPI_connect failed: %s", SPI_result_code_string(ret))));
+    
+    /* Create the query with the context variable */
+    initStringInfo(&query);
+    initStringInfo(&exec_result);
+    
+    /* Trim trailing semicolon if present to avoid double semicolons */
+    code_len = strlen(code);
+    trimmed_code = pstrdup(code);
+    while (code_len > 0 && (trimmed_code[code_len-1] == ';' || isspace((unsigned char)trimmed_code[code_len-1]))) {
+        trimmed_code[--code_len] = '\0';
+    }
+    
+    /* Calculate hash of the code */
+    code_hash = calculate_string_hash(trimmed_code);
+    snprintf(func_name, sizeof(func_name), "cache-%x", code_hash);
+    
+    /* Check if function exists */
+    appendStringInfo(&query, 
+                    "SELECT EXISTS (SELECT 1 FROM pg_proc p "
+                    "JOIN pg_namespace n ON p.pronamespace = n.oid "
+                    "WHERE n.nspname = 'hemar' AND p.proname = '%s');",
+                    func_name);
+    
+    ret = SPI_execute(query.data, true, 0);
+    if (ret != SPI_OK_SELECT)
+    {
+        SPI_finish();
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("Failed to check function existence: %s", SPI_result_code_string(ret))));
+    }
+    
+    function_exists = DatumGetBool(SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
+    
+    /* Reset query buffer for function creation */
+    resetStringInfo(&query);
+    
+    /* Only create function if it doesn't exist */
+    if (!function_exists)
+    {
+        elog(NOTICE, "Caching function %s", func_name);
+        elog(DEBUG1, "Content: %s", trimmed_code);
+
+        appendStringInfo(&query, 
+                        "CREATE OR REPLACE FUNCTION \"hemar\".\"%s\"(context jsonb) RETURNS text LANGUAGE plpgsql AS $$ "
+                        "BEGIN "
+                        "  %s; "    
+                        " RETURN '';" // NOTICE(yukkop): Trailing return in case user does not return anything
+                        "END $$;",
+                        func_name,
+                        trimmed_code);
+        
+        /* Execute the query */
+        ret = SPI_execute(query.data, false, 0);
+        
+        if (ret != SPI_OK_UTILITY)
+        {
+            SPI_finish();
+            ereport(ERROR,
+                    (errcode(ERRCODE_SYNTAX_ERROR),
+                     errmsg("Failed to execute SQL in template: %s", SPI_result_code_string(ret))));
+        }
+    }
+    
+    /* Reset query buffer for function execution */
+    resetStringInfo(&query);
+    
+    /* Execute the function */
+    appendStringInfo(&query, "SELECT \"hemar\".\"%s\"($1);", func_name);
+    
+    /* Prepare arguments for SPI_execute_with_args */
+    Oid argtypes[1] = {JSONBOID};
+    Datum argvalues[1] = {JsonbPGetDatum(define)};
+    
+    ret = SPI_execute_with_args(query.data, 1, argtypes, argvalues, NULL, true, 0);
+    
+    if (ret != SPI_OK_SELECT)
+    {
+        SPI_finish();
+        ereport(ERROR,
+                (errcode(ERRCODE_SYNTAX_ERROR),
+                 errmsg("Failed to execute function: %s", SPI_result_code_string(ret))));
+    }
+    
+    /* Get the result */
+    if (SPI_processed > 0)
+    {
+        Datum content = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+        
+        if (!isnull)
+        {
+            char *content_str = TextDatumGetCString(content);
+            appendStringInfoString(&exec_result, content_str);
+            pfree(content_str);
+        }
+    }
+    
+    /* Append any captured output to the result */
+    if (exec_result.len > 0)
+    {
+        appendStringInfoString(result, exec_result.data);
+    }
+    
+    /* Clean up */
+    pfree(query.data);
+    pfree(exec_result.data);
+    pfree(trimmed_code);
+    
+    /* Disconnect from SPI */
+    SPI_finish();
 }
 
 /* Function declarations */

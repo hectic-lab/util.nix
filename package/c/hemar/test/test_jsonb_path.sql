@@ -482,12 +482,12 @@ BEGIN
     -- Print summary
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';
-        RAISE NOTICE 'SUMMARY: % of % tests passed (100%%)', 
+        RAISE NOTICE 'SUMMARY: % of % jsonb_get_by_path tests passed (100%%)', 
             passed_tests, total_tests;
         RAISE NOTICE '------------------------------------';
     ELSE
         RAISE WARNING '------------------------------------';
-        RAISE WARNING 'SUMMARY: % of % tests passed (%)', 
+        RAISE WARNING 'SUMMARY: % of % jsonb_get_by_path tests passed (%)', 
             passed_tests, 
             total_tests, 
             round((passed_tests::numeric / total_tests::numeric) * 100, 2) || '%';
@@ -495,6 +495,6 @@ BEGIN
     END IF;
 
     IF passed_tests != total_tests THEN
-      RAISE EXCEPTION 'Tests failed: % of % tests did not pass', (total_tests - passed_tests), total_tests;
+      RAISE EXCEPTION 'Tests failed: % of % jsonb_get_by_path tests did not pass', (total_tests - passed_tests), total_tests;
     END IF;
 END $$; 

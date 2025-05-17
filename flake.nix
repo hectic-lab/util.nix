@@ -177,6 +177,9 @@
               jq
               yq-go
               curl
+	      (writeScriptBin "hemar-check" ''
+                ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null vm-postgres 'zsh -c check'
+	      '')
             ]);
 
           # environment
@@ -324,18 +327,29 @@
                   ALTER DATABASE postgres SET client_min_messages TO DEBUG1;
                   CREATE EXTENSION "hemar";
 
-		  -- SELECT hemar.parse('{% zalupa %}');
-		  SELECT hemar.render('{"a": "b"}'::JSONB, 'a {% a %}');
-		  SELECT hemar.render('{"a": ["b", "c"]}'::JSONB, 'a {% for i in a do text %}');
-		  SELECT hemar.render('{"a": {"g": ["b", "c"]}}'::JSONB, 'a {% for i in a.g do {% i %} %}');
-		  SELECT hemar.render('{"a": {"g": ["b", "c"], "b": [{"c": "a"}, {"c": "b"}]}}'::JSONB, 'a {% for i in a.b do {% i.c %} %}');
+                  \i ${./package/c/hemar/test/mod.sql}
+
+		  -- SELECT hemar.parse('{{ zalupa }}');
+		  -- SELECT hemar.render('{"a": "b"}'::JSONB, 'a {{ a }}');
+		  -- SELECT hemar.render('{"a": ["b", "c"]}'::JSONB, 'a {{ for i in a do text }}');
+		  -- SELECT hemar.render('{"a": {"g": ["b", "c"]}}'::JSONB, 'a {{ for i in a.g do {{ i }} }}');
+		  -- SELECT hemar.render('{"a": {"b": [{"c": "a"}, {"c": "b"}]}}'::JSONB, 'a {{ for i in a.b do text }}');
+		  -- SELECT hemar.render('{"a": {"g": ["b", "c"], "b": [{"c": "a"}, {"c": "b"}]}}'::JSONB, 'a {{ for i in a.g do text }}');
+		  -- SELECT hemar.render('{"a": {"g": ["b", "c"]}}'::JSONB, 'a {{ for i in a.g do text {{ i }} text }}');
+		  -- SELECT hemar.render('{"a": {"g": ["b", "c"]}}'::JSONB, 'a {{ a.g[1] }} {{ a.g[0] }}');
+		  -- SELECT hemar.render('{"a": {"g": ["b", ["c", "d", "g"]]}}'::JSONB, 'a {{ a.g[1][2] }} {{ a.g[1][1] }} {{ a.g[1][0] }} {{ a.g[0] }}');
                 '';
               };                   
  
-              environment.systemPackages =  with pkgs; [ gdb ];
+              environment.systemPackages =  with pkgs; [
+	        gdb
+		hectic.nvim-pager
+		(writeScriptBin "check" ''
+	          journalctl -u postgresql.service | grep postgresql-post-start | sed 's|psql:/nix/store/[^:]*:[0-9]*: ||' | sed 's|^[^:]*:[^:]*:[^:]*: ||' | grep -v '^\[.*\]' | ${hectic.prettify-log}/bin/prettify-log --color-output
+		'')
+	       ];
               programs.zsh.shellAliases = self.lib.sharedShellAliases // {
 	        conn = "sudo su postgres -c 'psql -p 64317'";
-	        check = "journalctl -u postgresql";
 	      };
 
               virtualisation = {
