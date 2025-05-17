@@ -1060,6 +1060,23 @@ SECTION: iterator="section", collection="page.sections"$expected40$
     ELSE
         RAISE WARNING 'Test %: Complex nested structure with all tag types - FAILED', total_tests;
     END IF;
+
+    -- Test 41: Subsequent object interpolation
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $hemar$User: {{ user.profile.name }}, Age: {{ user.profile.age }}$hemar$,
+        $zalupa$Template parsed successfully. Structure:
+TEXT: "User: "
+INTERPOLATE: "user.profile.name"
+TEXT: ", Age: "
+INTERPOLATE: "user.profile.age"$zalupa$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: Subsequent object interpolation - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: Subsequent object interpolation - FAILED', total_tests;
+    END IF;
     
     -- Print summary
     IF passed_tests = total_tests THEN
