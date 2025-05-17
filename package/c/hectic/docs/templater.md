@@ -10,11 +10,11 @@ The templating engine supports flexible customization of tag syntax parameters. 
 
 - **Open Brace**  
   A non-empty string marking the beginning of a tag.  
-  *Example:* `{%`
+  *Example:* `{{`
 
 - **Close Brace**  
   A non-empty string marking the end of a tag.  
-  *Example:* `%}`
+  *Example:* `}}`
 
 ---
 
@@ -31,22 +31,22 @@ Parameters defining syntax for blocks controlling loops or nested structures.
   *Example:* ` in ` | `#`
 
 - **Post-Suffix**  
-  Finalizes the section declaration block.  
-  *Example:* `do ` | `:`
+  Finalizes the section block.  
+  *Example:* `end ` | `/`
 
 *Example*
 
 *Section Example:*
 ```tpl
-{% for item in items do
-  {% item.name %}
+{{ for item in items }}
+  {{ item.name }}
   some text
-  {% for inner_item in item.inner_items join '\n' do
+  {{ for inner_item in item.inner_items join '\n' }}
     <p>some other text</p>
-    {% inner_item %}
-  %}
+    {{ inner_item }}
+  {{ end }}
   \n
-%}
+{{ end }}
 ```
 *Context Example:*
 ```json
@@ -68,7 +68,7 @@ Inserts variable values or expression results directly into templates.
 
 *Interpolation Example:*
 ```tpl
-  {% interpolation_field %}
+  {{ interpolation_field }}
 ```
 *Context Example:*
 ```json
@@ -87,7 +87,7 @@ Includes content from other templates.
 *Include Example:*
 ```tpl
   text before
-  {% include inner_template %}
+  {{ include inner_template }}
   <div id="footer">...</div>
 ```
 *Context Examples:*
@@ -96,7 +96,7 @@ Includes content from other templates.
 {
   "include inner_template": [
     {
-      "template": "{% field %}",
+      "template": "{{ field }}",
       "context": { "field": "value" }
     }
   ]
@@ -107,7 +107,7 @@ Includes content from other templates.
   "field": "value",
   "include inner_template": [
     {
-      "template": "{% field %}"
+      "template": "{{ field }}"
     }
   ]
 }
@@ -124,7 +124,7 @@ Includes content from other templates.
 ```
 
 ## Execution Tags
-**Note:** Currently not included in C library; implemented as a wrapper on applicable platforms.
+**Note:** implemented as a wrapper on applicable platforms, in that case must evel Postgresql functions.
 Enables calling functions with arguments, or execute code. Have hardcoded context var - alows use template context 
 - **Prefix**  
   Denotes a function call.  
@@ -132,8 +132,8 @@ Enables calling functions with arguments, or execute code. Have hardcoded contex
 
 *Function Example:*
 ```tpl
-  {% exec RETURN my_function(context->arg1, context->arg2, 'literal') %}
-  {% exec RETURN 'aaaaa' %}
+  {{ exec RETURN my_function(context->arg1, context->arg2, 'literal') }}
+  {{ exec RETURN 'aaaaa' }}
 ```
 
 ## Notes
@@ -149,17 +149,17 @@ Enables calling functions with arguments, or execute code. Have hardcoded contex
 ```tpl
   <div>text before<div>
 
-  {% include inner_template %}
+  {{ include inner_template }}
 
-  {% name %}
+  {{ name }}
 
-  {% for item in array do
-    some text: {% name2 %}
-    {% item.name %}
-  %}
+  {{ for item in array }}
+    some text: {{ name2 }}
+    {{ item.name }}
+  {{ end }}
 
   <div>code insertion:</div>
-  {% execute
+  {{ execute
     context + '{"name3": "zalupa"}';
 
     IF context->condition THEN
@@ -168,7 +168,7 @@ Enables calling functions with arguments, or execute code. Have hardcoded contex
       RETURN 'some text';
     END
     RETURN 'some other text';
-  %}
+  }}
 
   <div id="footer">...</div>
 ```
