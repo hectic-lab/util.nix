@@ -23,6 +23,7 @@
 static void template_node_to_string(TemplateNode *node, StringInfo result, int indent);
 static void render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryContext context);
 static void render_execute_tag(const char *code, Jsonb *define, StringInfo result, MemoryContext context);
+static JsonbValue *jsonb_get_by_path_internal(Jsonb *jb, const char *path_str, MemoryContext context);
 
 static const char *
 jbt_type_to_string(JsonbIteratorToken type)
@@ -1490,17 +1491,14 @@ parse_path_string(const char *path_str, int *num_segments)
 }
 
 /*
- * Get JSONB value by path
- * Input: JSONB document and path string
- * Output: JSONB value at the specified path or NULL if path is invalid
+ * Internal function to get JSONB value by path
+ * Input: JSONB document, path string, and memory context
+ * Output: JsonbValue at the specified path or NULL if path is invalid
+ * Note: The returned JsonbValue is allocated in the provided context
  */
-Datum
-pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
+static JsonbValue *
+jsonb_get_by_path_internal(Jsonb *jb, const char *path_str, MemoryContext context)
 {
-    Jsonb *jb = PG_GETARG_JSONB_P(0);
-    text *path_text = PG_GETARG_TEXT_PP(1);
-    char *path_str = text_to_cstring(path_text);
-    
     JsonbValue *result = NULL;
     JsonbValue tmp_val;
     JsonbIterator *it;
@@ -1519,8 +1517,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
     if (path_str == NULL || *path_str == '\0')
     {
         elog(WARNING, "path is empty, returning NULL");
-        pfree(path_str);
-        PG_RETURN_NULL();
+        return NULL;
     }
     
     /* Parse the path string */
@@ -1530,9 +1527,8 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
     {
         /* Free allocated memory before returning */
         elog(WARNING, "no segments in path, returning NULL");
-        pfree(path_str);
         pfree(segments);
-        PG_RETURN_NULL();
+        return NULL;
     }
     
     /* Start iterating through the JSONB document */
@@ -1550,8 +1546,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
             for (i = 0; i < num_segments; i++)
                 pfree(segments[i]);
             pfree(segments);
-            pfree(path_str);
-            PG_RETURN_NULL();
+            return NULL;
         }
     }
     else if (token == WJB_BEGIN_OBJECT)
@@ -1565,8 +1560,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
             for (i = 0; i < num_segments; i++)
                 pfree(segments[i]);
             pfree(segments);
-            pfree(path_str);
-            PG_RETURN_NULL();
+            return NULL;
         }
     }
     else
@@ -1577,8 +1571,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
         for (i = 0; i < num_segments; i++)
             pfree(segments[i]);
         pfree(segments);
-        pfree(path_str);
-        PG_RETURN_NULL();
+        return NULL;
     }
     
     /* Process each path segment */
@@ -1597,8 +1590,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                 for (i = 0; i < num_segments; i++)
                     pfree(segments[i]);
                 pfree(segments);
-                pfree(path_str);
-                PG_RETURN_NULL();
+                return NULL;
             }
             
             /* Extract the array index */
@@ -1610,8 +1602,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                 for (i = 0; i < num_segments; i++)
                     pfree(segments[i]);
                 pfree(segments);
-                pfree(path_str);
-                PG_RETURN_NULL();
+                return NULL;
             }
             
             /* Navigate to the specified array element */
@@ -1632,7 +1623,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                     if (current_segment == num_segments - 1)
                     {
                         /* Create a standalone JsonbValue for the result */
-                        result = palloc(sizeof(JsonbValue));
+                        result = MemoryContextAlloc(context, sizeof(JsonbValue));
                         *result = v;
                         
                         /* Convert to a Jsonb container */
@@ -1651,10 +1642,8 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                         for (i = 0; i < num_segments; i++)
                             pfree(segments[i]);
                         pfree(segments);
-                        pfree(path_str);
                         
-                        /* Return the result as a new Jsonb */
-                        PG_RETURN_JSONB_P(JsonbValueToJsonb(&tmp_val));
+                        return result;
                     }
                     
                     /* Not the last segment, continue traversing */
@@ -1680,9 +1669,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                         for (i = 0; i < num_segments; i++)
                             pfree(segments[i]);
                         pfree(segments);
-                        pfree(path_str);
-                        
-                        PG_RETURN_NULL();
+                        return NULL;
                     }
                 }
                 
@@ -1713,9 +1700,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                 for (i = 0; i < num_segments; i++)
                     pfree(segments[i]);
                 pfree(segments);
-                pfree(path_str);
-                
-                PG_RETURN_NULL();
+                return NULL;
             }
             
             /* If we found the element and broke out of the loop to process the next segment,
@@ -1734,9 +1719,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                 for (i = 0; i < num_segments; i++)
                     pfree(segments[i]);
                 pfree(segments);
-                pfree(path_str);
-                
-                PG_RETURN_NULL();
+                return NULL;
             }
             
             /* Navigate to the specified field */
@@ -1753,8 +1736,6 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                     for (i = 0; i < num_segments; i++)
                         pfree(segments[i]);
                     pfree(segments);
-                    pfree(path_str);
-                    
                     ereport(ERROR,
                             (errcode(ERRCODE_INTERNAL_ERROR),
                              errmsg("unexpected JSONB iterator token")));
@@ -1774,7 +1755,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                     if (current_segment == num_segments - 1)
                     {
                         /* Create a standalone JsonbValue for the result */
-                        result = palloc(sizeof(JsonbValue));
+                        result = MemoryContextAlloc(context, sizeof(JsonbValue));
                         *result = v;
                         
                         /* Convert to a Jsonb container */
@@ -1793,10 +1774,8 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                         for (i = 0; i < num_segments; i++)
                             pfree(segments[i]);
                         pfree(segments);
-                        pfree(path_str);
                         
-                        /* Return the result as a new Jsonb */
-                        PG_RETURN_JSONB_P(JsonbValueToJsonb(&tmp_val));
+                        return result;
                     }
                     
                     /* Not the last segment, continue traversing */
@@ -1822,9 +1801,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                         for (i = 0; i < num_segments; i++)
                             pfree(segments[i]);
                         pfree(segments);
-                        pfree(path_str);
-                        
-                        PG_RETURN_NULL();
+                        return NULL;
                     }
                 }
                 else
@@ -1858,9 +1835,7 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
                 for (i = 0; i < num_segments; i++)
                     pfree(segments[i]);
                 pfree(segments);
-                pfree(path_str);
-                
-                PG_RETURN_NULL();
+                return NULL;
             }
             
             /* If we found the field and broke out of the loop to process the next segment,
@@ -1878,7 +1853,49 @@ pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
     for (i = 0; i < num_segments; i++)
         pfree(segments[i]);
     pfree(segments);
+    
+    return NULL;
+}
+
+/*
+ * Get JSONB value by path
+ * Input: JSONB document and path string
+ * Output: JSONB value at the specified path or NULL if path is invalid
+ */
+Datum
+pg_jsonb_get_by_path(PG_FUNCTION_ARGS)
+{
+    Jsonb *jb = PG_GETARG_JSONB_P(0);
+    text *path_text = PG_GETARG_TEXT_PP(1);
+    char *path_str = text_to_cstring(path_text);
+    JsonbValue *result;
+    JsonbValue tmp_val;
+    
+    /* Use the internal function to get the value */
+    result = jsonb_get_by_path_internal(jb, path_str, CurrentMemoryContext);
+    
+    if (result == NULL)
+    {
+        pfree(path_str);
+        PG_RETURN_NULL();
+    }
+    
+    /* Convert to a Jsonb container */
+    if (result->type == jbvBinary)
+    {
+        tmp_val.type = jbvBinary;
+        tmp_val.val.binary.data = result->val.binary.data;
+        tmp_val.val.binary.len = result->val.binary.len;
+    }
+    else
+    {
+        tmp_val = *result;
+    }
+    
+    /* Free allocated memory */
+    pfree(result);
     pfree(path_str);
     
-    PG_RETURN_NULL();
+    /* Return the result as a new Jsonb */
+    PG_RETURN_JSONB_P(JsonbValueToJsonb(&tmp_val));
 }
