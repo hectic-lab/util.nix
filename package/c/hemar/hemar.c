@@ -1195,11 +1195,12 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
     char *str_value;
     int debug_msg_size = 4096;
     char *debug_msg = palloc(debug_msg_size);
+
+    elog(DEBUG1, "define: %s", JsonbToCString(NULL, &define->root, VARSIZE_ANY_EXHDR(define)));
     
     while (current)
     {
         snprintf(debug_msg, debug_msg_size, "Rendering node type: %.50s", tnt_to_string(current->type));
-
         switch (current->type)
         {
             case TEMPLATE_NODE_TEXT:
@@ -1216,7 +1217,6 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                 if (current->value->interpolate.key)
                 {
                     /* Get the value from the JSONB context using the path */
-                    elog(DEBUG1, "define: %s", JsonbToCString(NULL, &define->root, VARSIZE_ANY_EXHDR(define)));
                     value = jsonb_get_by_path_internal(define, current->value->interpolate.key, context);
                     
                     if (value != NULL)
@@ -1263,16 +1263,246 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                         pfree(value);
                     }
                 }
+                else
+                {
+                    elog(WARNING, "Interpolation key is not set");
+                }
                 break;
                 
             case TEMPLATE_NODE_EXECUTE:
                 snprintf(debug_msg, debug_msg_size, "%s EXECUTE: %.50s", debug_msg, current->value->execute.code);
                 render_execute_tag(current->value->execute.code, define, result, context);
                 break;
-                
+
             case TEMPLATE_NODE_SECTION:
                 snprintf(debug_msg, debug_msg_size, "%s SECTION: %.50s", debug_msg, current->value->section.iterator);
-                /* We'll implement section rendering later */
+                if (!current->value->section.collection)
+                {
+                    elog(WARNING, "Section collection is not set");
+                    break;  
+                }
+
+                if (!current->value->section.iterator)
+                {
+                    elog(WARNING, "Section iterator is not set");
+                    break;  
+                }
+
+                value = jsonb_get_by_path_internal(define, current->value->section.collection, context);
+                
+                if (value != NULL)
+                {
+                    /* Convert the value to a string based on its type */
+                    /* must render body with context (define) concatenated with iterator item */
+                    switch (value->type)
+                    {
+                        case jbvString:
+                            /* iterate by string, where item is char */
+                            {
+                                const char *str = value->val.string.val;
+                                for (int i = 0; i < value->val.string.len; i++)
+                                {
+                                    /* Create a new context with the current character */
+                                    JsonbValue char_val;
+                                    char_val.type = jbvString;
+                                    char_val.val.string.val = pstrdup((char[]){str[i], '\0'});
+                                    char_val.val.string.len = 1;
+                                    
+                                    /* Create a new context with the iterator value */
+                                    JsonbValue *new_context = palloc(sizeof(JsonbValue));
+                                    new_context->type = jbvObject;
+                                    
+                                    /* Create a new JSONB object */
+                                    JsonbParseState *parse_state = NULL;
+                                    JsonbValue *res = pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
+                                    
+                                    /* Copy the original context */
+                                    JsonbIterator *it = JsonbIteratorInit(&define->root);
+                                    JsonbIteratorToken token;
+                                    JsonbValue v;
+                                    
+                                    while ((token = JsonbIteratorNext(&it, &v, true)) != WJB_DONE)
+                                    {
+                                        if (token == WJB_KEY)
+                                        {
+                                            /* Add the key */
+                                            pushJsonbValue(&parse_state, WJB_KEY, &v);
+                                        }
+                                        else if (token == WJB_VALUE)
+                                        {
+                                            /* Add the value */
+                                            pushJsonbValue(&parse_state, WJB_VALUE, &v);
+                                        }
+                                    }
+                                    
+                                    /* Add the iterator value */
+                                    JsonbValue key_val;
+                                    key_val.type = jbvString;
+                                    key_val.val.string.val = pstrdup(current->value->section.iterator);
+                                    key_val.val.string.len = strlen(current->value->section.iterator);
+                                    pushJsonbValue(&parse_state, WJB_KEY, &key_val);
+                                    pushJsonbValue(&parse_state, WJB_VALUE, &char_val);
+                                    
+                                    /* Finish the object */
+                                    res = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+                                    
+                                    /* Convert to Jsonb */
+                                    Jsonb *context_jsonb = JsonbValueToJsonb(res);
+                                    
+                                    /* Render the section body with the new context */
+                                    render_template(current->value->section.body, context_jsonb, result, context);
+                                    
+                                    /* Free the temporary values */
+                                    pfree(char_val.val.string.val);
+                                    pfree(key_val.val.string.val);
+                                    pfree(new_context);
+                                }
+                            }
+                            break;
+                            
+                        case jbvNumeric:
+                            elog(WARNING, "Numeric values cannot be used as section collections");
+                            break;
+                            
+                        case jbvBool:
+                            if (value->val.boolean)
+                            {
+                                /* Render the section body with the original context */
+                                render_template(current->value->section.body, define, result, context);
+                            }
+                            break;
+                            
+                        case jbvNull:
+                            /* Don't render anything for null values */
+                            break;
+
+                        case jbvBinary:
+                            /* iterate by array as expected or object where item is key/value pair */
+                            {
+                                JsonbIterator *it = JsonbIteratorInit((JsonbContainer *)value->val.binary.data);
+                                JsonbIteratorToken token;
+                                JsonbValue v;
+                                
+                                /* Get the container type */
+                                token = JsonbIteratorNext(&it, &v, true);
+                                
+                                if (token == WJB_BEGIN_ARRAY)
+                                {
+                                    /* Iterate through array elements */
+                                    int index = 0;
+                                    while ((token = JsonbIteratorNext(&it, &v, true)) != WJB_END_ARRAY)
+                                    {
+                                        /* Create a new context with the current element */
+                                        JsonbValue *new_context = palloc(sizeof(JsonbValue));
+                                        new_context->type = jbvObject;
+                                        
+                                        /* Copy the original context */
+                                        JsonbIterator *ctx_it = JsonbIteratorInit(&define->root);
+                                        JsonbIteratorToken ctx_token;
+                                        JsonbValue ctx_v;
+                                        
+                                        while ((ctx_token = JsonbIteratorNext(&ctx_it, &ctx_v, true)) != WJB_DONE)
+                                        {
+                                            if (ctx_token == WJB_KEY)
+                                            {
+                                                /* Add the key */
+                                                JsonbValue key_val;
+                                                key_val.type = jbvString;
+                                                key_val.val.string.val = pstrdup(ctx_v.val.string.val);
+                                                key_val.val.string.len = ctx_v.val.string.len;
+                                                JsonbValueToJsonb(&key_val);
+                                            }
+                                            else if (ctx_token == WJB_VALUE)
+                                            {
+                                                /* Add the value */
+                                                JsonbValueToJsonb(&ctx_v);
+                                            }
+                                        }
+                                        
+                                        /* Add the iterator value */
+                                        JsonbValue key_val;
+                                        key_val.type = jbvString;
+                                        key_val.val.string.val = pstrdup(current->value->section.iterator);
+                                        key_val.val.string.len = strlen(current->value->section.iterator);
+                                        JsonbValueToJsonb(&key_val);
+                                        JsonbValueToJsonb(&v);
+                                        
+                                        /* Render the section body with the new context */
+                                        render_template(current->value->section.body, JsonbValueToJsonb(new_context), result, context);
+                                        
+                                        /* Free the temporary values */
+                                        pfree(new_context);
+                                        index++;
+                                    }
+                                }
+                                else if (token == WJB_BEGIN_OBJECT)
+                                {
+                                    /* Iterate through object key-value pairs */
+                                    while ((token = JsonbIteratorNext(&it, &v, true)) != WJB_END_OBJECT)
+                                    {
+                                        if (token == WJB_KEY)
+                                        {
+                                            /* Create a new context with the current key-value pair */
+                                            JsonbValue *new_context = palloc(sizeof(JsonbValue));
+                                            new_context->type = jbvObject;
+                                            
+                                            /* Copy the original context */
+                                            JsonbIterator *ctx_it = JsonbIteratorInit(&define->root);
+                                            JsonbIteratorToken ctx_token;
+                                            JsonbValue ctx_v;
+                                            
+                                            while ((ctx_token = JsonbIteratorNext(&ctx_it, &ctx_v, true)) != WJB_DONE)
+                                            {
+                                                if (ctx_token == WJB_KEY)
+                                                {
+                                                    /* Add the key */
+                                                    JsonbValue key_val;
+                                                    key_val.type = jbvString;
+                                                    key_val.val.string.val = pstrdup(ctx_v.val.string.val);
+                                                    key_val.val.string.len = ctx_v.val.string.len;
+                                                    JsonbValueToJsonb(&key_val);
+                                                }
+                                                else if (ctx_token == WJB_VALUE)
+                                                {
+                                                    /* Add the value */
+                                                    JsonbValueToJsonb(&ctx_v);
+                                                }
+                                            }
+                                            
+                                            /* Add the iterator value (key) */
+                                            JsonbValue key_val;
+                                            key_val.type = jbvString;
+                                            key_val.val.string.val = pstrdup(current->value->section.iterator);
+                                            key_val.val.string.len = strlen(current->value->section.iterator);
+                                            JsonbValueToJsonb(&key_val);
+                                            JsonbValueToJsonb(&v);
+                                            
+                                            /* Get the value */
+                                            token = JsonbIteratorNext(&it, &v, true);
+                                            
+                                            /* Add the value */
+                                            JsonbValueToJsonb(&v);
+                                            
+                                            /* Render the section body with the new context */
+                                            render_template(current->value->section.body, JsonbValueToJsonb(new_context), result, context);
+                                            
+                                            /* Free the temporary values */
+                                            pfree(new_context);
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                            
+                        default:
+                            elog(WARNING, "Unsupported JSONB value type in section: %s",
+                                 jbv_type_to_string(value->type));
+                            break;
+                    }
+                    
+                    /* Free the value since it was allocated in our context */
+                    pfree(value);
+                }
                 break;
                 
             case TEMPLATE_NODE_INCLUDE:
