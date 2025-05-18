@@ -94,32 +94,32 @@ Includes content from other templates.
 ```json
 // Separate context
 {
-  "include inner_template": [
-    {
+  "include": {
+  "inner_template": {
       "template": "{{ field }}",
       "context": { "field": "value" }
     }
-  ]
+  }
 }
 
 // Shared root context
 {
   "field": "value",
-  "include inner_template": [
-    {
+  "include": {
+    "inner_template": {
       "template": "{{ field }}"
     }
-  ]
+  }
 }
 
 // Plain text inclusion
 {
   "field": "value",
-  "include inner_template": [
-    {
+  "include": {
+    "inner_template": {
       "content": "<p>value</p>"
     }
-  ]
+  }
 }
 ```
 
