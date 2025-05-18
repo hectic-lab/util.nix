@@ -4,4 +4,5 @@ BEGIN;
   \ir test_render_exec.sql
   \ir test_render_interpolate.sql
   \ir test_render_section.sql
+  \ir test_render_include.sql
 ROLLBACK;
