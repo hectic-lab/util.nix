@@ -1547,9 +1547,13 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                         /* Get the include data from the context */
                         JsonbValue *include_data = jsonb_get_by_path_internal(define, include_path, context);
 
-                        elog(DEBUG1, "Include data: %s", JsonbToCString(NULL, &JsonbValueToJsonb(include_data)->root, VARSIZE_ANY_EXHDR(JsonbValueToJsonb(include_data))));
+                        if (!include_data)
+                        {
+                            elog(WARNING, "Include data not found");
+                            break;
+                        }
                         
-                        if (include_data != NULL && include_data->type == jbvBinary)
+                        if (include_data->type == jbvBinary)
                         {
                             JsonbIterator *it = JsonbIteratorInit((JsonbContainer *)include_data->val.binary.data);
                             JsonbIteratorToken token;

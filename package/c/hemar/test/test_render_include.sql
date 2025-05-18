@@ -177,6 +177,44 @@ BEGIN
         RAISE WARNING 'Test % failed: Should have raised an error for invalid include data', total_tests;
     END;
 
+    -- Test 8: Error handling - unexisting include object
+    total_tests := total_tests + 1;
+    BEGIN
+        result := hemar.render(
+                '{}'::jsonb,
+            '{{ include invalid_template }}'
+        );
+
+        IF result = '' THEN
+            RAISE NOTICE 'Test % passed: Error handling for unexisting include object works correctly', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test % failed: Expected "", got "%"', total_tests, result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test % failed: Should have raised an error for unexisting include object', total_tests;
+    END;
+
+    -- Test 9: Error handling - unexisting include data
+    total_tests := total_tests + 1;
+    BEGIN
+        result := hemar.render(
+                '{
+                    "include": { }
+                }'::jsonb,
+            '{{ include invalid_template }}'
+        );
+
+        IF result = '' THEN
+            RAISE NOTICE 'Test % passed: Error handling for unexisting include data works correctly', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test % failed: Expected "", got "%"', total_tests, result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test % failed: Should have raised an error for unexisting include data', total_tests;
+    END;
+
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';
         RAISE NOTICE 'SUMMARY: % of % template include tests passed (100%%)', 

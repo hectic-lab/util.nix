@@ -9,52 +9,53 @@ DECLARE
 BEGIN
     -- Test 1: Complex template with all tag types
     total_tests := total_tests + 1;
-    test_result := hemar.render(
-        '{
-            "page": {
-                "title": "My Page",
-                "sections": [
-                    {
-                        "id": "section1",
-                        "title": "Section 1",
-                        "items": [
-                            {
-                                "id": "item1",
-                                "status": "active",
-                                "content": "Item 1 Content",
-                                "template": "item_template"
-                            },
-                            {
-                                "id": "item2",
-                                "status": "inactive",
-                                "content": "Item 2 Content",
-                                "template": "item_template"
-                            }
-                        ]
-                    }
-                ]
-            },
-            "include": {
-                "meta_tags": {
-                    "content": "<meta name=\"description\" content=\"Test Page\">"
-                },
-                "header": {
-                    "template": "Welcome to {{ page.title }}!",
-                    "context": {
-                        "page": {
-                            "title": "My Page"
+    BEGIN
+        test_result := hemar.render(
+            '{
+                "page": {
+                    "title": "My Page",
+                    "sections": [
+                        {
+                            "id": "section1",
+                            "title": "Section 1",
+                            "items": [
+                                {
+                                    "id": "item1",
+                                    "status": "active",
+                                    "content": "Item 1 Content",
+                                    "template": "item_template"
+                                },
+                                {
+                                    "id": "item2",
+                                    "status": "inactive",
+                                    "content": "Item 2 Content",
+                                    "template": "item_template"
+                                }
+                            ]
                         }
+                    ]
+                },
+                "include": {
+                    "meta_tags": {
+                        "content": "<meta name=\"description\" content=\"Test Page\">"
+                    },
+                    "header": {
+                        "template": "Welcome to {{ page.title }}!",
+                        "context": {
+                            "page": {
+                                "title": "My Page"
+                            }
+                        }
+                    },
+                    "item_template": {
+                        "template": "Status: {{ status }}, Content: {{ content }}"
+                    },
+                    "footer": {
+                        "content": "<footer>Copyright 2024</footer>"
                     }
-                },
-                "item_template": {
-                    "template": "Status: {{ status }}, Content: {{ content }}"
-                },
-                "footer": {
-                    "content": "<footer>Copyright 2024</footer>"
                 }
-            }
-        }'::jsonb,
-        $template$<!DOCTYPE html>
+            }'::jsonb,
+            $template$<!DOCTYPE html>
 <html>
 <head>
     <title>{{ page.title }}</title>
@@ -88,9 +89,9 @@ BEGIN
     <footer>{{ include footer }}</footer>
 </body>
 </html>$template$
-    );
+        );
     
-    expected := '<!DOCTYPE html>
+        expected := '<!DOCTYPE html>
 <html>
 <head>
     <title>My Page</title>
@@ -112,65 +113,73 @@ BEGIN
     <footer><footer>Copyright 2024</footer></footer>
 </body>
 </html>';
-    
-    passed := test_result = expected;
-    passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
-    IF passed THEN
-        RAISE NOTICE 'Test %: Complex template with all tag types: PASSED', total_tests;
-    ELSE
-        RAISE WARNING 'Test %: Complex template with all tag types: FAILED. Expected "%", got "%"', 
-            total_tests, expected, test_result;
-    END IF;
-
-    -- Test 2: Template with nested includes and shared context
+        
+        passed := test_result = expected;
+        passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
+        IF passed THEN
+            RAISE NOTICE 'Test %: Complex template with all tag types: PASSED', total_tests;
+        ELSE
+            RAISE WARNING 'Test %: Complex template with all tag types: FAILED. Expected "%", got "%"', 
+                total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
+    END;
+        
+        -- Test 2: Template with nested includes and shared context
     total_tests := total_tests + 1;
-    test_result := hemar.render(
-        '{
-            "user": {
-                "name": "John",
-                "role": "admin"
-            },
-            "include": {
-                "user_info": {
-                    "template": "User: {{ user.name }} ({{ user.role }})"
+    BEGIN
+        test_result := hemar.render(
+            '{
+                "user": {
+                    "name": "John",
+                    "role": "admin"
                 },
-                "permissions": {
-                    "template": "{{ include user_info }} - Permissions: {{ for perm in user.permissions }}{{ perm }} {{ end }}",
-                    "context": {
-                        "user": {
-                            "name": "John",
-                            "role": "admin",
-                            "permissions": ["read", "write", "delete"]
+                "include": {
+                    "user_info": {
+                        "template": "User: {{ user.name }} ({{ user.role }})"
+                    },
+                    "permissions": {
+                        "template": "{{ include user_info }} - Permissions: {{ for perm in user.permissions }}{{ perm }} {{ end }}",
+                        "context": {
+                            "user": {
+                                "name": "John",
+                                "role": "admin",
+                                "permissions": ["read", "write", "delete"]
+                            }
                         }
                     }
                 }
-            }
-        }'::jsonb,
-        $template${{ include permissions }}$template$
-    );
+            }'::jsonb,
+            $template${{ include permissions }}$template$
+        );
     
-    expected := 'User: John (admin) - Permissions: read write delete ';
+        expected := 'User: John (admin) - Permissions: read write delete ';
     
-    passed := test_result = expected;
-    passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
-    IF passed THEN
-        RAISE NOTICE 'Test %: Template with nested includes and shared context: PASSED', total_tests;
-    ELSE
-        RAISE WARNING 'Test %: Template with nested includes and shared context: FAILED. Expected "%", got "%"', 
-            total_tests, expected, test_result;
-    END IF;
+        passed := test_result = expected;
+        passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
+        IF passed THEN
+            RAISE NOTICE 'Test %: Template with nested includes and shared context: PASSED', total_tests;
+        ELSE
+            RAISE WARNING 'Test %: Template with nested includes and shared context: FAILED. Expected "%", got "%"', 
+                total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
+    END;
 
     -- Test 3: Template with execute tag using context from section
     total_tests := total_tests + 1;
-    test_result := hemar.render(
-        '{
-            "items": [
-                {"id": 1, "value": 100},
-                {"id": 2, "value": 200},
-                {"id": 3, "value": 300}
-            ]
-        }'::jsonb,
-        $template$Items:
+    BEGIN
+        test_result := hemar.render(
+            '{
+                "items": [
+                    {"id": 1, "value": 100},
+                    {"id": 2, "value": 200},
+                    {"id": 3, "value": 300}
+                ]
+            }'::jsonb,
+            $template$Items:
 {{ for item in items }}
     Item {{ item.id }}: {{ exec
         DECLARE
@@ -181,22 +190,25 @@ BEGIN
         END;
     }}
 {{ end }}$template$
-    );
+        );
     
-    expected := 'Items:
+        expected := 'Items:
     Item 1: 200
     Item 2: 400
     Item 3: 600
 ';
     
-    passed := test_result = expected;
-    passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
-    IF passed THEN
-        RAISE NOTICE 'Test %: Template with execute tag using context from section: PASSED', total_tests;
-    ELSE
-        RAISE WARNING 'Test %: Template with execute tag using context from section: FAILED. Expected "%", got "%"', 
-            total_tests, expected, test_result;
-    END IF;
+        passed := test_result = expected;
+        passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
+        IF passed THEN
+            RAISE NOTICE 'Test %: Template with execute tag using context from section: PASSED', total_tests;
+        ELSE
+            RAISE WARNING 'Test %: Template with execute tag using context from section: FAILED. Expected "%", got "%"', 
+                total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
+    END;
 
     -- Print summary
     IF passed_tests = total_tests THEN
