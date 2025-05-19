@@ -187,6 +187,114 @@ BEGIN
         RAISE WARNING 'Test %: Invalid collection type: FAILED with error: %', total_tests, SQLERRM;
     END;
 
+    
+    -- Test 11: Section whitespaces
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '{{for item in array}}item{{end}}'
+        );
+        expected := 'itemitemitem';
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Section whitespaces: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Section whitespaces: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Section whitespaces: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 12: Section whitespaces 2
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '{{for item in array}}
+    item
+{{end}}'
+        );
+        expected := '    item
+    item
+    item';
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Section whitespaces 2: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Section whitespaces 2: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Section whitespaces 2: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 13: Section whitespaces 3
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '{{for item in array}} item
+            {{end}}'
+        );
+        expected := ' item
+ item
+ item';
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Section whitespaces 3: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Section whitespaces 3: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Section whitespaces 3: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 14: Section whitespaces 4
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '{{for item in array}}
+ item {{end}}'
+        );
+        expected := ' item
+ item
+ item';
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Section whitespaces 4: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Section whitespaces 4: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Section whitespaces 4: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 15: Section whitespaces 5
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '{{for item in array}}
+  item 
+             {{end}}
+            '
+        );
+        expected := '  item
+  item
+  item
+';
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Section whitespaces 5: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Section whitespaces 5: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Section whitespaces 5: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+
 
     -- Print summary
     IF passed_tests = total_tests THEN

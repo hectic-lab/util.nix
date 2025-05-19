@@ -1,4 +1,33 @@
 -- Test all template tags together
+CREATE OR REPLACE FUNCTION pg_temp.diff(string1 text, string2 text) RETURNS TABLE("index" int, char1 text, char2 text) AS $$
+BEGIN
+    RETURN QUERY WITH 
+        s1 AS (SELECT string1 AS str),
+        s2 AS (SELECT string2 AS str)
+    SELECT i,
+        substring(s1.str FROM i FOR 1) AS char1,
+        substring(s2.str FROM i FOR 1) AS char2
+    FROM s1, s2,
+        generate_series(1, GREATEST(length(s1.str), length(s2.str))) AS i
+    WHERE substring(s1.str FROM i FOR 1) IS DISTINCT FROM substring(s2.str FROM i FOR 1);
+
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION pg_temp.test_regexp_replace(string text) RETURNS text AS $$
+BEGIN
+    RETURN regexp_replace(
+             regexp_replace(
+               regexp_replace(
+                 regexp_replace(
+                   regexp_replace(string, E'\t', '[TAB]', 'g'),
+                 E'\n', '[LF]', 'g'),
+               E'\r', '[CR]', 'g'),
+             ' ', '[SPACE]', 'g'),
+           '\s', '[WHITESPACE]', 'g');
+END;
+$$ LANGUAGE plpgsql;
+
 DO $$
 DECLARE
     total_tests INT := 0;
@@ -6,8 +35,50 @@ DECLARE
     test_result TEXT;
     expected TEXT;
     passed BOOLEAN;
+    item INT;
+    c1 TEXT;
+    c2 TEXT;
 BEGIN
-    -- Test 1: Complex template with all tag types
+    -- Test 1: Template with execute tag using context from section
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{
+                "items": [
+                    {"id": 1, "value": 100},
+                    {"id": 2, "value": 200},
+                    {"id": 3, "value": 300}
+                ]
+            }'::jsonb,
+            $template$Items:{{ for item in items }}
+    Item {{ item.id }}: {{ exec RETURN (context->'item'->>'value')::int * 2; }}
+{{ end }}$template$
+        );
+    
+        expected:='Items:
+    Item 1: 200
+    Item 2: 400
+    Item 3: 600
+';
+    
+        passed := test_result = expected;
+        passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
+        IF passed THEN
+            RAISE NOTICE 'Test %: Template with execute tag using context from section: PASSED', total_tests;
+        ELSE
+            RAISE WARNING 'Test %: Template with execute tag using context from section: FAILED. Expected "%", got "%"', 
+                total_tests, pg_temp.test_regexp_replace(expected), pg_temp.test_regexp_replace(test_result);
+            FOR item, c1, c2 IN 
+                SELECT * FROM pg_temp.diff(expected, test_result)
+            LOOP
+                RAISE NOTICE ' % | % | %', item, c1, c2;
+            END LOOP;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 2: Complex template with all tag types
     total_tests := total_tests + 1;
     BEGIN
         test_result := hemar.render(
@@ -126,7 +197,7 @@ BEGIN
         RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
     END;
         
-        -- Test 2: Template with nested includes and shared context
+    -- Test 3: Template with nested includes and shared context
     total_tests := total_tests + 1;
     BEGIN
         test_result := hemar.render(
@@ -168,7 +239,7 @@ BEGIN
         RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
     END;
 
-    -- Test 3: Template with execute tag using context from section
+    -- Test 4: Template with execute tag using context from section
     total_tests := total_tests + 1;
     BEGIN
         test_result := hemar.render(
