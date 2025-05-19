@@ -217,7 +217,8 @@ BEGIN
         );
         expected := '    item
     item
-    item';
+    item
+';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 2: PASSED', total_tests;
             passed_tests := passed_tests + 1;
@@ -238,7 +239,8 @@ BEGIN
         );
         expected := ' item
  item
- item';
+ item
+';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 3: PASSED', total_tests;
             passed_tests := passed_tests + 1;
@@ -257,9 +259,7 @@ BEGIN
             '{{for item in array}}
  item {{end}}'
         );
-        expected := ' item
- item
- item';
+        expected := ' item  item  item ';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 4: PASSED', total_tests;
             passed_tests := passed_tests + 1;
@@ -276,25 +276,24 @@ BEGIN
         test_result := hemar.render(
             '{"array": [1, 2, 3]}'::jsonb,
             '{{for item in array}}
-  item 
+  item
              {{end}}
-            '
+'
         );
         expected := '  item
   item
   item
+
 ';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 5: PASSED', total_tests;
             passed_tests := passed_tests + 1;
         ELSE
-            RAISE WARNING 'Test %: Section whitespaces 5: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+            RAISE WARNING 'Test %: Section whitespaces 5: FAILED. Expected "%", got "%"', total_tests, pg_temp.test_regexp_replace(expected), pg_temp.test_regexp_replace(test_result);
         END IF;
     EXCEPTION WHEN OTHERS THEN
         RAISE WARNING 'Test %: Section whitespaces 5: FAILED with error: %', total_tests, SQLERRM;
     END;
-
-
 
     -- Print summary
     IF passed_tests = total_tests THEN

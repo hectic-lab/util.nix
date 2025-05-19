@@ -16,7 +16,7 @@ BEGIN;
   
   CREATE OR REPLACE FUNCTION pg_temp.test_regexp_replace(string text) RETURNS text AS $$
   BEGIN
-      RETURN regexp_replace(regexp_replace(
+      RETURN regexp_replace(
                regexp_replace(
                  regexp_replace(
                    regexp_replace(
@@ -24,8 +24,7 @@ BEGIN;
                    E'\n', '\\n', 'g'),
                  E'\r', '\\r', 'g'),
                ' ', '[S]', 'g'),
-             '\s', '\\s', 'g'), '\\n', '\\n
-');
+             '\s', '\\s', 'g');
   END;
   $$ LANGUAGE plpgsql;
 

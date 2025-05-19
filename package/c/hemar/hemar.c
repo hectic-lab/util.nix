@@ -25,6 +25,76 @@ static void render_template(TemplateNode *node, Jsonb *define, StringInfo result
 static void render_execute_tag(const char *code, Jsonb *define, StringInfo result, MemoryContext context);
 static JsonbValue *jsonb_get_by_path_internal(Jsonb *jb, const char *path_str, MemoryContext context);
 
+/* Helper function to find the end of the current line */
+static const char *
+find_line_end(const char *str)
+{
+    const char *p = str;
+    while (*p && *p != '\n')
+        p++;
+    return p;
+}
+
+/* Helper function to check if a string ends with a newline */
+static bool
+ends_with_newline(const char *str, size_t len)
+{
+    if (len == 0)
+        return false;
+    return str[len - 1] == '\n';
+}
+
+/* Helper function to find the start of the previous line */
+static const char *
+find_prev_line_start(const char *str, const char *current)
+{
+    const char *p = current;
+    while (p > str && *(p - 1) != '\n')
+        p--;
+    return p;
+}
+
+/* Helper function to check if a tag is on its own line */
+static bool
+is_tag_on_own_line(const char *start, const char *tag_start, const TemplateConfig *config)
+{
+    const char *line_start = find_prev_line_start(start, tag_start);
+    const char *p = line_start;
+    
+    /* Check if there's only whitespace before the tag */
+    while (p < tag_start && isspace((unsigned char)*p))
+        p++;
+    if (p != tag_start)
+        return false;
+        
+    /* Find the end of the tag */
+    p = tag_start;
+    while (*p && *p != '\n') {
+        if (strncmp(p, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
+            p += strlen(config->Syntax.Braces.close);
+            break;
+        }
+        p++;
+    }
+    
+    /* Check if there's only whitespace or newline after the tag */
+    while (*p && *p != '\n' && isspace((unsigned char)*p))
+        p++;
+    return *p == '\n' || *p == '\0';
+}
+
+/* Helper function to trim newline from previous text node */
+static void
+trim_newline_from_prev_text(TemplateNode *node)
+{
+    if (node && node->type == TEMPLATE_NODE_TEXT && node->value->text.content) {
+        size_t len = strlen(node->value->text.content);
+        if (ends_with_newline(node->value->text.content, len)) {
+            node->value->text.content[len - 1] = '\0';
+        }
+    }
+}
+
 char *tnt_to_string(TemplateNodeType type) {
   switch (type) {
     case TEMPLATE_NODE_SECTION: return "SECTION";
@@ -215,6 +285,7 @@ template_default_config(MemoryContext context)
     config.Syntax.Section.control = "for";
     config.Syntax.Section.source = "in";
     config.Syntax.Section.begin = "";  /* No longer used, but keep for backward compatibility */
+    config.Syntax.Section.end = "end"; /* End tag for sections */
     config.Syntax.Interpolate.invoke = "";
     config.Syntax.Include.invoke = "include";
     config.Syntax.Execute.invoke = "exec";
@@ -268,6 +339,14 @@ template_validate_config(const TemplateConfig *config, TemplateErrorCode *error_
     
     /* Check section begin */
     if (!config->Syntax.Section.begin || strlen(config->Syntax.Section.begin) > TEMPLATE_MAX_PREFIX_LEN)
+    {
+        if (error_code)
+            *error_code = TEMPLATE_ERROR_INVALID_CONFIG;
+        return false;
+    }
+    
+    /* Check section end */
+    if (!config->Syntax.Section.end || strlen(config->Syntax.Section.end) > TEMPLATE_MAX_PREFIX_LEN)
     {
         if (error_code)
             *error_code = TEMPLATE_ERROR_INVALID_CONFIG;
@@ -376,7 +455,7 @@ template_parse_interpolation(MemoryContext context, const char **s_ptr,
 /* Parse section tag */
 static TemplateNode *
 template_parse_section(MemoryContext context, const char **s_ptr,
-                      const TemplateConfig *config, TemplateErrorCode *error_code)
+                      const TemplateConfig *config, TemplateErrorCode *error_code, bool is_control_on_own_line, bool *is_end_on_own_line)
 {
     const char **s = s_ptr;
     const char *iterator_start, *collection_start;
@@ -500,7 +579,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
                 elog(DEBUG1, "TPS: Found nested section, nesting level: %d, at position: %s", nesting_level, *s);
             }
             /* Check if this is an end tag */
-            else if (strncmp(tag_ptr, "end", 3) == 0)
+            else if (strncmp(tag_ptr, config->Syntax.Section.end, strlen(config->Syntax.Section.end)) == 0)
             {
                 /* Found an end tag, decrease nesting level */
                 nesting_level--;
@@ -510,9 +589,9 @@ template_parse_section(MemoryContext context, const char **s_ptr,
                 {
                     /* This is our matching end tag */
                     end_tag_start = *s;
-                break;
-	        }
-	    }
+                    break;
+                }
+            }
         }
         
         (*s)++;
@@ -527,15 +606,70 @@ template_parse_section(MemoryContext context, const char **s_ptr,
         template_free_node(node);
         return NULL;
     }
+
+
+    // FIXME(yukkop): This code is duplicate
+    char *end_tag_end = end_tag_start;
+    end_tag_end += strlen(config->Syntax.Braces.open);
+    end_tag_end = skip_whitespace(end_tag_end);
+    end_tag_end += strlen(config->Syntax.Section.end); /* Use configured end tag */
+    end_tag_end = skip_whitespace(end_tag_end);
+
+    /* Initialize body_len to the full content length */
+    size_t body_len = end_tag_start - body_start;
+
+    if ((*is_end_on_own_line = is_tag_on_own_line(end_tag_start, end_tag_end, config))) {
+        /* Find the start of the line containing the end tag */
+        const char *line_start = find_prev_line_start(end_tag_start, end_tag_end);
+        /* Update body_len to exclude the line containing the end tag */
+        body_len = line_start - body_start;
+    }
     
     /* Extract the body content */
-    size_t body_len = end_tag_start - body_start;
     char *body_content = pnstrdup(body_start, body_len);
     
     elog(DEBUG1, "TPS: Section body content: %s", body_content);
+
+    if (is_end_on_own_line) {
+        /* Find last newline by iterating from the end */
+        const char *p = body_content + body_len - 1;
+        while (p >= body_content) {
+            if (*p == '\n') {
+                /* Check if everything after this newline is whitespace */
+                const char *check = p + 1;
+                bool only_whitespace = true;
+                while (check < body_content + body_len) {
+                    if (!isspace((unsigned char)*check)) {
+                        only_whitespace = false;
+                        break;
+                    }
+                    check++;
+                }
+                
+                if (only_whitespace) {
+                    /* Trim everything after the last newline */
+                    body_len = p - body_content + 1; /* Include the newline */
+                    body_content[body_len] = '\0';
+                }
+                break;
+            }
+            p--;
+        }
+    }
     
     /* Parse the body content as a template */
     const char *body_ptr = body_content;
+    if (is_control_on_own_line) {
+        /* Only trim whitespace and newline if control tag was on its own line */
+        while (*body_ptr && isspace((unsigned char)*body_ptr)) {
+            if (*body_ptr == '\n') {
+                body_ptr++;
+                break;
+            }
+            body_ptr++;
+        }
+    }
+
     body_node = template_parse(context, &body_ptr, config, false, error_code);
     
     if (!body_node)
@@ -553,7 +687,7 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     *s = end_tag_start;
     *s += strlen(config->Syntax.Braces.open);
     *s = skip_whitespace(*s);
-    *s += 3; /* Skip "end" */
+    *s += strlen(config->Syntax.Section.end); /* Use configured end tag */
     *s = skip_whitespace(*s);
     
     /* Check for closing brace of end tag */
@@ -736,203 +870,6 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
     return node;
 }
 
-/* Helper function to find the end of a tag */
-static const char *
-find_tag_end(const char *tag_start, const TemplateConfig *config)
-{
-    const char *p = tag_start;
-    bool in_quotes = false;
-    char quote_char = 0;
-    
-    /* Skip opening braces */
-    p += strlen(config->Syntax.Braces.open);
-    
-    /* Skip whitespace after opening braces */
-    while (*p && isspace((unsigned char)*p))
-        p++;
-    
-    /* Skip the tag keyword ("for" or "end") */
-    if (strncmp(p, config->Syntax.Section.control, strlen(config->Syntax.Section.control)) == 0)
-    {
-        p += strlen(config->Syntax.Section.control);
-    }
-    else if (strncmp(p, "end", 3) == 0)
-    {
-        p += 3;
-    }
-    else
-    {
-        return NULL;  /* Not a control tag */
-    }
-    
-    /* Skip whitespace after keyword */
-    while (*p && isspace((unsigned char)*p))
-        p++;
-    
-    /* For "for" tags, skip the iterator and "in" parts */
-    if (strncmp(tag_start + strlen(config->Syntax.Braces.open), config->Syntax.Section.control, 
-               strlen(config->Syntax.Section.control)) == 0)
-    {
-        /* Skip iterator name */
-        while (*p && !isspace((unsigned char)*p))
-            p++;
-        
-        /* Skip whitespace */
-        while (*p && isspace((unsigned char)*p))
-            p++;
-        
-        /* Skip "in" keyword */
-        if (strncmp(p, config->Syntax.Section.source, strlen(config->Syntax.Section.source)) == 0)
-        {
-            p += strlen(config->Syntax.Section.source);
-            
-            /* Skip whitespace after "in" */
-            while (*p && isspace((unsigned char)*p))
-                p++;
-            
-            /* Skip collection name */
-            while (*p && !isspace((unsigned char)*p))
-            {
-                if (*p == '"' || *p == '\'')
-                {
-                    if (!in_quotes)
-                    {
-                        in_quotes = true;
-                        quote_char = *p;
-                    }
-                    else if (*p == quote_char)
-                    {
-                        in_quotes = false;
-                    }
-                }
-                p++;
-            }
-        }
-    }
-    
-    /* Skip trailing whitespace */
-    while (*p && isspace((unsigned char)*p))
-        p++;
-    
-    /* Find closing braces */
-    if (strncmp(p, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
-    {
-        return p + strlen(config->Syntax.Braces.close);
-    }
-    
-    return NULL;  /* Invalid tag format */
-}
-
-/* Helper function to check if a line contains only whitespace and a control tag */
-static bool
-is_control_tag_only_line(const char *line_start, const char *line_end, const char *tag_start, const char *tag_end)
-{
-    const char *p;
-    
-    /* Check whitespace before tag */
-    for (p = line_start; p < tag_start; p++)
-    {
-        if (!isspace((unsigned char)*p))
-            return false;
-    }
-    
-    /* Check whitespace after tag */
-    for (p = tag_end; p < line_end; p++)
-    {
-        if (!isspace((unsigned char)*p))
-            return false;
-    }
-    
-    return true;
-}
-
-/* Helper function to find the start of the current line */
-static const char *
-find_line_start(const char *text, const char *current_pos)
-{
-    const char *p = current_pos;
-    
-    /* Move backwards until we find a newline or the start of text */
-    while (p > text && *(p-1) != '\n')
-        p--;
-    
-    return p;
-}
-
-/* Helper function to find the end of the current line */
-static const char *
-find_line_end(const char *text)
-{
-    const char *p = text;
-    
-    /* Move forwards until we find a newline or the end of text */
-    while (*p && *p != '\n')
-        p++;
-    
-    return p;
-}
-
-/* Helper function to check if a tag is a control tag */
-static bool
-is_control_tag(const char *tag_start, const TemplateConfig *config)
-{
-    const char *p = tag_start;
-    
-    /* Skip opening braces and whitespace */
-    p += strlen(config->Syntax.Braces.open);
-    while (*p && isspace((unsigned char)*p))
-        p++;
-    
-    /* Check for "for" or "end" */
-    return (strncmp(p, config->Syntax.Section.control, strlen(config->Syntax.Section.control)) == 0 ||
-            strncmp(p, "end", 3) == 0);
-}
-
-/* Helper function to trim whitespace around control tags */
-static void
-trim_control_tag_whitespace(const char **s_ptr, const TemplateConfig *config)
-{
-    const char **s = s_ptr;
-    const char *line_start, *line_end, *tag_start, *tag_end;
-    
-    /* Find the start of the current line */
-    line_start = find_line_start(*s - 100, *s);  /* Look back up to 100 chars for line start */
-    if (line_start < *s - 100)
-        line_start = *s;  /* If we couldn't find line start, use current position */
-    
-    /* Find the end of the current line */
-    line_end = find_line_end(*s);
-    
-    /* Find the tag boundaries */
-    tag_start = *s;
-    tag_end = find_tag_end(tag_start, config);
-    
-    if (!tag_end)
-        return;  /* Not a valid control tag */
-    
-    /* Check if this is a control tag on its own line */
-    if (is_control_tag_only_line(line_start, line_end, tag_start, tag_end))
-    {
-        /* For opening tags, remove whitespace and newline after the tag */
-        if (strncmp(tag_start + strlen(config->Syntax.Braces.open), config->Syntax.Section.control, 
-                   strlen(config->Syntax.Section.control)) == 0)
-        {
-            /* Skip to the end of the line */
-            while (*tag_end && *tag_end != '\n')
-                tag_end++;
-            if (*tag_end == '\n')
-                tag_end++;  /* Skip the newline */
-            *s = tag_end;
-        }
-        /* For closing tags, remove whitespace and newline before the tag */
-        else if (strncmp(tag_start + strlen(config->Syntax.Braces.open), "end", 3) == 0)
-        {
-            /* Move back to start of line */
-            *s = line_start;
-        }
-    }
-}
-
 /* Main template parser function */
 TemplateNode *
 template_parse(MemoryContext context, const char **s, const TemplateConfig *config, 
@@ -966,7 +903,7 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
     while (*s && **s != '\0')
     {
         /* Check for closing brace in inner parse */
-        if (inner_parse && strncmp(*s, config->Syntax.Braces.open, strlen(config->Syntax.Braces.open)) == 0)
+        if (inner_parse && strncmp(*s, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0)
         {
             break;
         }
@@ -992,9 +929,6 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
                 current->value->text.content = MemoryContextStrdup(context, pnstrdup(start, text_len));
                 current_node_filled = true;
             }
-            
-            /* Check for control tag and trim whitespace if needed */
-            trim_control_tag_whitespace(s, config);
             
             /* Parse the tag */
             tag_node = NULL;
@@ -1042,7 +976,18 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
             if (matched_type == 1) {
                 /* Section tag */
                 elog(LOG, "TPE: Parsing section tag at position: %.50s", *s);
-                tag_node = template_parse_section(context, s, config, error_code);
+                
+                /* Check if this is a section tag on its own line */
+                bool is_end_on_own_line = false,
+                     is_control_on_own_line = is_tag_on_own_line(start, *s, config);
+                
+                if (tag_node && is_control_on_own_line) {
+                    /* If we have a previous text node, trim its trailing newline */
+                    trim_newline_from_prev_text(current);
+                }
+                
+                /* Parse the section tag */
+                tag_node = template_parse_section(context, s, config, error_code, is_control_on_own_line, &is_end_on_own_line);
             } else if (matched_type == 2) {
                 /* Include tag */
                 elog(LOG, "TPE: Parsing include tag at position: %.50s", *s);
