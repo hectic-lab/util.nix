@@ -25,6 +25,8 @@ BEGIN
         IF NOT passed THEN
             RAISE WARNING 'Template parsing test failed!';
             RAISE WARNING 'Template: %', template_text;
+            -- RAISE WARNING 'Expected to find: %', pg_temp.test_regexp_replace(expected_structure);
+            -- RAISE WARNING 'Actual result: %', pg_temp.test_regexp_replace(parsed_result);
             RAISE WARNING 'Expected to find: %', expected_structure;
             RAISE WARNING 'Actual result: %', parsed_result;
         END IF;
@@ -213,9 +215,9 @@ INTERPOLATE: "var3"$expected11$
           <p>{{ item.description }}</p>
           {{ include item.footer }}
         {{ end }}$hemar12$,
-        $expected12$SECTION: iterator="item", collection="items"
-  TEXT: "
-          <h2>"
+        $expected12$Template parsed successfully. Structure:
+SECTION: iterator="item", collection="items"
+  TEXT: "          <h2>"
   INTERPOLATE: "item.title"
   TEXT: "</h2>
           <p>"
@@ -224,7 +226,8 @@ INTERPOLATE: "var3"$expected11$
           "
   INCLUDE: "item.footer"
   TEXT: "
-        "$expected12$
+"
+$expected12$
     );
     IF result THEN
         passed_tests := passed_tests + 1;
@@ -299,14 +302,13 @@ TEXT: "
 
   "
 SECTION: iterator="item", collection="array"
-  TEXT: "
-    some text: "
+  TEXT: "    some text: "
   INTERPOLATE: "name2"
   TEXT: "
     "
   INTERPOLATE: "item.name"
   TEXT: "
-  "
+"
 TEXT: "
 
   <div>code insertion:</div>
@@ -340,18 +342,21 @@ TEXT: "
             {{ end }}
           {{ end }}
         {{ end }}',
-        'SECTION: iterator="a", collection="items"
-  TEXT: "
-          "
+        'Template parsed successfully. Structure:
+SECTION: iterator="a", collection="items"
+  TEXT: "          "
   SECTION: iterator="b", collection="a.items"
-    TEXT: "
-            "
+    TEXT: "            "
     SECTION: iterator="c", collection="b.items"
-      TEXT: "
-              "
+      TEXT: "              "
       INTERPOLATE: "c.name"
       TEXT: "
-            "'
+"
+    TEXT: "
+"
+  TEXT: "
+"
+'
     );
     IF result THEN
         passed_tests := passed_tests + 1;
@@ -456,37 +461,34 @@ TEXT: "
 {{ end }}$template22$,
         $expected22$Template parsed successfully. Structure:
 SECTION: iterator="x", collection="outer"
-  TEXT: "
-  Level 1: "
+  TEXT: "  Level 1: "
   INTERPOLATE: "x.name"
   TEXT: "
   "
   SECTION: iterator="y", collection="x.items"
-    TEXT: "
-    Level 2: "
+    TEXT: "    Level 2: "
     INTERPOLATE: "y.title"
     TEXT: "
     "
     SECTION: iterator="z", collection="y.subitems"
-      TEXT: "
-      Level 3: "
+      TEXT: "      Level 3: "
       INTERPOLATE: "z.label"
       TEXT: " - "
       INTERPOLATE: "z.value"
       TEXT: "
       "
       SECTION: iterator="detail", collection="z.details"
-        TEXT: "
-        Details: "
+        TEXT: "        Details: "
         INTERPOLATE: "detail"
         TEXT: "
-      "
+"
       TEXT: "
-    "
+"
     TEXT: "
-  "
+"
   TEXT: "
-"$expected22$
+"
+$expected22$
     );
     IF result THEN
         passed_tests := passed_tests + 1;
@@ -518,13 +520,12 @@ TEXT: "</header>
   <nav>
     "
 SECTION: iterator="item", collection="menu_items"
-  TEXT: "
-      <a href=""
+  TEXT: "      <a href=""
   INTERPOLATE: "item.url"
   TEXT: "">"
   INTERPOLATE: "item.label"
   TEXT: "</a>
-    "
+"
 TEXT: "
   </nav>
   <main>
@@ -535,7 +536,8 @@ TEXT: "
 EXECUTE: "SELECT get_footer_text() AS footer_text;"
 TEXT: "
   </main>
-</div>"$expected23$
+</div>"
+$expected23$
     );
     IF result THEN
         passed_tests := passed_tests + 1;
@@ -626,12 +628,13 @@ INCLUDE: "system.templates[user.template_index]"$expected27$
         $template29${{   for   item   in   items   }}
   {{   item.name   }}
 {{   end   }}$template29$,
-        $expected29$SECTION: iterator="item", collection="items"
-  TEXT: "
-  "
+        $expected29$Template parsed successfully. Structure:
+SECTION: iterator="item", collection="items"
+  TEXT: "  "
   INTERPOLATE: "item.name"
   TEXT: "
-"$expected29$
+"
+$expected29$
     );
     IF result THEN
         passed_tests := passed_tests + 1;
@@ -693,14 +696,14 @@ END;"$expected30$
         <span>{{ item.name }}</span>
     {{ end }}
 </div>$template31$,
-        $expected31$TEXT: "<div>
+        $expected31$Template parsed successfully. Structure:
+TEXT: "<div>
     "
 SECTION: iterator="item", collection="items"
-  TEXT: "
-        <span>"
+  TEXT: "        <span>"
   INTERPOLATE: "item.name"
   TEXT: "</span>
-    "
+"
 TEXT: "
 </div>"$expected31$
     );
@@ -762,18 +765,19 @@ ORDER BY level, name;"$expected32$
 {{ for template_name in available_templates }}
   {{ include template_name }}
 {{ end }}$template33$,
-        $expected33$INCLUDE: "base_template"
+        $expected33$Template parsed successfully. Structure:
+INCLUDE: "base_template"
 TEXT: "
 "
 INCLUDE: "dynamic_templates[index]"
 TEXT: "
 "
 SECTION: iterator="template_name", collection="available_templates"
-  TEXT: "
-  "
+  TEXT: "  "
   INCLUDE: "template_name"
   TEXT: "
-"$expected33$
+"
+$expected33$
     );
     IF result THEN
         passed_tests := passed_tests + 1;
@@ -912,32 +916,31 @@ END;"$expected37$
     {{ end }}
   {{ end }}
 {{ end }}$template38$,
-        $expected38$SECTION: iterator="user", collection="users"
-  TEXT: "
-  "
+        $expected38$Template parsed successfully. Structure:
+SECTION: iterator="user", collection="users"
+  TEXT: "  "
   INTERPOLATE: "user.name"
   TEXT: "'s permissions:
   "
   SECTION: iterator="permission", collection="user.permissions"
-    TEXT: "
-    - "
+    TEXT: "    - "
     INTERPOLATE: "permission.name"
     TEXT: ": "
     INTERPOLATE: "permission.status"
     TEXT: "
     "
     SECTION: iterator="scope", collection="permission.scopes"
-      TEXT: "
-      * "
+      TEXT: "      * "
       INTERPOLATE: "scope.area"
       TEXT: ": "
       INTERPOLATE: "scope.level"
       TEXT: "
-    "
+"
     TEXT: "
-  "
+"
   TEXT: "
-"$expected38$
+"
+$expected38$
     );
     IF result THEN
         passed_tests := passed_tests + 1;
