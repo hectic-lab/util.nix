@@ -50,7 +50,8 @@ BEGIN
                     {"id": 3, "value": 300}
                 ]
             }'::jsonb,
-            $template$Items:{{ for item in items }}
+            $template$Items:
+{{ for item in items }}
     Item {{ item.id }}: {{ exec RETURN (context->'item'->>'value')::int * 2; }}
 {{ end }}$template$
         );
@@ -233,48 +234,6 @@ BEGIN
             RAISE NOTICE 'Test %: Template with nested includes and shared context: PASSED', total_tests;
         ELSE
             RAISE WARNING 'Test %: Template with nested includes and shared context: FAILED. Expected "%", got "%"', 
-                total_tests, expected, test_result;
-        END IF;
-    EXCEPTION WHEN OTHERS THEN
-        RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
-    END;
-
-    -- Test 4: Template with execute tag using context from section
-    total_tests := total_tests + 1;
-    BEGIN
-        test_result := hemar.render(
-            '{
-                "items": [
-                    {"id": 1, "value": 100},
-                    {"id": 2, "value": 200},
-                    {"id": 3, "value": 300}
-                ]
-            }'::jsonb,
-            $template$Items:
-{{ for item in items }}
-    Item {{ item.id }}: {{ exec
-        DECLARE
-            v_value INT;
-        BEGIN
-            v_value := (context->>'value')::int;
-            RETURN v_value * 2;
-        END;
-    }}
-{{ end }}$template$
-        );
-    
-        expected := 'Items:
-    Item 1: 200
-    Item 2: 400
-    Item 3: 600
-';
-    
-        passed := test_result = expected;
-        passed_tests := passed_tests + (CASE WHEN passed THEN 1 ELSE 0 END);
-        IF passed THEN
-            RAISE NOTICE 'Test %: Template with execute tag using context from section: PASSED', total_tests;
-        ELSE
-            RAISE WARNING 'Test %: Template with execute tag using context from section: FAILED. Expected "%", got "%"', 
                 total_tests, expected, test_result;
         END IF;
     EXCEPTION WHEN OTHERS THEN

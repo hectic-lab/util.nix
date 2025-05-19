@@ -50,6 +50,7 @@ typedef struct {
             const char *control;   /* default: "for " */
             const char *source;    /* default: "in " */
             const char *begin;     /* default: "do " */
+            const char *end;       /* default: "end" */
         } Section;
         struct {
             const char *invoke;    /* default: "" */
