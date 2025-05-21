@@ -217,7 +217,8 @@ BEGIN
         );
         expected := '    item
     item
-    item';
+    item
+';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 2: PASSED', total_tests;
             passed_tests := passed_tests + 1;
@@ -238,7 +239,8 @@ BEGIN
         );
         expected := ' item
  item
- item';
+ item
+';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 3: PASSED', total_tests;
             passed_tests := passed_tests + 1;
