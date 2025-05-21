@@ -988,29 +988,12 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
             
             /* Choose the tag parser based on the matched type */
             if (matched_type == 1) {
-                /*
-                  FIXME(yukkop): This writen as shit coz I strupid monkey
-                  Now it, probably, make many excesive actions.
-
-                  Steps to prase, for future rework:
-                  1. if `control` tag, then remove all this line from result
-                    1. remove whitespaces before (in previous node if it is text node)
-                    2. remove whitespaces after until \n (in section body before parse it to nodes) 
-                    3. remove \n (as previous step)
-                  2. if `end` tag, then remove all this line from result
-                    1. remove whitespaces before (in last body node if it is text node)
-                    2. remove whitespaces after until \n (skip it before parse next nodes)
-                    3. remove \n (also skip)
-                  3. render sections body
-                */
                 /* Section tag */
                 elog(LOG, "TPE: Parsing section tag at position: %.50s", *s);
                 
                 /* Check if this is a section tag on its own line */
                 bool is_end_on_own_line = false,
                      is_control_on_own_line = is_tag_on_own_line(start, *s, config);
-
-                elog(LOG, "TPE: is_control_on_own_line: %s", is_control_on_own_line ? "true" : "false");
                 
                 if (is_control_on_own_line && current && current->type == TEMPLATE_NODE_TEXT && current->value->text.content) {
                     /* Find the last newline in the text node */
@@ -1023,8 +1006,6 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
                             last_newline = i;
                         }
                     }
-
-                    elog(LOG, "TPE: Last newline: %zu", last_newline);
                     
                     /* If we found a newline, trim everything after it */
                     if (last_newline > 0) {
@@ -1034,15 +1015,15 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
                 
                 /* Parse the section tag */
                 tag_node = template_parse_section(context, s, config, error_code, is_control_on_own_line, &is_end_on_own_line);
-
-                elog(LOG, "TPE: is_end_on_own_line: %s", is_end_on_own_line ? "true" : "false");
-
+                
                 if (is_end_on_own_line) {
-                    /* Remove the end tag from the result */
-                    while (**s != '\n') {
+                    /* Skip the end tag line */
+                    while (**s && **s != '\n') {
                         (*s)++;
                     }
-                    (*s)++;
+                    if (**s == '\n') {
+                        (*s)++;
+                    }
                 }
             } else if (matched_type == 2) {
                 /* Include tag */
