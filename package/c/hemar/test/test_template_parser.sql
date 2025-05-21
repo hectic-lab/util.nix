@@ -49,6 +49,38 @@ DECLARE
 BEGIN
     PERFORM pg_sleep(2);
     RAISE NOTICE 'Starting template parser tests...';
+
+    -- Test 0: bruh
+    total_tests := total_tests + 1;
+    result := test_template_parse(
+        $hemar1$
+        text
+        {{ for i in a }}
+            item
+            item
+            item
+        {{ end }}
+        text
+$hemar1$,
+        $expected1$Template parsed successfully. Structure:
+TEXT: "
+        text"
+SECTION: iterator="i", collection="a"
+  TEXT: "            item
+            item
+            item
+"
+TEXT: "
+        text
+"
+$expected1$
+    );
+    IF result THEN
+        passed_tests := passed_tests + 1;
+        RAISE NOTICE 'Test %: bruh - PASSED', total_tests;
+    ELSE
+        RAISE WARNING 'Test %: bruh - FAILED', total_tests;
+    END IF;
     
     -- Test 1: Simple interpolation
     total_tests := total_tests + 1;

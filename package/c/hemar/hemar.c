@@ -58,29 +58,39 @@ find_prev_line_start(const char *str, const char *current)
 static bool
 is_tag_on_own_line(const char *start, const char *tag_start, const TemplateConfig *config)
 {
-    const char *line_start = find_prev_line_start(start, tag_start);
-    const char *p = line_start;
-    
-    /* Check if there's only whitespace before the tag */
-    while (p < tag_start && isspace((unsigned char)*p))
-        p++;
-    if (p != tag_start)
-        return false;
-        
-    /* Find the end of the tag */
+    const char *p;
+
+    // Find start of line or buffer
+    const char *line_start = tag_start;
+    while (line_start > start && line_start[-1] != '\n')
+        line_start--;
+
+    // Check all characters before tag_start are whitespace
+    for (p = line_start; p < tag_start; p++) {
+        if (!isspace((unsigned char)*p))
+            return false;
+    }
+
+    // Move p from tag_start to after closing braces
     p = tag_start;
-    while (*p && *p != '\n') {
+    while (*p) {
         if (strncmp(p, config->Syntax.Braces.close, strlen(config->Syntax.Braces.close)) == 0) {
             p += strlen(config->Syntax.Braces.close);
             break;
         }
+        if (*p == '\n') // tag broken across lines
+            return false;
         p++;
     }
-    
-    /* Check if there's only whitespace or newline after the tag */
-    while (*p && *p != '\n' && isspace((unsigned char)*p))
+
+    // Check all characters after closing braces until newline or end are whitespace
+    while (*p && *p != '\n') {
+        if (!isspace((unsigned char)*p))
+            return false;
         p++;
-    return *p == '\n' || *p == '\0';
+    }
+
+    return true;
 }
 
 /* Helper function to trim newline from previous text node */
@@ -589,9 +599,9 @@ template_parse_section(MemoryContext context, const char **s_ptr,
                 {
                     /* This is our matching end tag */
                     end_tag_start = *s;
-                    break;
-                }
-            }
+                break;
+	        }
+	    }
         }
         
         (*s)++;
@@ -618,9 +628,11 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     /* Initialize body_len to the full content length */
     size_t body_len = end_tag_start - body_start;
 
-    if ((*is_end_on_own_line = is_tag_on_own_line(end_tag_start, end_tag_end, config))) {
+    elog(NOTICE, "TPS: end_tag_start: %.9s", end_tag_start);
+
+    if ((*is_end_on_own_line = is_tag_on_own_line(body_start, end_tag_start, config))) {
         /* Find the start of the line containing the end tag */
-        const char *line_start = find_prev_line_start(end_tag_start, end_tag_end);
+        const char *line_start = find_prev_line_start(body_start, end_tag_start);
         /* Update body_len to exclude the line containing the end tag */
         body_len = line_start - body_start;
     }
@@ -703,6 +715,8 @@ template_parse_section(MemoryContext context, const char **s_ptr,
     /* Set the pointer to after the closing brace */
     *s_ptr = *s + strlen(config->Syntax.Braces.close);
     elog(DEBUG1, "TPS: Successfully parsed section, returning at position: %s", *s_ptr);
+
+    elog(LOG, "TPS: is_end_on_own_line: %s", *is_end_on_own_line ? "true" : "false");
     
     return node;
 }
@@ -829,7 +843,7 @@ template_parse_execute(MemoryContext context, const char **s_ptr,
                 
                 /* If we've reached the matching closing brace, we're done */
                 if (brace_level == 0) {
-                    break;
+            break;
                 }
                 
                 *s += strlen(config->Syntax.Braces.close) - 1;  /* -1 because we'll increment s below */
@@ -974,20 +988,62 @@ template_parse(MemoryContext context, const char **s, const TemplateConfig *conf
             
             /* Choose the tag parser based on the matched type */
             if (matched_type == 1) {
+                /*
+                  FIXME(yukkop): This writen as shit coz I strupid monkey
+                  Now it, probably, make many excesive actions.
+
+                  Steps to prase, for future rework:
+                  1. if `control` tag, then remove all this line from result
+                    1. remove whitespaces before (in previous node if it is text node)
+                    2. remove whitespaces after until \n (in section body before parse it to nodes) 
+                    3. remove \n (as previous step)
+                  2. if `end` tag, then remove all this line from result
+                    1. remove whitespaces before (in last body node if it is text node)
+                    2. remove whitespaces after until \n (skip it before parse next nodes)
+                    3. remove \n (also skip)
+                  3. render sections body
+                */
                 /* Section tag */
                 elog(LOG, "TPE: Parsing section tag at position: %.50s", *s);
                 
                 /* Check if this is a section tag on its own line */
                 bool is_end_on_own_line = false,
                      is_control_on_own_line = is_tag_on_own_line(start, *s, config);
+
+                elog(LOG, "TPE: is_control_on_own_line: %s", is_control_on_own_line ? "true" : "false");
                 
-                if (tag_node && is_control_on_own_line) {
-                    /* If we have a previous text node, trim its trailing newline */
-                    trim_newline_from_prev_text(current);
+                if (is_control_on_own_line && current && current->type == TEMPLATE_NODE_TEXT && current->value->text.content) {
+                    /* Find the last newline in the text node */
+                    char *content = current->value->text.content;
+                    size_t len = strlen(content);
+                    size_t last_newline = 0;
+                    
+                    for (size_t i = 0; i < len; i++) {
+                        if (content[i] == '\n') {
+                            last_newline = i;
+                        }
+                    }
+
+                    elog(LOG, "TPE: Last newline: %zu", last_newline);
+                    
+                    /* If we found a newline, trim everything after it */
+                    if (last_newline > 0) {
+                        content[last_newline+1] = '\0';
+                    }
                 }
                 
                 /* Parse the section tag */
                 tag_node = template_parse_section(context, s, config, error_code, is_control_on_own_line, &is_end_on_own_line);
+
+                elog(LOG, "TPE: is_end_on_own_line: %s", is_end_on_own_line ? "true" : "false");
+
+                if (is_end_on_own_line) {
+                    /* Remove the end tag from the result */
+                    while (**s != '\n') {
+                        (*s)++;
+                    }
+                    (*s)++;
+                }
             } else if (matched_type == 2) {
                 /* Include tag */
                 elog(LOG, "TPE: Parsing include tag at position: %.50s", *s);

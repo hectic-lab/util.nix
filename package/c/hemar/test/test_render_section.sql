@@ -217,8 +217,7 @@ BEGIN
         );
         expected := '    item
     item
-    item
-';
+    item';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 2: PASSED', total_tests;
             passed_tests := passed_tests + 1;
@@ -239,8 +238,7 @@ BEGIN
         );
         expected := ' item
  item
- item
-';
+ item';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 3: PASSED', total_tests;
             passed_tests := passed_tests + 1;
@@ -283,7 +281,6 @@ BEGIN
         expected := '  item
   item
   item
-
 ';
         IF test_result = expected THEN
             RAISE NOTICE 'Test %: Section whitespaces 5: PASSED', total_tests;
@@ -293,6 +290,68 @@ BEGIN
         END IF;
     EXCEPTION WHEN OTHERS THEN
         RAISE WARNING 'Test %: Section whitespaces 5: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 16: Tabs
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '
+identation1
+{{for item in array}}
+    identation2
+{{end}}
+identation1
+'
+        );
+        expected := '
+identation1
+    identation2
+    identation2
+    identation2
+identation1
+';
+
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Tabs: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Tabs: FAILED. Expected "%", got "%"', total_tests, pg_temp.test_regexp_replace(expected), pg_temp.test_regexp_replace(test_result);
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Tabs: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
+    -- Test 17: Tabs 2
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"array": [1, 2, 3]}'::jsonb,
+            '
+        identation1
+        {{for item in array}}
+            identation2
+        {{end}}
+        identation1
+'
+        );
+        expected := '
+        identation1
+            identation2
+            identation2
+            identation2
+        identation1
+';
+
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Tabs: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Tabs: FAILED. Expected "%", got "%"', total_tests, pg_temp.test_regexp_replace(expected), pg_temp.test_regexp_replace(test_result);
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Tabs: FAILED with error: %', total_tests, SQLERRM;
     END;
 
     -- Print summary

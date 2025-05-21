@@ -137,25 +137,25 @@ BEGIN
     <header>{{ include header }}</header>
     <main>
         {{ for section in page.sections }}
-            <section id="{{ section.id }}">
-                <h2>{{ section.title }}</h2>
-                {{ for item in section.items }}
-                    <div class="item {{ item.status }}">
-                        {{ include item.template }}
-                        {{ exec
-                            DECLARE
-                                v_status TEXT;
-                            BEGIN
-                                v_status := context->'item'->>'status';
-                                RETURN CASE 
-                                    WHEN v_status = 'active' THEN ' (Active Item)'
-                                    ELSE ' (Inactive Item)'
-                                END;
-                            END;
-                        }}
-                    </div>
-                {{ end }}
-            </section>
+        <section id="{{ section.id }}">
+            <h2>{{ section.title }}</h2>
+            {{ for item in section.items }}
+            <div class="item {{ item.status }}">
+                {{ include item.template }}
+                {{ exec
+                    DECLARE
+                        v_status TEXT;
+                    BEGIN
+                        v_status := context->'item'->>'status';
+                        RETURN CASE 
+                            WHEN v_status = 'active' THEN ' (Active Item)'
+                            ELSE ' (Inactive Item)'
+                        END;
+                    END;
+                }}
+            </div>
+            {{ end }}
+        </section>
         {{ end }}
     </main>
     <footer>{{ include footer }}</footer>
@@ -172,15 +172,15 @@ BEGIN
 <body>
     <header>Welcome to My Page!</header>
     <main>
-        <section id="section1">
-            <h2>Section 1</h2>
-            <div class="item active">
-                Status: active, Content: Item 1 Content (Active Item)
-            </div>
-            <div class="item inactive">
-                Status: inactive, Content: Item 2 Content (Inactive Item)
-            </div>
-        </section>
+                <section id="section1">
+                <h2>Section 1</h2>
+                            <div class="item active">
+                                Status: active, Content: Item 1 Content (Active Item)
+                            </div>
+                            <div class="item inactive">
+                                Status: inactive, Content: Item 2 Content (Inactive Item)
+                            </div>
+                </section>
     </main>
     <footer><footer>Copyright 2024</footer></footer>
 </body>
@@ -192,7 +192,7 @@ BEGIN
             RAISE NOTICE 'Test %: Complex template with all tag types: PASSED', total_tests;
         ELSE
             RAISE WARNING 'Test %: Complex template with all tag types: FAILED. Expected "%", got "%"', 
-                total_tests, expected, test_result;
+                total_tests, pg_temp.test_regexp_replace(expected), pg_temp.test_regexp_replace(test_result);
         END IF;
     EXCEPTION WHEN OTHERS THEN
         RAISE WARNING 'Test % failed: Error: %', total_tests, SQLERRM;
