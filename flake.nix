@@ -45,6 +45,30 @@
 
     parseEnv = import ./parse-env.nix;
 
+    buildPostgresqlExtension =
+      pkgs: pkgs.callPackage (import (builtins.path {
+        name = "extension-builder";
+        path = ./buildPostgresqlExtension.nix;
+      }));
+
+    buildHemarExt = pkgs: versionSuffix: let
+        postgresql = pkgs."postgresql_${versionSuffix}";
+        c-hectic = self.packages.${pkgs.system}.c-hectic;
+    in buildPostgresqlExtension pkgs {
+        inherit postgresql;
+      } {
+        pname = "hemar";
+        version = "0.1";
+        src = ./package/c/hemar;
+        nativeBuildInputs = (with pkgs; [pkg-config]) ++ [ c-hectic ];
+        dontShrinkRPath = true;
+        postFixup = ''
+          echo ">>> postFixup running..."
+          ${pkgs.patchelf}/bin/patchelf --set-rpath ${c-hectic}/lib $out/lib/hemar.so
+        '';
+        preInstall = ''mkdir $out'';
+      };
+
     dotEnv = builtins.getEnv "DOTENV";
     minorEnvironment =
       if dotEnv != ""
@@ -133,6 +157,9 @@
         pg_wdumpall = pkgs.callPackage ./package/postgres/pg_wdumpall.nix rust.commonArgs; 
         pg_wdump = pkgs.callPackage ./package/postgres/pg_wdump.nix rust.commonArgs; 
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
+	pg-15-hemar = buildHemarExt pkgs "15";
+	pg-16-hemar = buildHemarExt pkgs "16";
+	pg-17-hemar = buildHemarExt pkgs "17";
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
         hmpl = pkgs.callPackage ./package/c/hmpl/default.nix { 
@@ -469,12 +496,6 @@
               inherit (pkgs-unstable.darwin.apple_sdk.frameworks) Security;
             };
 
-          buildPostgresqlExtension =
-            prev.callPackage (import (builtins.path {
-              name = "extension-builder";
-              path = ./buildPostgresqlExtension.nix;
-            }));
-
           buildSmtpExt = versionSuffix: let
             postgresql = prev."postgresql_${versionSuffix}";
             src = prev.fetchFromGitHub {
@@ -499,7 +520,7 @@
             };
           buildPlHaskellExt = versionSuffix: let
 	      version = "4.0"; 
-            in buildPostgresqlExtension {
+            in buildPostgresqlExtension prev {
               postgresql = prev."postgresql_${versionSuffix}";
             } {
               pname = "plhaskell";
@@ -514,7 +535,7 @@
             };
           buildHttpExt = versionSuffix: let
               version = "1.6.1";
-            in buildPostgresqlExtension {
+            in buildPostgresqlExtension prev {
               postgresql = prev."postgresql_${versionSuffix}";
             } {
               pname = "http";
@@ -527,48 +548,31 @@
 	    };
 	    nativeBuildInputs = with prev; [pkg-config curl];
 	  };
-          buildHemarExt = versionSuffix: let
-              postgresql = prev."postgresql_${versionSuffix}";
-	      c-hectic = self.packages.${prev.system}.c-hectic;
-	  in buildPostgresqlExtension {
-              inherit postgresql;
-            } {
-              pname = "hemar";
-              version = "0.1";
-              src = ./package/c/hemar;
-              nativeBuildInputs = (with prev; [pkg-config]) ++ [ c-hectic ];
-	      dontShrinkRPath = true;
-	      postFixup = ''
-	        echo ">>> postFixup running..."
-                ${prev.patchelf}/bin/patchelf --set-rpath ${c-hectic}/lib $out/lib/hemar.so
-              '';
-              preInstall = ''mkdir $out'';
-            };
         in {
           hectic = self.packages.${prev.system};
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
             plhaskell = buildPlHaskellExt "17";
-            hemar = buildHemarExt "17";
+            hemar = buildHemarExt prev "17";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
             plhaskell = buildPlHaskellExt "16";
-            hemar = buildHemarExt "16";
+            hemar = buildHemarExt prev "16";
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
             plhaskell = buildPlHaskellExt "15";
-            hemar = buildHemarExt "15";
+            hemar = buildHemarExt prev "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
             plhaskell = buildPlHaskellExt "14";
-            hemar = buildHemarExt "14";
+            hemar = buildHemarExt prev "14";
           };};
           writers = let
             writeC =
