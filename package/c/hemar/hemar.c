@@ -1539,6 +1539,8 @@ render_template(TemplateNode *node, Jsonb *define, StringInfo result, MemoryCont
                                         
                                         /* Convert to Jsonb */
                                         Jsonb *context_jsonb = JsonbValueToJsonb(res);
+
+                                        elog(DEBUG1, "Context JSONB: %s", JsonbToCString(NULL, &context_jsonb->root, VARSIZE_ANY_EXHDR(context_jsonb)));
                                         
                                         /* Render the section body with the new context */
                                         render_template(current->value->section.body, context_jsonb, result, context);

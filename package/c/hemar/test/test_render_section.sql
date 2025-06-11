@@ -356,6 +356,30 @@ identation1
         RAISE WARNING 'Test %: Tabs: FAILED with error: %', total_tests, SQLERRM;
     END;
 
+    -- Test 18: Context
+    total_tests := total_tests + 1;
+    BEGIN
+        test_result := hemar.render(
+            '{"value": 12, "array": [1, 2, 3]}'::jsonb,
+            '
+        {{for item in array}}
+            {{exec RETURN context::TEXT}}
+        {{end}}
+'
+        );
+        expected := '
+';
+
+        IF test_result = expected THEN
+            RAISE NOTICE 'Test %: Context: PASSED', total_tests;
+            passed_tests := passed_tests + 1;
+        ELSE
+            RAISE WARNING 'Test %: Context: FAILED. Expected "%", got "%"', total_tests, expected, test_result;
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'Test %: Context: FAILED with error: %', total_tests, SQLERRM;
+    END;
+
     -- Print summary
     IF passed_tests = total_tests THEN
         RAISE NOTICE '------------------------------------';
