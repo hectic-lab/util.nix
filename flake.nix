@@ -280,7 +280,7 @@
                 ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrbBG+U07f7OKvOxYIGYCaNvyozzxQF+I9Fb5TYZErK yukkop vm-postgres''
               ];
 
-              programs.zsh.shellAliases = self.lib.sharedShellAliases;
+              programs.zsh.shellAliases = self.lib.sharedShellAliasesForDevVm;
 
               virtualisation = {
                 vmVariant = {
@@ -362,7 +362,7 @@
 	          journalctl -u postgresql.service | grep postgresql-post-start | sed 's|psql:/nix/store/[^:]*:[0-9]*: ||' | sed 's|^[^:]*:[^:]*:[^:]*: ||' | grep -v '^\[.*\]' | ${hectic.prettify-log}/bin/prettify-log --color-output
 		'')
 	       ];
-              programs.zsh.shellAliases = self.lib.sharedShellAliases // {
+              programs.zsh.shellAliases = self.lib.sharedShellAliasesForDevVm // {
 	        conn = "sudo su postgres -c 'psql -p 64317'";
 	      };
 
@@ -408,6 +408,7 @@
           ];
 
           services.getty.autologinUser = "root";
+          programs.zsh.shellAliases = self.lib.sharedShellAliases;
 
           programs.zsh.enable = true;
           users.defaultUserShell = pkgs.zsh;
@@ -625,8 +626,11 @@
           jc = ''journalctl'';
           sc = ''journalctl'';
           nv = ''nvim'';
-          sd = "shutdown now";
         };
+
+	sharedShellAliasesForDevVm = self.lib.sharedShellAliases // {
+          sd = "shutdown now";
+	};
 
         readEnvironment = { envVarsToRead, prefix ? "" }:
           builtins.listToAttrs
