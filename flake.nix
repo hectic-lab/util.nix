@@ -162,9 +162,6 @@
 	pg-17-hemar = buildHemarExt pkgs "17";
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
-        hmpl = pkgs.callPackage ./package/c/hmpl/default.nix { 
-          hectic = self.packages.${system}.hectic;
-        };
       };
 
       devShells.${system} = let
