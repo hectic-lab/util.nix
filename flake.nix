@@ -566,27 +566,27 @@
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
             http = buildHttpExt "17";
             pg_smtp_client = buildSmtpExt "17";
-            plhaskell = buildPlHaskellExt "17";
+            #plhaskell = buildPlHaskellExt "17";
             plsh = buildPlShExt "17";
             hemar = buildHemarExt prev "17";
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
             http = buildHttpExt "16";
             pg_smtp_client = buildSmtpExt "16";
-            plhaskell = buildPlHaskellExt "16";
+            #plhaskell = buildPlHaskellExt "16";
             hemar = buildHemarExt prev "16";
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
             http = buildHttpExt "15";
             pg_smtp_client = buildSmtpExt "15";
-            plhaskell = buildPlHaskellExt "15";
+            #plhaskell = buildPlHaskellExt "15";
             plsh = buildPlShExt "15";
             hemar = buildHemarExt prev "15";
           };};
           postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
             http = buildHttpExt "14";
             pg_smtp_client = buildSmtpExt "14";
-            plhaskell = buildPlHaskellExt "14";
+            #plhaskell = buildPlHaskellExt "14";
             hemar = buildHemarExt prev "14";
           };};
           writers = let
