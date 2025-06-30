@@ -1,12 +1,17 @@
-{ stdenv, gcc, lib, bash, c-hectic }:
-
+{
+  stdenv,
+  gcc,
+  lib,
+  bash,
+  c-hectic,
+}:
 stdenv.mkDerivation {
   pname = "prettify";
   version = "1.0";
   src = ./.;
   doCheck = false;
 
-  nativeBuildInputs = [ gcc c-hectic ];
+  nativeBuildInputs = [gcc c-hectic];
 
   buildPhase = ''
     ls

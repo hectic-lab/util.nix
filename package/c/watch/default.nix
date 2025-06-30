@@ -1,12 +1,17 @@
-{ stdenv, gcc, lib, bash, gdb }:
-
+{
+  stdenv,
+  gcc,
+  lib,
+  bash,
+  gdb,
+}:
 stdenv.mkDerivation {
   pname = "watch";
   version = "1.0";
   src = ./.;
   doCheck = false;
 
-  nativeBuildInputs = [ gcc gdb ];
+  nativeBuildInputs = [gcc gdb];
 
   buildPhase = ''
     ${bash}/bin/sh ./make.sh build

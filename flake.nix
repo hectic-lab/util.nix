@@ -176,7 +176,7 @@
           version = "3.4.3";
           src = pkgs.python3Packages.fetchPypi {
             inherit pname version;
-            sha256 = "sha256-gzYP+LyXmA5P8lyWTHvTkj0zPRd6pPf7c2sBnybHy0E="; 
+            sha256 = "sha256-gzYP+LyXmA5P8lyWTHvTkj0zPRd6pPf7c2sBnybHy0E=";
           };
         };
         py3-cryptomus = pkgs.python3Packages.buildPythonPackage rec {
@@ -184,7 +184,7 @@
           version = "1.1";
           src = pkgs.python3Packages.fetchPypi {
             inherit pname version;
-            sha256 = "sha256-f0BBGfemKxMdz+LMvawWqqRfmF+TrCpMwgtJEYt+fgU="; 
+            sha256 = "sha256-f0BBGfemKxMdz+LMvawWqqRfmF+TrCpMwgtJEYt+fgU=";
           };
         };
         py3-modulegraph = pkgs.python3Packages.buildPythonPackage rec {
@@ -192,7 +192,7 @@
           version = "0.19.6";
           src = pkgs.python3Packages.fetchPypi {
             inherit pname version;
-            sha256 = "sha256-yRTIyVoOEP6IUF1OnCKEtOPbxwlD4wbMZWfjbMVBv0s="; 
+            sha256 = "sha256-yRTIyVoOEP6IUF1OnCKEtOPbxwlD4wbMZWfjbMVBv0s=";
           };
         };
         py3-swifter = pkgs.python3Packages.buildPythonPackage rec {
@@ -200,13 +200,13 @@
           version = "1.4.0";
           src = pkgs.python3Packages.fetchPypi {
             inherit pname version;
-            sha256 = "sha256-4bt0R2ohs/B6F6oYyX/cuoWZcmvRfacy8J2rzFDia6A="; 
+            sha256 = "sha256-4bt0R2ohs/B6F6oYyX/cuoWZcmvRfacy8J2rzFDia6A=";
           };
         };
         py3-aiogram-newsletter = pkgs.python3Packages.buildPythonPackage rec {
           pname = "aiogram-newsletter";
           version = "0.0.10";
-        
+
           src = pkgs.fetchFromGitHub {
             inherit pname version;
             owner = "nessshon";
@@ -247,13 +247,14 @@
         pg-15-ext-plsh = buildPlShExt pkgs "15";
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
+        support-bot = pkgs.callPackage ./package/support-bot {};
       };
 
       devShells.${system} = let
         shells = self.devShells.${system};
       in {
         c = pkgs.mkShell {
-          buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ c-hectic nvim-pager watch ]);
+          buildInputs = (with pkgs; [inotify-tools gdb gcc]) ++ (with self.packages.${system}; [c-hectic nvim-pager watch]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
         };
         postgres-c = pkgs.mkShell {
@@ -271,6 +272,7 @@
 
           shellHook = ''
             export PATH=${pkgs.gcc}/bin:$PATH
+
             export PAGER="${self.packages.${system}.nvim-pager}/bin/pager"
           '';
         };
@@ -352,7 +354,7 @@
 
                   char *value = getenv(env_name);
                   if (value) {
-                      char buffer[128]; 
+                      char buffer[128];
                       sprintf(buffer, "echo $%s\n", env_name);
                       system(buffer);
                   } else {
@@ -440,7 +442,7 @@
                 '';
               };                   
  
-              environment.systemPackages =  with pkgs; [
+              environment.systemPackags =  with pkgs; [
                 gdb
                 hectic.nvim-pager
                 (writeScriptBin "check" ''
@@ -569,7 +571,6 @@
       overlays.default = final: prev: (
         let
 	  hectic-packages = self.packages.${prev.system};
-
         in {
           hectic = hectic-packages;
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
@@ -594,11 +595,12 @@
             hemar = hectic-packages.pg-15-ext-hemar;
           };};
           writers = let
-            writeC =
-              name: argsOrScript:
-              if lib.isAttrs argsOrScript && !lib.isDerivation argsOrScript then
+            writeC = name: argsOrScript:
+              if lib.isAttrs argsOrScript && !lib.isDerivation argsOrScript
+              then
                 prev.writers.makeBinWriter (
-                  argsOrScript // {
+                  argsOrScript
+                  // {
                     compileScript = ''
                       # Force gcc to treat the input file as C code
                       ${prev.gcc}/bin/gcc -fsyntax-only -xc $contentPath
@@ -609,7 +611,8 @@
                       ${prev.gcc}/bin/gcc -xc -o $out $contentPath
                     '';
                   }
-                ) name
+                )
+                name
               else
                 prev.writers.makeBinWriter {
                   compileScript = ''
@@ -621,22 +624,25 @@
                     fi
                     ${prev.gcc}/bin/gcc -xc -o $out $contentPath
                   '';
-                } name argsOrScript;
-            writeMinC =
-              name: includes: body:
-                writeC name ''
-                  ${builtins.concatStringsSep "\n" (map (h: "#include " + h) includes)}
+                }
+                name
+                argsOrScript;
+            writeMinC = name: includes: body:
+              writeC name ''
+                ${builtins.concatStringsSep "\n" (map (h: "#include " + h) includes)}
 
-                  int main(int argc, char *argv[]) {
-                      ${body}
-                  }
-                '';
-          in prev.writers // {
-            writeCBin = name: writeC "/bin/${name}";
-            writeC = writeC;
-            writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
-            writeMinC = writeMinC;
-          };
+                int main(int argc, char *argv[]) {
+                    ${body}
+                }
+              '';
+          in
+            prev.writers
+            // {
+              writeCBin = name: writeC "/bin/${name}";
+              writeC = writeC;
+              writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
+              writeMinC = writeMinC;
+            };
         }
       );
       lib = {

@@ -7,6 +7,8 @@
 #   --color       Pass -fdiagnostics-color=always to compiler.
 #   help, --help  Show this help message.
 
+set -u
+
 check_dependencies() {
   for dep in gcc pg_config; do
     if ! command -v "$dep" >/dev/null 2>&1; then
