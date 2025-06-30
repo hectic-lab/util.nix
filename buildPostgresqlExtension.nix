@@ -57,7 +57,7 @@
 # hooks run, this needs to be run in an override of `mkDerivation` and not in a setup hook.
 {
   lib,
-  stdenv,
+  clangStdenv,
   postgresql,
   nix-update-script,
 }: args: let
@@ -75,7 +75,7 @@
           ));
       };
 
-    buildInputs = [postgresql] ++ prevAttrs.buildInputs or [];
+    buildInputs = [postgresql postgresql.pg_config] ++ prevAttrs.buildInputs or [];
 
     installFlags =
       [
@@ -137,4 +137,4 @@
       + prevAttrs.postInstall or "";
   };
 in
-  stdenv.mkDerivation (lib.extends buildPostgresqlExtension (lib.toFunction args))
+  clangStdenv.mkDerivation (lib.extends buildPostgresqlExtension (lib.toFunction args))
