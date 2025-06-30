@@ -113,7 +113,7 @@ pkgs.writeShellScriptBin "unpack" ''
   mv "$SRC_PROJECT_DIR" "$WEB_DIR"
 
   cd "$WEB_DIR"
-  ${pkgs.nodejs_18}/bin/npm isntall
+  ${pkgs.nodejs_22}/bin/npm isntall
 
   # Handle the config.toml file
   if [ ! -f "$SRC_CONFIG" ]; then
