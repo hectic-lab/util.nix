@@ -1,12 +1,11 @@
 { stdenv, patchelf, gcc, lib, bash, inotify-tools }:
-
 stdenv.mkDerivation {
   pname = "hectic";
   version = "1.0";
   src = ./.;
   doCheck = true;
 
-  nativeBuildInputs = [ gcc inotify-tools ];
+  nativeBuildInputs = [gcc inotify-tools];
 
   buildPhase = ''
     ls

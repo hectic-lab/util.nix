@@ -12,4 +12,5 @@ PG_LDFLAGS += -Wl,-rpath,$(shell $(HECTIC_CONFIG) --libdir)
 SHLIB_LINK += $(shell $(HECTIC_CONFIG) --libs)
 
 PGXS := $(shell $(PG_CONFIG) --pgxs)
+
 include $(PGXS)

@@ -16,7 +16,7 @@ in
 
     cargoLock.lockFile = ./Cargo.lock;
 
-    buildInputs = [ postgresql_15 ];
+    buildInputs = [postgresql_15];
 
     doCheck = true;
   }
