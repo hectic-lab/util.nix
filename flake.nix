@@ -1,8 +1,7 @@
 {
   description = "yukkop's nix utilities";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -15,7 +14,6 @@
     self,
     nixpkgs,
     rust-overlay,
-    nixpkgs-unstable,
   }: let
     lib = nixpkgs.lib;
 
@@ -68,6 +66,82 @@
         '';
         preInstall = ''mkdir $out'';
       };
+    buildPgrxExtension = pkgs: 
+      pkgs.callPackage (import (builtins.path {
+        name = "extension-builder";
+        path = ./buildPgrxExtension.nix;
+      })) { 
+        cargo-pgrx = pkgs.cargo-pgrx_0_12_6;
+        inherit (pkgs.darwin.apple_sdk.frameworks) Security;
+      };
+
+    buildSmtpExt = pkgs: versionSuffix: let
+      postgresql = pkgs."postgresql_${versionSuffix}";
+      src = pkgs.fetchFromGitHub {
+        owner = "brianpursley";
+        repo = "pg_smtp_client";
+        rev = "6ff3b71e3705e0d4081a51c21ca0379e869ba5fb";
+        hash = "sha256-wC/2rAsSDO83UITaFhtaf3do3aaOAko4gnKUOzwURc8=";
+      };
+      cargo = self.lib.cargoToml src;
+    in
+      buildPgrxExtension pkgs {
+        pname = cargo.package.name;
+        version = cargo.package.version;
+    
+        inherit src postgresql;
+    
+        buildInputs = with pkgs; [ openssl ];
+
+        cargoHash = "sha256-Cg5qY4TKkSJRSAtlFbjIRhea0dXPLEyasi5n09HcYeo=";
+    
+        doCheck = false;
+      };
+    buildPlShExt = pkgs: versionSuffix: let
+        version = "4.0"; 
+      in buildPostgresqlExtension pkgs {
+        postgresql = pkgs."postgresql_${versionSuffix}";
+      } {
+        pname = "plsh";
+        inherit version;
+        src = pkgs.fetchFromGitHub {
+          owner = "petere";
+          repo = "plsh";
+          rev = "d88079617309974f71b3f8e4d5f96869dba66835";
+          hash = "sha256-H9B5L+yIjjVNhnuF+bIZKyCrOqfIvu5W26aqyqL5UdQ=";
+        };
+        nativeBuildInputs = with pkgs; [ pkg-config ];
+      };
+    buildPlHaskellExt = pkgs: versionSuffix: let
+        version = "4.0"; 
+      in buildPostgresqlExtension pkgs {
+        postgresql = pkgs."postgresql_${versionSuffix}";
+      } {
+        pname = "plhaskell";
+        inherit version;
+        src = pkgs.fetchFromGitHub {
+          owner = "ed-o-saurus";
+          repo = "PLHaskell";
+          rev = "d917f0991a455cf0558c2036e360ba1a9b40a8ef";
+          hash = "sha256-+sJmR/SCMfxxExa7GZuNmWez1dfhvlM9qOdO9gHNf74=";
+        };
+        nativeBuildInputs = with pkgs; [pkg-config curl ghc haskellPackages.hsc2hs haskellPackages.HSFFIG];
+      };
+    buildHttpExt = pkgs: versionSuffix: let
+        version = "1.6.1";
+      in buildPostgresqlExtension pkgs {
+        postgresql = pkgs."postgresql_${versionSuffix}";
+      } {
+        pname = "http";
+        inherit version;
+        src = pkgs.fetchFromGitHub {
+          owner = "pramsey";
+          repo = "pgsql-http";
+          rev = "v${version}";
+          hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
+      };
+      nativeBuildInputs = with pkgs; [pkg-config curl];
+    };
 
     dotEnv = builtins.getEnv "DOTENV";
     minorEnvironment =
@@ -84,7 +158,6 @@
       system,
       pkgs,
     }: let
-      pkgs-unstable = import nixpkgs-unstable { inherit system; };
     in {
       packages.${system} = let
         rust = {
@@ -135,7 +208,7 @@
           version = "0.0.10";
         
           src = pkgs.fetchFromGitHub {
-	    inherit pname version;
+            inherit pname version;
             owner = "nessshon";
             repo = "aiogram-newsletter";
             rev = "bb8a42e4bcff66a9a606fc92ccc27b1d094b20fc";
@@ -157,9 +230,21 @@
         pg_wdumpall = pkgs.callPackage ./package/postgres/pg_wdumpall.nix rust.commonArgs; 
         pg_wdump = pkgs.callPackage ./package/postgres/pg_wdump.nix rust.commonArgs; 
         pg-migration = pkgs.callPackage ./package/postgres/pg-migration/default.nix rust.commonArgs;
-	pg-15-hemar = buildHemarExt pkgs "15";
-	pg-16-hemar = buildHemarExt pkgs "16";
-	pg-17-hemar = buildHemarExt pkgs "17";
+        pg-17-ext-hemar = buildHemarExt pkgs "17";
+        pg-17-ext-http = buildHttpExt pkgs "17";
+        pg-17-ext-smtp-client = buildSmtpExt pkgs "17";
+        pg-17-ext-plhaskell = buildPlHaskellExt pkgs "17";
+        pg-17-ext-plsh = buildPlShExt pkgs "17";
+        pg-16-ext-hemar = buildHemarExt pkgs "16";
+        pg-16-ext-http = buildHttpExt pkgs "16";
+        pg-16-ext-smtp-client = buildSmtpExt pkgs "16";
+        pg-16-ext-plhaskell = buildPlHaskellExt pkgs "16";
+        pg-16-ext-plsh = buildPlShExt pkgs "16";
+        pg-15-ext-hemar = buildHemarExt pkgs "15";
+        pg-15-ext-http = buildHttpExt pkgs "15";
+        pg-15-ext-smtp-client = buildSmtpExt pkgs "15";
+        pg-15-ext-plhaskell = buildPlHaskellExt pkgs "15";
+        pg-15-ext-plsh = buildPlShExt pkgs "15";
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
       };
@@ -171,21 +256,21 @@
           buildInputs = (with pkgs; [ inotify-tools gdb gcc ]) ++ (with self.packages.${system}; [ c-hectic nvim-pager watch ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
         };
-	postgres-c = pkgs.mkShell {
-          buildInputs = (with pkgs; [ inotify-tools postgresql_15 ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc ]);
+        postgres-c = pkgs.mkShell {
+          buildInputs = (with pkgs; [ inotify-tools postgresql_15 ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs; [ gdb gcc ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
 
-	  shellHook = ''
-            export PATH=${pkgs-unstable.gcc}/bin:$PATH
+          shellHook = ''
+            export PATH=${pkgs.gcc}/bin:$PATH
             export PAGER="${self.packages.${system}.nvim-pager}/bin/pager"
           '';
         };
-	pure-c = pkgs.mkShell {
-          buildInputs = (with pkgs; [ inotify-tools ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs-unstable; [ gdb gcc binutils ]);
+        pure-c = pkgs.mkShell {
+          buildInputs = (with pkgs; [ inotify-tools ]) ++ (with self.packages.${system}; [ nvim-pager ]) ++ (with pkgs; [ gdb gcc binutils ]);
           PAGER = "${self.packages.${system}.nvim-pager}/bin/pager";
 
-	  shellHook = ''
-            export PATH=${pkgs-unstable.gcc}/bin:$PATH
+          shellHook = ''
+            export PATH=${pkgs.gcc}/bin:$PATH
             export PAGER="${self.packages.${system}.nvim-pager}/bin/pager"
           '';
         };
@@ -201,9 +286,9 @@
               jq
               yq-go
               curl
-	      (writeScriptBin "hemar-check" ''
+              (writeScriptBin "hemar-check" ''
                 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null vm-postgres 'zsh -c check'
-	      '')
+              '')
             ]);
 
           # environment
@@ -327,9 +412,9 @@
 
 
               services.postgresql =
-	      let
-	        package = pkgs.postgresql_15;
-	      in {
+              let
+                package = pkgs.postgresql_15;
+              in {
                 enable = true;
                 package = package;
                 settings = 
@@ -356,15 +441,15 @@
               };                   
  
               environment.systemPackages =  with pkgs; [
-	        gdb
-		hectic.nvim-pager
-		(writeScriptBin "check" ''
-	          journalctl -u postgresql.service | grep postgresql-post-start | sed 's|psql:/nix/store/[^:]*:[0-9]*: ||' | sed 's|^[^:]*:[^:]*:[^:]*: ||' | grep -v '^\[.*\]' | ${hectic.prettify-log}/bin/prettify-log --color-output
-		'')
-	       ];
+                gdb
+                hectic.nvim-pager
+                (writeScriptBin "check" ''
+                  journalctl -u postgresql.service | grep postgresql-post-start | sed 's|psql:/nix/store/[^:]*:[0-9]*: ||' | sed 's|^[^:]*:[^:]*:[^:]*: ||' | grep -v '^\[.*\]' | ${hectic.prettify-log}/bin/prettify-log --color-output
+                '')
+               ];
               programs.zsh.shellAliases = self.lib.sharedShellAliasesForDevVm // {
-	        conn = "sudo su postgres -c 'psql -p 64317'";
-	      };
+                conn = "sudo su postgres -c 'psql -p 64317'";
+              };
 
               virtualisation = {
                 vmVariant = {
@@ -483,111 +568,30 @@
       };
       overlays.default = final: prev: (
         let
-          pkgs-unstable = import nixpkgs-unstable { inherit (prev) system; };
+	  hectic-packages = self.packages.${prev.system};
 
-          buildPgrxExtension =
-            prev.callPackage (import (builtins.path {
-              name = "extension-builder";
-              path = ./buildPgrxExtension.nix;
-            })) { 
-              cargo-pgrx = pkgs-unstable.cargo-pgrx_0_12_6;
-              inherit (pkgs-unstable.darwin.apple_sdk.frameworks) Security;
-            };
-
-          buildSmtpExt = versionSuffix: let
-            postgresql = prev."postgresql_${versionSuffix}";
-            src = prev.fetchFromGitHub {
-              owner = "brianpursley";
-              repo = "pg_smtp_client";
-              rev = "6ff3b71e3705e0d4081a51c21ca0379e869ba5fb";
-              hash = "sha256-wC/2rAsSDO83UITaFhtaf3do3aaOAko4gnKUOzwURc8=";
-            };
-            cargo = self.lib.cargoToml src;
-          in
-            buildPgrxExtension {
-              pname = cargo.package.name;
-              version = cargo.package.version;
-          
-              inherit src postgresql;
-          
-              buildInputs = with prev; [ openssl ];
-
-              cargoHash = "sha256-AbLT7vcFV89zwZIaTC1ELat9l4UeNP8Bn9QMMOms1Co=";
-          
-              doCheck = false;
-            };
-          buildPlShExt = versionSuffix: let
-	      version = "4.0"; 
-            in buildPostgresqlExtension prev {
-              postgresql = prev."postgresql_${versionSuffix}";
-            } {
-              pname = "plsh";
-              inherit version;
-              src = prev.fetchFromGitHub {
-                owner = "petere";
-                repo = "plsh";
-                rev = "d88079617309974f71b3f8e4d5f96869dba66835";
-                hash = "sha256-H9B5L+yIjjVNhnuF+bIZKyCrOqfIvu5W26aqyqL5UdQ=";
-              };
-              nativeBuildInputs = with prev; [ pkg-config ];
-            };
-          buildPlHaskellExt = versionSuffix: let
-	      version = "4.0"; 
-            in buildPostgresqlExtension prev {
-              postgresql = prev."postgresql_${versionSuffix}";
-            } {
-              pname = "plhaskell";
-              inherit version;
-              src = prev.fetchFromGitHub {
-                owner = "ed-o-saurus";
-                repo = "PLHaskell";
-                rev = "d917f0991a455cf0558c2036e360ba1a9b40a8ef";
-                hash = "sha256-+sJmR/SCMfxxExa7GZuNmWez1dfhvlM9qOdO9gHNf74=";
-              };
-              nativeBuildInputs = with prev; [pkg-config curl ghc haskellPackages.hsc2hs haskellPackages.HSFFIG];
-            };
-          buildHttpExt = versionSuffix: let
-              version = "1.6.1";
-            in buildPostgresqlExtension prev {
-              postgresql = prev."postgresql_${versionSuffix}";
-            } {
-              pname = "http";
-              inherit version;
-              src = prev.fetchFromGitHub {
-	        owner = "pramsey";
-		repo = "pgsql-http";
-		rev = "v${version}";
-		hash = "sha256-C8eqi0q1dnshUAZjIsZFwa5FTYc7vmATF3vv2CReWPM=";
-	    };
-	    nativeBuildInputs = with prev; [pkg-config curl];
-	  };
         in {
-          hectic = self.packages.${prev.system};
+          hectic = hectic-packages;
           postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
-            http = buildHttpExt "17";
-            pg_smtp_client = buildSmtpExt "17";
-            plhaskell = buildPlHaskellExt "17";
-            plsh = buildPlShExt "17";
-            hemar = buildHemarExt prev "17";
+            http = hectic-packages.pg-17-ext-http;
+            pg_smtp_client = hectic-packages.pg-17-ext-smtp-client;
+            plhaskell = hectic-packages.pg-17-ext-plhaskell;
+            plsh = hectic-packages.pg-17-ext-plsh;
+            hemar = hectic-packages.pg-17-ext-hemar;
           };};
           postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
-            http = buildHttpExt "16";
-            pg_smtp_client = buildSmtpExt "16";
-            plhaskell = buildPlHaskellExt "16";
-            hemar = buildHemarExt prev "16";
+            http = hectic-packages.pg-16-ext-http;
+            pg_smtp_client = hectic-packages.pg-16-ext-smtp-client;
+            plhaskell = hectic-packages.pg-16-ext-plhaskell;
+            plsh = hectic-packages.pg-16-ext-plsh;
+            hemar = hectic-packages.pg-16-ext-hemar;
           };};
           postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
-            http = buildHttpExt "15";
-            pg_smtp_client = buildSmtpExt "15";
-            plhaskell = buildPlHaskellExt "15";
-            plsh = buildPlShExt "15";
-            hemar = buildHemarExt prev "15";
-          };};
-          postgresql_14 = prev.postgresql_14 // {pkgs = prev.postgresql_14.pkgs // {
-            http = buildHttpExt "14";
-            pg_smtp_client = buildSmtpExt "14";
-            plhaskell = buildPlHaskellExt "14";
-            hemar = buildHemarExt prev "14";
+            http = hectic-packages.pg-15-ext-http;
+            pg_smtp_client = hectic-packages.pg-15-ext-smtp-client;
+            plhaskell = hectic-packages.pg-15-ext-plhaskell;
+            plsh = hectic-packages.pg-15-ext-plsh;
+            hemar = hectic-packages.pg-15-ext-hemar;
           };};
           writers = let
             writeC =
@@ -645,9 +649,9 @@
           nv = ''nvim'';
         };
 
-	sharedShellAliasesForDevVm = self.lib.sharedShellAliases // {
+        sharedShellAliasesForDevVm = self.lib.sharedShellAliases // {
           sd = "shutdown now";
-	};
+        };
 
         readEnvironment = { envVarsToRead, prefix ? "" }:
           builtins.listToAttrs
