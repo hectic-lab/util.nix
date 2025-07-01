@@ -245,6 +245,7 @@
         pg-15-ext-smtp-client = buildSmtpExt pkgs "15";
         pg-15-ext-plhaskell = buildPlHaskellExt pkgs "15";
         pg-15-ext-plsh = buildPlShExt pkgs "15";
+        slpt = pkgs.callPackage ./package/slpt.nix {};
         c-hectic = pkgs.callPackage ./package/c/hectic/default.nix {};
         watch = pkgs.callPackage ./package/c/watch/default.nix {};
         support-bot = pkgs.callPackage ./package/support-bot {};
