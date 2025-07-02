@@ -2,7 +2,7 @@
   src = fetchFromGitHub {
     owner = "nativerv";
     repo = "slpt";
-    rev = "6ce04bcf53e12518eb7abba193c72014557ec2c2";
-    hash = "sha256-AZ8z8wR8xX9tYNM9sPb0Uqc0UHWebMbal8sNupWAbOI=";
+    rev = "8d70db4d8dfcd624ed49b9e6fb0ad449b6f25b89";
+    hash = "sha256-sCHZsf7Y36iAesh7BeSxy9WhE/uQv13/VWmjlaVSEcU=";
   };
 in writeShellScriptBin "slpt" (builtins.readFile "${src}/slpt")
