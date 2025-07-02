@@ -53,6 +53,7 @@
         postgresql = pkgs."postgresql_${versionSuffix}";
         c-hectic = self.packages.${pkgs.system}.c-hectic;
     in buildPostgresqlExtension pkgs {
+        stdenv = pkgs.clangStdenv;
         inherit postgresql;
       } {
         pname = "hemar";
@@ -100,6 +101,7 @@
     buildPlShExt = pkgs: versionSuffix: let
         version = "4.0"; 
       in buildPostgresqlExtension pkgs {
+        stdenv = pkgs.clangStdenv;
         postgresql = pkgs."postgresql_${versionSuffix}";
       } {
         pname = "plsh";
@@ -115,6 +117,7 @@
     buildPlHaskellExt = pkgs: versionSuffix: let
         version = "4.0"; 
       in buildPostgresqlExtension pkgs {
+        stdenv = pkgs.clangStdenv;
         postgresql = pkgs."postgresql_${versionSuffix}";
       } {
         pname = "plhaskell";
@@ -125,11 +128,26 @@
           rev = "d917f0991a455cf0558c2036e360ba1a9b40a8ef";
           hash = "sha256-+sJmR/SCMfxxExa7GZuNmWez1dfhvlM9qOdO9gHNf74=";
         };
-        nativeBuildInputs = with pkgs; [pkg-config curl ghc haskellPackages.hsc2hs haskellPackages.HSFFIG];
+	preBuild = ''
+	  last=$(pwd)
+	  cd ${pkgs.haskellPackages.ghc}
+	  include=$(dirname "${pkgs.haskellPackages.ghc}/$(find . -name HsFFI.h)")
+	  ls $include
+	  cd $last
+          export NIX_CFLAGS_COMPILE="$NIX_CFLAGS_COMPILE -I$include"
+        '';
+        nativeBuildInputs = with pkgs; [
+	  pkg-config
+	  curl
+	  ghc
+	  haskellPackages.hsc2hs
+	  haskellPackages.ghc 
+	];
       };
     buildHttpExt = pkgs: versionSuffix: let
         version = "1.6.1";
       in buildPostgresqlExtension pkgs {
+        stdenv = pkgs.clangStdenv;
         postgresql = pkgs."postgresql_${versionSuffix}";
       } {
         pname = "http";
