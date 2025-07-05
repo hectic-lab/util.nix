@@ -572,14 +572,13 @@
 
           system.stateVersion = "24.11";
         };
-        "hardware.hetzner" = {...}: {
+        "hardware.hetzner" = { pkgs, ...}: {
           boot.loader.grub.device = "/dev/sda";
           boot.initrd.availableKernelModules = [
             "ata_piix"
             "uhci_hcd"
             "xen_blkfront"
-            "vmw_pvscsi"
-          ];
+          ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
           boot.initrd.kernelModules = ["nvme"];
           fileSystems."/" = {
             device = "/dev/sda1";
