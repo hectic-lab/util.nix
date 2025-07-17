@@ -1,47 +1,24 @@
 {
   description = "yukkop's nix utilities";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-25-05.url = "github:NixOS/nixpkgs/nixos-25.05";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
-        nixpkgs.follows = "nixpkgs";
+        nixpkgs.follows = "nixpkgs-25-05";
       };
     };
   };
 
   outputs = {
     self,
-    nixpkgs,
+    nixpkgs-25-05,
     rust-overlay,
-  }: let
-    lib = nixpkgs.lib;
-
-    recursiveUpdate = lib.recursiveUpdate;
-
-    supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin"];
-
-    forSpecSystemsWithPkgs = supportedSystems: pkgOverlays: f:
-      builtins.foldl' (
-        acc: system: let
-          pkgs = import nixpkgs {
-            inherit system;
-            overlays = pkgOverlays;
-          };
-          systemOutputs = f {
-            system = system;
-            pkgs = pkgs;
-          };
-        in
-          recursiveUpdate acc systemOutputs
-      ) {}
-      supportedSystems;
-
-    forAllSystemsWithPkgs = pkgOverlays: f: forSpecSystemsWithPkgs supportedSystems pkgOverlays f;
-
-    envErrorMessage = varName: "Error: The ${varName} environment variable is not set.";
-
-    parseEnv = import ./parse-env.nix;
+    ...
+  }@inputs: let
+    flake = ./.;
+    nixpkgs = nixpkgs-25-05;
+    self-lib = import ./lib { inherit flake self inputs; };
 
     buildPostgresqlExtension =
       pkgs: pkgs.callPackage (import (builtins.path {
@@ -84,7 +61,7 @@
         rev = "6ff3b71e3705e0d4081a51c21ca0379e869ba5fb";
         hash = "sha256-wC/2rAsSDO83UITaFhtaf3do3aaOAko4gnKUOzwURc8=";
       };
-      cargo = self.lib.cargoToml src;
+      cargo = self-lib.cargoToml src;
     in
       buildPgrxExtension pkgs {
         pname = cargo.package.name;
@@ -161,22 +138,11 @@
       nativeBuildInputs = with pkgs; [pkg-config curl];
     };
 
-    dotEnv = builtins.getEnv "DOTENV";
-    minorEnvironment =
-      if dotEnv != ""
-      then
-        if builtins.pathExists dotEnv
-        then parseEnv dotEnv
-        else throw "${dotEnv} file not exist"
-      else if builtins.pathExists ./.env
-      then parseEnv ./.env
-      else {};
   in
-    forAllSystemsWithPkgs [(import rust-overlay)] ({
+    self-lib.forAllSystemsWithPkgs [(import rust-overlay)] ({
       system,
       pkgs,
-    }: let
-    in {
+    }: {
       packages.${system} = let
         rust = {
           nativeBuildInputs = [
@@ -403,96 +369,20 @@
           });
       };
       nixosConfigurations = {
-        "${system}_manual_test" = nixpkgs.lib.nixosSystem {
+        "devvm|manual|${system}" = import "./nixos/system/devvm|manual" { inherit flake self inputs; };
+        "hemar-test|${system}" = nixpkgs.lib.nixosSystem {
           inherit system;
           modules = [
-            self.nixosModules."preset.default"
-            self.nixosModules."hardware.hetzner"
-            ({modulesPath, pkgs, ...}: {
+            ({modulesPath, pkgs, lib, ...}: {
               imports = [
+                self.nixosModules.hectic
                 (modulesPath + "/profiles/qemu-guest.nix")
               ];
 
-              environment.systemPackages = with pkgs; [
-                (pkgs.writers.writeMinCBin "minc-hello-world" ["<stdio.h>"] /*c*/ ''
-                  printf("hello world\n");
-                '')
-                (pkgs.writers.writeMinCBin "minc-env" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
-                  char *env_name;
-                  if (argc > 1) {
-                    env_name = argv[1];
-                  } else {
-                    env_name = "HOME";
-                  }
-                  char *value = getenv(env_name);
-                  if (value) {
-                      printf("%s: %s\n", env_name, value);
-                  } else {
-                      printf("Environment variable %s not found.\n", env_name);
-                  }
-                '')
-                (pkgs.writers.writeMinCBin "minc-env-check" ["<stdio.h>" "<stdlib.h>"] /*c*/ ''
-                  char *env_name;
-                  if (argc > 1) {
-                    env_name = argv[1];
-                  } else {
-                    env_name = "HOME";
-                  }
-
-                  char *value = getenv(env_name);
-                  if (value) {
-                      char buffer[128];
-                      sprintf(buffer, "echo $%s\n", env_name);
-                      system(buffer);
-                  } else {
-                      printf("Environment variable %s not found.\n", env_name);
-                  }
-                '')
-              ];
-
-              users.users.root.openssh.authorizedKeys.keys = [
-                ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrbBG+U07f7OKvOxYIGYCaNvyozzxQF+I9Fb5TYZErK yukkop vm-postgres''
-              ];
-
-              programs.zsh.shellAliases = self.lib.sharedShellAliasesForDevVm;
-
-              virtualisation = {
-                vmVariant = {
-                  systemd.services.fix-root-perms = {
-                    description = "Fix root directory permissions";
-                    after = [ "local-fs.target" ];
-                    wantedBy = [ "multi-user.target" ];
-                    serviceConfig = {
-                      Type = "oneshot";
-                      ExecStart = "${pkgs.coreutils}/bin/chmod 755 /";
-                    };
-                  };
-                  virtualisation = {
-                    diskSize = 1024*6;
-                    diskImage = null;
-                    forwardPorts = [ ];
-                  };
-                };
-              };
-              networking.firewall = {
-                enable = true;
-                allowedTCPPorts = [
-                  80
-                ];
-              };
-            })
-          ];
-          pkgs = import nixpkgs {inherit system; overlays = [ self.overlays.default ];};
-        };
-        "${system}_hemar_test" = nixpkgs.lib.nixosSystem {
-          inherit system;
-          modules = [
-            self.nixosModules."preset.default"
-            self.nixosModules."hardware.hetzner"
-            ({modulesPath, pkgs, ...}: {
-              imports = [
-                (modulesPath + "/profiles/qemu-guest.nix")
-              ];
+              hectic = {
+	        archetype.dev.enable = true;
+		hardware.hetzner-cloud.enable = true;
+	      };
 
               users.users.root.openssh.authorizedKeys.keys = [
                 ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrbBG+U07f7OKvOxYIGYCaNvyozzxQF+I9Fb5TYZErK yukkop vm-postgres''
@@ -569,232 +459,10 @@
           pkgs = import nixpkgs {inherit system; overlays = [ self.overlays.default ];};
         };
       };
-    })
-    // {
-      nixosModules = {
-        "preset.default" = {
-          pkgs,
-          modulesPath,
-          ...
-        }: {
-          imports = [
-            (modulesPath + "/profiles/qemu-guest.nix")
-          ];
-
-          services.getty.autologinUser = "root";
-          programs.zsh.shellAliases = self.lib.sharedShellAliases;
-
-          programs.zsh.enable = true;
-          users.defaultUserShell = pkgs.zsh;
-
-          # Enable flakes and new 'nix' command
-          nix.settings.experimental-features = "nix-command flakes";
-
-          virtualisation.vmVariant.virtualisation = {
-            qemu.options = [
-              "-nographic"
-              "-display curses"
-              "-append console=ttyS0"
-              "-serial mon:stdio"
-              "-vga qxl"
-            ];
-            forwardPorts = [
-              {
-                from = "host";
-                host.port = 40500;
-                guest.port = 22;
-              }
-            ];
-          };
-
-          services.openssh = {
-            enable = true;
-            settings = {
-              PasswordAuthentication = false;
-            };
-          };
-
-          networking.firewall = {
-            enable = true;
-            allowedTCPPorts = [];
-          };
-
-          environment = {
-            defaultPackages = [];
-            systemPackages =
-              (with pkgs; [
-                curl
-                neovim
-                yq-go
-                jq
-                htop-vim
-              ])
-              ++ (with self.packages.${pkgs.system}; [
-                prettify-log
-                nvim-pager
-              ]);
-            variables = {
-              PAGER = with self.packages.${pkgs.system}; "${nvim-pager}/bin/pager";
-            };
-          };
-
-          system.stateVersion = "24.11";
-        };
-        "hardware.hetzner" = { pkgs, ...}: {
-          boot.loader.grub.device = "/dev/sda";
-          boot.initrd.availableKernelModules = [
-            "ata_piix"
-            "uhci_hcd"
-            "xen_blkfront"
-          ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
-          boot.initrd.kernelModules = ["nvme"];
-          fileSystems."/" = {
-            device = "/dev/sda1";
-            fsType = "ext4";
-          };
-        };
-      };
-      overlays.default = final: prev: (
-        let
-	  hectic-packages = self.packages.${prev.system};
-        in {
-          hectic = hectic-packages;
-          postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
-            http = hectic-packages.pg-17-ext-http;
-            pg_smtp_client = hectic-packages.pg-17-ext-smtp-client;
-            plhaskell = hectic-packages.pg-17-ext-plhaskell;
-            plsh = hectic-packages.pg-17-ext-plsh;
-            hemar = hectic-packages.pg-17-ext-hemar;
-          };};
-          postgresql_16 = prev.postgresql_16 // {pkgs = prev.postgresql_16.pkgs // {
-            http = hectic-packages.pg-16-ext-http;
-            pg_smtp_client = hectic-packages.pg-16-ext-smtp-client;
-            plhaskell = hectic-packages.pg-16-ext-plhaskell;
-            plsh = hectic-packages.pg-16-ext-plsh;
-            hemar = hectic-packages.pg-16-ext-hemar;
-          };};
-          postgresql_15 = prev.postgresql_15 // {pkgs = prev.postgresql_15.pkgs // {
-            http = hectic-packages.pg-15-ext-http;
-            pg_smtp_client = hectic-packages.pg-15-ext-smtp-client;
-            plhaskell = hectic-packages.pg-15-ext-plhaskell;
-            plsh = hectic-packages.pg-15-ext-plsh;
-            hemar = hectic-packages.pg-15-ext-hemar;
-          };};
-          writers = let
-            writeC = name: argsOrScript:
-              if lib.isAttrs argsOrScript && !lib.isDerivation argsOrScript
-              then
-                prev.writers.makeBinWriter (
-                  argsOrScript
-                  // {
-                    compileScript = ''
-                      # Force gcc to treat the input file as C code
-                      ${prev.gcc}/bin/gcc -fsyntax-only -xc $contentPath
-                      if [ $? -ne 0 ]; then
-                        echo "Syntax check failed"
-                        exit 1
-                      fi
-                      ${prev.gcc}/bin/gcc -xc -o $out $contentPath
-                    '';
-                  }
-                )
-                name
-              else
-                prev.writers.makeBinWriter {
-                  compileScript = ''
-                    # Force gcc to treat the input file as C code
-                    ${prev.gcc}/bin/gcc -fsyntax-only -xc $contentPath
-                    if [ $? -ne 0 ]; then
-                      echo "Syntax check failed"
-                      exit 1
-                    fi
-                    ${prev.gcc}/bin/gcc -xc -o $out $contentPath
-                  '';
-                }
-                name
-                argsOrScript;
-            writeMinC = name: includes: body:
-              writeC name ''
-                ${builtins.concatStringsSep "\n" (map (h: "#include " + h) includes)}
-
-                int main(int argc, char *argv[]) {
-                    ${body}
-                }
-              '';
-          in
-            prev.writers
-            // {
-              writeCBin = name: writeC "/bin/${name}";
-              writeC = writeC;
-              writeMinCBin = name: includes: body: writeMinC "/bin/${name}" includes body;
-              writeMinC = writeMinC;
-            };
-        }
-      );
-      lib = {
-        # -- For all systems --
-        inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs;
-
-	shellModules.logs = ''
-          RED='\033[0;31m'
-          GREEN='\033[0;32m'
-          YELLOW='\033[1;33m'
-          BLUE='\033[0;34m'
-          PURPLE='\033[0;35m'
-          MAGENTA="$PURPLE"
-          CYAN='\033[0;36m'
-          WHITE='\033[1;37m'
-          NC='\033[0m' # No Color
-
-          LOG_PATH="/var/log/hectic/activation.log"
-
-          mkdir -p "$(dirname "$LOG_PATH")"
-
-          log_info()    { text=$1; shift; printf "%b ''${text}%b\n" "$BLUE"   "$@" "$NC" | tee -a "$LOG_PATH" >&2; }
-          log_success() { text=$1; shift; printf "%b ''${text}%b\n" "$GREEN"  "$@" "$NC" | tee -a "$LOG_PATH" >&2; }
-          log_warning() { text=$1; shift; printf "%b ''${text}%b\n" "$YELLOW" "$@" "$NC" | tee -a "$LOG_PATH" >&2; }
-          log_error()   { text=$1; shift; printf "%b ''${text}%b\n" "$RED"    "$@" "$NC" | tee -a "$LOG_PATH" >&2; }
-          log_step()    { text=$1; shift; printf "%b ''${text}%b\n" "$PURPLE" "$@" "$NC" | tee -a "$LOG_PATH" >&2; }
-
-          log_header() { printf "\n%b=== %s ===%b\n" "$WHITE" "$@" "$NC" | tee -a "$LOG_PATH" >&2; }
-        '';
-
-        sharedShellAliases = {
-          jc = ''journalctl'';
-          sc = ''journalctl'';
-          nv = ''nvim'';
-        };
-
-        sharedShellAliasesForDevVm = self.lib.sharedShellAliases // {
-          sd = "shutdown now";
-        };
-
-        readEnvironment = { envVarsToRead, prefix ? "" }:
-          builtins.listToAttrs
-          (map (name: {
-              inherit name;
-              value = self.lib.getEnv "${prefix}${name}";
-            })
-            envVarsToRead);
-
-        # -- Env processing --
-        getEnv = varName: let
-          var = builtins.getEnv varName;
-        in
-          if var != ""
-          then var
-          else if minorEnvironment ? varName
-          then minorEnvironment."${varName}"
-          else throw (envErrorMessage varName);
-
-        # -- Cargo.toml --
-        cargoToml = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
-
-        ssh.keys = {
-          hetzner-test = {
-            yukkop = ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ8scy1tv6zfXX6xyaukhO/fsZwif5rC89DvXNc6XxOf'';
-          };
-        };
-      };
-    };
+    }) //
+  {
+    lib = self-lib;
+    overlays.default = import ./overlay { inherit flake self inputs nixpkgs; };
+    nixosModules = import ./nixos/module { inherit flake self inputs nixpkgs; };
+  };
 }
