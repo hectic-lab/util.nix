@@ -7,6 +7,7 @@
   pkgs,
   modulesPath,
   config,
+  ...
 }:
 {
   imports = [
