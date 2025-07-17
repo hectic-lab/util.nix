@@ -48,7 +48,10 @@ in {
   forSystems = systems: nixpkgs.lib.genAttrs systems;
   forAllSystems = nixpkgs.lib.genAttrs commonSystems;
 
-  shellModules.logs = builtins.readFile ./shell/logs.sh;
+  shellModules = {
+    logs = builtins.readFile ./shell/logs.sh;
+    check-tool = builtins.readFile ./shell/check-tool.sh;
+  };
 
   sharedShellAliases = {
     jc = ''journalctl'';
