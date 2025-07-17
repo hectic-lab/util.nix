@@ -1,5 +1,4 @@
-{ flake, inputs, self }: let
-  nixpkgs = inputs.nixpkgs-25-05;
+{ flake, inputs, self, nixpkgs }: let
   lib = nixpkgs.lib;
   recursiveUpdate = nixpkgs.lib.recursiveUpdate;
 
@@ -12,7 +11,7 @@
     "aarch64-darwin"
   ];
 
-  forSpecSystemsWithPkgs = supportedSystems: pkgOverlays: f:
+  forSystemsWithPkgs = supportedSystems: pkgOverlays: f:
     builtins.foldl' (
       acc: system: let
         pkgs = import nixpkgs {
@@ -28,7 +27,7 @@
     ) {}
     supportedSystems;
 
-  forAllSystemsWithPkgs = pkgOverlays: f: forSpecSystemsWithPkgs commonSystems pkgOverlays f;
+  forAllSystemsWithPkgs = pkgOverlays: f: forSystemsWithPkgs commonSystems pkgOverlays f;
 
   parseEnv = import ./parse-env.nix;
 
@@ -44,7 +43,10 @@
     else {};
 in {
   # -- For all systems --
-  inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSpecSystemsWithPkgs commonSystems;
+  inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSystemsWithPkgs commonSystems;
+
+  forSystems = systems: nixpkgs.lib.genAttrs systems;
+  forAllSystems = nixpkgs.lib.genAttrs commonSystems;
 
   shellModules.logs = ''
     RED='\033[0;31m'
@@ -144,6 +146,8 @@ in {
         paths;
     in
       listToAttrs attrList;
+
+  nixpkgs-lib = nixpkgs.lib;
 } // rec {
   /* Supplied a directory, reads it's recursive structure into NixOS modules, so
      that provided a `./module` dir with `module/foo/bar.nix` in it it outputs
