@@ -44,7 +44,7 @@
     nixpkgs = nixpkgs-25-05;
     overlays = [ self.overlays.default ];
     self-lib = import ./lib { inherit flake self inputs nixpkgs; };
-  in self-lib.forAllSystemsWithPkgs [(import rust-overlay)] ({
+  in self-lib.forAllSystemsWithPkgs ([(import rust-overlay)] ++ overlays) ({
     system,
     pkgs,
   }: {
