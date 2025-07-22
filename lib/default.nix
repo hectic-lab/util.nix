@@ -51,6 +51,7 @@ in {
   shellModules = {
     logs = builtins.readFile ./shell/logs.sh;
     check-tool = builtins.readFile ./shell/check-tool.sh;
+    local-dir = builtins.readFile ./shell/local-dir.sh;
   };
 
   sharedShellAliases = {
