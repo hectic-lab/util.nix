@@ -1,5 +1,5 @@
 .env
 result
-result-man/
+result-man
 rust-toolchain.toml
 target/
