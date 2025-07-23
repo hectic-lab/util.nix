@@ -272,4 +272,5 @@ in {
   c-hectic = pkgs.callPackage ./c/hectic/default.nix {};
   watch = pkgs.callPackage ./c/watch/default.nix {};
   support-bot = pkgs.callPackage ./support-bot {};
+  nix-derivation-hash = pkgs.callPackage ./nix-derivation-hash {};
 }
