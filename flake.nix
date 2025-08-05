@@ -70,5 +70,6 @@
     lib = self-lib;
     overlays.default = import ./overlay      { inherit flake self inputs nixpkgs; };
     nixosModules     = import ./nixos/module { inherit flake self inputs nixpkgs; };
+    templates        = import ./template     { inherit flake self inputs nixpkgs; };
   };
 }
