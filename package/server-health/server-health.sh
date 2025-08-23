@@ -70,4 +70,3 @@ esac
 len=$(wc -c <"$tmp" | awk '{print $1}')
 printf 'HTTP/1.1 %s\r\nContent-Type: %s\r\nContent-Length: %s\r\nConnection: close\r\n\r\n' "$status" "$ctype" "$len"
 cat "$tmp"
-
