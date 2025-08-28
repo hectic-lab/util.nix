@@ -1,6 +1,6 @@
 { inputs, flake, self }:
 { config, pkgs, lib, ... }: let
-  cfg = config.hectic.support-bot;
+  cfg = config.hectic.services.support-bot;
   system = pkgs.system;
 
   packagesAttr = lib.mapAttrs (packageName: packageConfig: 
@@ -10,7 +10,7 @@
   packagesArr = builtins.attrValues packagesAttr;
 in {
   options = {
-    hectic.support-bot = lib.mkOption {
+    hectic.services.support-bot = lib.mkOption {
       type = lib.types.attrsOf (
         lib.types.submodule {
           options = {

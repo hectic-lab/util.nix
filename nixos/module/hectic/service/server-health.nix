@@ -10,12 +10,12 @@
   ...
 }: let
   system = pkgs.system;
-  cfg = config.hectic.server-health;
+  cfg = config.hectic.services.server-health;
   #   URLS="http://..."     # default: none
   #   VOLUMES="/ /home"     # default: all from df -P
 in {
   options = {
-    hectic.server-health = {
+    hectic.serivices.server-health = {
       enable   = lib.mkEnableOption "enable serverhelth services";
       urls = lib.mkOption {
         type = lib.types.port;
