@@ -15,7 +15,7 @@ in {
         lib.types.submodule {
           options = {
             redisHost = lib.mkOption {
-              type = lib.types.host;
+              type = lib.types.str;
 	      default = "localhost";
 	      example = "localhost";
 	      description = ''
@@ -55,6 +55,9 @@ in {
         {
           "name-of-service" = {
             environmentPath = config.sops.secrets."name-of-service/environment".path;
+	    redisDb = 3;
+            redisPort = 42069;
+	    redisHost = localhost;
 	  };
         };
       '';
@@ -81,8 +84,8 @@ in {
 	  EnvironmentFile = supportConfig.environmentPath;
 	  Envitronmet = [
 	    "REDIS_HOST=${supportConfig.redisHost}"
-            "REDIS_PORT=${supportConfig.redisPort}"
-            "REDIS_DB=${supportConfig.redisDb}"
+            "REDIS_PORT=${builtins.toString supportConfig.redisPort}"
+            "REDIS_DB=${builtins.toString supportConfig.redisDb}"
 	  ];
           
           # Shutdown configuration
