@@ -15,7 +15,7 @@
   #   VOLUMES="/ /home"     # default: all from df -P
 in {
   options = {
-    hectic.serivices.server-health = {
+    hectic.services.server-health = {
       enable   = lib.mkEnableOption "enable serverhelth services";
       urls = lib.mkOption {
         type = lib.types.port;
