@@ -82,7 +82,7 @@ in {
           Restart = "always";
           RestartSec = "5s";
 	  EnvironmentFile = supportConfig.environmentPath;
-	  Envitronmet = [
+	  Environment = [
 	    "REDIS_HOST=${supportConfig.redisHost}"
             "REDIS_PORT=${builtins.toString supportConfig.redisPort}"
             "REDIS_DB=${builtins.toString supportConfig.redisDb}"
