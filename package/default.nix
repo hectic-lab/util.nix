@@ -275,4 +275,5 @@ in {
   nix-derivation-hash = pkgs.callPackage ./nix-derivation-hash {};
   server-health = pkgs.callPackage ./server-health {};
   shellplot = pkgs.callPackage ./shellplot {};
+  sops = pkgs.callPackage ./sops.nix {};
 }
