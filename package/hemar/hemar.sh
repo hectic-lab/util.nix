@@ -1,17 +1,133 @@
 #!/bin/dash
 
-# 0 - text
-# 1 - deside tag type
-# 2 - interpolation
-# 3 - section
-# 4 - include
-# 5 - compute
-STAGE=0
-STAGE_BUFFER="$(mktemp)"
-open_tag_flag=0
+# Syntax scheme:
+#
+# hemar
+#   elements
+# 
+# elements
+#   element
+#   element ws elements
+# 
+# element
+#   tag
+#   text
+# 
+# text
+#   text-item
+#   text-item text
+# 
+# text-item
+#   '0020' . '10FFFF' - '{'
+#   nopatern
+# 
+# tag
+#   '{[' ws path           ws ']}'
+#   '{[' ws loop-statement ws ']}'
+#   '{[' ws include-header ws ']}'
+#   '{[' ws "end"          ws ']}'
+#   '{[' ws function       ws ']}'
+# 
+# # loop tag
+# loop-statemant
+#   "for" string "in" path
+# 
+# # include tag
+# include-header
+#   "include" path
+# 
+# # fucntion tag
+# function
+#   "compute" language function-body
+#   "compute" - function-body
+# 
+# language
+#   "dash"
+#   "plpgsql"
+# 
+# function-body
+#   ""
+#   '0020' . '10FFFF', function-body
+# 
+# function-character
+#   '0020' . '10FFFF' - ']'
+#   ncpatern
+# 
+# # path
+# path
+#   "."
+#   segmented-path
+# 
+# segmented-path
+#   segment
+#   segment "." segmented-path
+# 
+# segment
+#   string
+#   index
+# 
+# index
+#   '\'     digit
+#   '\'     onenine digits
+#   '\' '-' digit
+#   '\' '-' onenine digits
+# 
+# # types
+# string
+#   character
+#   character string
+# 
+# character
+#   '0020' . '10FFFF' - '"' - '\' - '.' - ']'
+#   '\' escape
+#   ncpatern
+# 
+# escape
+#   '.'
+#   ']}'
+#   '"'
+#   '\'
+#   '/'
+#   'b'
+#   'f'
+#   'n'
+#   'r'
+#   't'
+#   'u' hex hex hex hex
+# 
+# hex
+#   digit
+#   'A' . 'F'
+#   'a' . 'f'
+# 
+# digits
+#   digit
+#   digit digits
+# 
+# digit
+#   '0'
+#   onenine
+# 
+# onenine
+#   '1' . '9'
+# 
+# # paterns
+# ws
+#   ""
+#   '0020' ws
+#   '000A' ws
+#   '000D' ws
+#   '0009' ws
+# 
+# nopatern
+#   '{' '0020' . '10FFFF' - '['
+# 
+# ncpatern
+#   ']' '0020' . '10FFFF' - '}'
 
-# data structure :)
 
+# AST Plex:
+#
 # Type = 0..=5
 #
 # Text = string            # just a text body
@@ -44,9 +160,21 @@ open_tag_flag=0
 #       | Compute 
 # }
 #
-# Hemar = {
+# AbstarctSyntaxTree (ATS) = {
 #    e = [Element]  # elements array
 #}
+AST=''
+
+# 0 - text
+# 1 - deside tag type
+# 2 - interpolation
+# 3 - section
+# 4 - include
+# 5 - compute
+STAGE=0
+STAGE_BUFFER="$(mktemp)"
+open_tag_flag=0
+
 # finds close pattern and store the char to the STAGE_BUFFER
 find_close_pattern() {
   char="${1:?}"
