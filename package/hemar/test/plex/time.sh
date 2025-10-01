@@ -83,7 +83,7 @@ count="$WORD_CREATE_ACCURACY"
 set_word_length 8
 i=0
 start=$(date +%s)
-while [ "$i" -lt "$count" ]; do
+while [ "$i" -lt "${count:?}" ]; do
   new_word >/dev/null
   i=$((i + 1))
 done
@@ -94,11 +94,11 @@ bench_set 'Set element with depth 1 length 8' 1 "$BENCH_ACCURACY" "$wordtime"
 bench_set 'Set element with depth 2 length 8' 2 "$BENCH_ACCURACY" "$wordtime"
 bench_set 'Set element with depth 3 length 8' 3 "$BENCH_ACCURACY" "$wordtime"
 
-count="$W"
+count="$WORD_CREATE_ACCURACY"
 set_word_length 2
 i=0
 start=$(date +%s)
-while [ "$i" -lt "$count" ]; do
+while [ "$i" -lt "${count:?}" ]; do
   new_word >/dev/null
   i=$((i + 1))
 done

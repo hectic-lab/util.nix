@@ -1,12 +1,5 @@
 #!/bin/dash
 
-#data_size="$(eval printf '%s' "\$$structname" | wc -c)"
-#if [ "$data_size" -ge "$(getconf ARG_MAX)" ]; then
-#    # TODO: handle large text
-#    echo "Data too large for an environment variable"
-#    exit 1
-#fi
-
 plex_set() {
     local structname key val regex base esc_key regex esc temp
     structname=$1 key=$2 val=$3

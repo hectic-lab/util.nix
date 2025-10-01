@@ -3,5 +3,5 @@
   self,
   pkgs
 }: {
-  hemar      = import ./hemar.nix      { inherit self system pkgs; };
+  hemar      = import ./hemar      { inherit self system pkgs; };
 }
