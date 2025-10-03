@@ -10,7 +10,7 @@
   ...
 }: let
   system = pkgs.system;
-  cfg = config.hectic.services.server-health;
+  cfg = config.hectic.services."sentinèlla";
   #   URLS="http://..."     # default: none
   #   VOLUMES="/ /home"     # default: all from df -P
 in {
@@ -67,15 +67,13 @@ in {
   };
   config = lib.mkMerge [
     (lib.mkIf cfg.probe.enable {
-      services.nginx.virtualHosts = {
-      };
       systemd.services."sentinèlla-probe" = {
         description = "Hectic server health check";
         after = [ "network.target" ];
         wantedBy = [ "multi-user.target" ];
         serviceConfig = {
           Type = "simple";
-          ExecStart = "${self.packages.${system}.server-health}/bin/probe";
+          ExecStart = "${self.packages.${system}."sentinèlla"}/bin/probe";
           EnvironmentFile = cfg.probe.environmentPath;
           Environment = (if cfg.probe.urls != null then [
             "URLS=${cfg.probe.urls}"
