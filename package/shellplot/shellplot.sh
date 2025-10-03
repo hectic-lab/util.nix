@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/dash
 # ImageMagick: scatter plot "by dots" from (x y) data
 # - Input: points.txt with "x y" per line (whitespace-separated)
 # - Output: plot.png (white bg, black dots). Also draws an optional polyline through points.
