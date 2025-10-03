@@ -1,10 +1,25 @@
-{ writeShellScriptBin, socat, dash }:
-writeShellScriptBin "server-health" ''
-  set +a
-  LOOP_FILE=${./probe-loop.sh}
-  socat() { ${socat}/bin/socat $@ }
-  dash()  { ${dash}/bin/dash   $@ }
-  set -a
+{ symlinkJoin, writeShellApplication, socat, dash, hectic, curl }:
+let
+  # TODO: writeDashApplication
+  probe = writeShellApplication {
+    name = "probe";
+    runtimeInputs = [ socat dash probe-loop ];
+    text = builtins.readFile ./probe.sh;
+  };
 
-  ${dash}/bin/dash ${./probe.sh}
-''
+  probe-loop = writeShellApplication {
+    name = "probe-loop";
+    runtimeInputs = [ ];
+    text = builtins.readFile ./probe-loop.sh;
+  };
+
+  sentinel = writeShellApplication {
+    name = "sentinel";
+    runtimeInputs = [ hectic.shellplot curl ];
+    text = builtins.readFile ./sentinel.sh;
+  };
+in
+symlinkJoin {
+  name = "sentinèlla";
+  paths = [ probe sentinel ];
+}

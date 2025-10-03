@@ -1,4 +1,4 @@
-#!/bin/dash
+#!/usr/bin/env dash
 
 # router.sh — POSIX sh HTTP backend (for socat)
 # usage: socat -T5 -t5 TCP-LISTEN:${port},reuseaddr,fork EXEC:"sh ${currentfile}"
@@ -6,9 +6,10 @@
 #   GET /status  -> check $URLS (0/0 if unset)
 #   GET /disk    -> check $VOLUMES (all if unset)
 # Env:
-#   URLS="http://..."     # default: none
-#   VOLUMES="/ /home"     # default: all from df -P
+#   URLS="http://..."                # default: none
+#   VOLUMES="/ /home"                # default: all from df -P
 #   TIMEOUT=5
+#   AUTH_FILE="/path/htpasswd-like"  # lines: user:pass
 
 base64() {
   local mod
@@ -55,9 +56,10 @@ base64() {
           b=buildbin($1)
           l=length(b)
 	  lack = (6 - l % 6) % 6
-          b = sprintf("%s%0*d", b, lack, 0)
+	  for(i=1;i<=lack;i+=1) {
+	    b = sprintf("%s0", b)
+          }
 	  r = base64(b)
-	  print lack
 	  for(i=1;i<=lack/2;i+=1) {
 	    r = sprintf("%s=", r)
           }
@@ -135,8 +137,16 @@ route_disk() {
     }
 }
 
+AUTH_TOKENS=""
+if [ -n "$AUTH_FILE" ] && [ -r "$AUTH_FILE" ]; then
+  while IFS= read -r up || [ -n "$up" ]; do
+    [ -n "$up" ] || continue
+    AUTH_TOKENS="$AUTH_TOKENS $(base64 encode "$up" | tail -n1)"
+  done <"$AUTH_FILE"
+fi
+
 require_auth=false
-[ -n "$USER" ] && [ -n "$PASS" ] && require_auth=true
+[ -n "$AUTH_TOKENS" ] && require_auth=true
 
 # --- read request & headers ---
 IFS= read -r req || exit 0
@@ -166,9 +176,12 @@ unauth() {
   printf '%s' "$body"
 }
 
-if $require_auth && ! $auth_ok; then
-  unauth
-  exit 0
+auth_ok=false
+if $require_auth; then
+  for t in $AUTH_TOKENS; do
+    [ "$tok" = "$t" ] && auth_ok=true && break
+  done
+  $auth_ok || { unauth; exit 0; }
 fi
 
 tmp=$(mktemp) || exit 1
