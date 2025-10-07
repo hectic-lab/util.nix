@@ -96,8 +96,8 @@ base64() {
   esac
 }
 
-TIMEOUT=${TIMEOUT:-5}
-[ -n "$VOLUMES" ] || VOLUMES=$(df -P | awk 'NR>1{print $6}')
+: "${TIMEOUT:=5}"
+: "${VOLUMES:=$(df -P | awk 'NR>1{print $6}')}"
 
 route_status() {
     if [ -z "$URLS" ]; then
@@ -138,7 +138,7 @@ route_disk() {
 }
 
 AUTH_TOKENS=""
-if [ -n "$AUTH_FILE" ] && [ -r "$AUTH_FILE" ]; then
+if [ -n "${AUTH_FILE:-}" ] && [ -r "$AUTH_FILE" ]; then
   while IFS= read -r up || [ -n "$up" ]; do
     [ -n "$up" ] || continue
     AUTH_TOKENS="$AUTH_TOKENS $(base64 encode "$up" | tail -n1)"
