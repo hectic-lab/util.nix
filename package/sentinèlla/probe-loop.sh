@@ -100,28 +100,28 @@ base64() {
 : "${VOLUMES:=$(df -P | awk 'NR>1{print $6}')}"
 
 route_status() {
-    if [ -z "$URLS" ]; then
-        printf '{\n  "checks": [],\n  "summary":{"total":0,"ok":0}\n}\n'
+    if [ -z "${URLS:-}" ]; then
+        printf '{"checks":[],"summary":{"total":0,"ok":0}}'
         return
     fi
     {
-        printf '{\n  "checks": [\n'
+        printf '{"checks":['
         first=1 okcnt=0 tot=0
         for u in $URLS; do
             tot=$((tot+1))
             res=$(curl -sS -m "$TIMEOUT" -o /dev/null -w '%{http_code} %{time_total}' "$u" 2>/dev/null) || res="000 0"
             code=${res%% *}; ttot=${res#* }
             case $code in 2*|3*) ok=true; okcnt=$((okcnt+1));; *) ok=false;; esac
-            [ $first -eq 0 ] && printf ',\n'; first=0
-            printf '    {"url":"%s","code":%s,"time_s":%s,"ok":%s}' "$u" "$code" "$ttot" "$ok"
+            [ $first -eq 0 ] && printf ','; first=0
+            printf '{"url":"%s","code":%s,"time_s":%s,"ok":%s}' "$u" "$code" "$ttot" "$ok"
         done
-        printf '\n  ],\n  "summary":{"total":%s,"ok":%s}\n}\n' "$tot" "$okcnt"
+        printf '],"summary":{"total":%s,"ok":%s}}' "$tot" "$okcnt"
     }
 }
 
 route_disk() {
     {
-        printf '{\n  "volumes": [\n'
+        printf '{"volumes":['
         first=1
         for v in $VOLUMES; do
 	    # POSIX df -P: Filesystem 1K-blocks Used Available Capacity Mounted on
@@ -129,11 +129,11 @@ route_disk() {
             set -- $(df -P "$v" 2>/dev/null | awk 'NR==2{print $2, $3, $4, $5, $6}')
             size=$1 used=$2 avail=$3 usep=$4 mnt=$5
             [ -z "$size" ] && continue
-            [ $first -eq 0 ] && printf ',\n'; first=0
-            printf '    {"mount":"%s","size_blocks":%s,"used":%s,"avail":%s,"use_percent":"%s"}' \
+            [ $first -eq 0 ] && printf ','; first=0
+            printf '{"mount":"%s","size_blocks":%s,"used":%s,"avail":%s,"use_percent":"%s"}' \
               "$mnt" "$size" "$used" "$avail" "$usep"
         done
-        printf '\n  ]\n}\n'
+        printf ']}'
     }
 }
 
