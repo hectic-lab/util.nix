@@ -261,6 +261,7 @@ in {
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   sops                         = pkgs.callPackage ./sops.nix                          {};
+  onlinepubs2man            = pkgs.callPackage ./onlinepubs2man                    {};
   pg-17-ext-hemar              = buildHemarExt     pkgs "17";
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
