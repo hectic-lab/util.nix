@@ -24,6 +24,15 @@ in {
             urls to check
           '';
         };
+        authFile = lib.mkOption {
+          type = lib.types.path;
+	  example = ''
+            config.sops.secrets."name-of-service/sentinèlla-probe".path
+	  '';
+	  description = ''
+            file with lines: user:pass
+	  '';
+        };
         volumes = lib.mkOption {
           type = lib.types.port;
           description = ''
@@ -44,9 +53,10 @@ in {
 	  description = ''
 	    in case when you do not want show configurations in repository
 	    ```
-              VOLUMES=
-              URLS=
+              VOLUMES=      # default: none
+              URLS=         # default: all from df -P
               PORT=
+              AUTH_FILE=    # lines:   user:pass
 	    ```
 	  '';
         };

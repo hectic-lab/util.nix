@@ -241,8 +241,6 @@ in {
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};
   nvim-pager                   = pkgs.callPackage ./nvim-pager.nix                    {};
-  printobstacle                = pkgs.callPackage ./printobstacle.nix                 {};
-  printprogress                = pkgs.callPackage ./printprogress.nix                 {};
   colorize                     = pkgs.callPackage ./colorize.nix                      {};
   github-gh-tl                 = pkgs.callPackage ./github/gh-tl.nix                  {};
   supabase-with-env-collection = pkgs.callPackage ./supabase-with-env-collection.nix  {};
@@ -261,7 +259,7 @@ in {
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   sops                         = pkgs.callPackage ./sops.nix                          {};
-  onlinepubs2man            = pkgs.callPackage ./onlinepubs2man                    {};
+  onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   pg-17-ext-hemar              = buildHemarExt     pkgs "17";
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";

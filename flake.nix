@@ -49,8 +49,8 @@
     pkgs,
   }: {
     packages.${system}         = import ./package      { inherit system pkgs self; };
-    legacyPackages.${system}   = import nixpkgs        { inherit system overlays; };
-    devShells.${system}        = import ./devshell     { inherit self system pkgs; };
+    legacyPackages.${system}   = import ./legacy       { inherit system pkgs self; };
+    devShells.${system}        = import ./devshell     { inherit system pkgs self; };
     nixosConfigurations = {
       "devvm-manual|${system}" = import ./nixos/system/devvm-manual/default.nix 
         { inherit flake self inputs system; };

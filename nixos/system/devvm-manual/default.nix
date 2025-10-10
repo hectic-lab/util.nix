@@ -9,7 +9,10 @@
   name = builtins.baseNameOf ./.;
 
 in self.lib.nixpkgs-lib.nixosSystem {
-  inherit (self.legacyPackages."${system}") pkgs;
+  pkgs = import inputs.nixpkgs-25-05 { 
+    inherit system;
+    overlays = [ self.overlays.default ];
+  };
   modules = [
     { networking.hostName = name; }
     (import ./${name}.nix { inherit flake self inputs; })
