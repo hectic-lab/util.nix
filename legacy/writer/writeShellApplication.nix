@@ -1,4 +1,11 @@
 {
+  writeTextFile,
+  lib,
+  shellcheck-minimal,
+  stdenv,
+  runtimeShell,
+}:
+{
   /*
      The name of the script to write.
 
@@ -87,6 +94,8 @@
      Type: Bool
   */
   inheritPath ? true,
+
+  shell ? runtimeShell,
 }:
 writeTextFile {
   inherit
@@ -99,27 +108,26 @@ writeTextFile {
   destination = "/bin/${name}";
   allowSubstitutes = true;
   preferLocalBuild = false;
-  text =
-    ''
-      #!${dash}/bin/dash
-      ${lib.concatMapStringsSep "\n" (option: "set -o ${option}") bashOptions}
-    ''
-    + lib.optionalString (runtimeEnv != null) (
-      lib.concatStrings (
-        lib.mapAttrsToList (name: value: ''
-          ${lib.toShellVar name value}
-          export ${name}
-        '') runtimeEnv
-      )
+  text = ''
+    #!${shell}
+    ${lib.concatMapStringsSep "\n" (option: "set -o ${option}") bashOptions}
+  ''
+  + lib.optionalString (runtimeEnv != null) (
+    lib.concatStrings (
+      lib.mapAttrsToList (name: value: ''
+        ${lib.toShellVar name value}
+        export ${name}
+      '') runtimeEnv
     )
-    + lib.optionalString (runtimeInputs != [ ]) ''
+  )
+  + lib.optionalString (runtimeInputs != [ ]) ''
 
-      export PATH="${lib.makeBinPath runtimeInputs}${lib.optionalString inheritPath ":$PATH"}"
-    ''
-    + ''
+    export PATH="${lib.makeBinPath runtimeInputs}${lib.optionalString inheritPath ":$PATH"}"
+  ''
+  + ''
 
-      ${text}
-    '';
+    ${text}
+  '';
 
   checkPhase =
     let
@@ -140,11 +148,10 @@ writeTextFile {
     if checkPhase == null then
       ''
         runHook preCheck
-	#dryrun
-	${dash}/bin/dash -n -O extglob "$target"
+        ${stdenv.shellDryRun} "$target"
         ${shellcheckCommand}
         runHook postCheck
       ''
     else
       checkPhase;
-};
+}

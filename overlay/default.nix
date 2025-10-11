@@ -5,7 +5,7 @@ in final: prev: (
     packages = self.packages.${prev.system};
     legacyPackages = self.legacyPackages.${prev.system};
   in {
-    hectic = packages;
+    hectic = packages // legacyPackages;
     postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {
       http = packages.pg-17-ext-http;
       pg_smtp_client = packages.pg-17-ext-smtp-client;
@@ -27,6 +27,5 @@ in final: prev: (
       plsh = packages.pg-15-ext-plsh;
       hemar = packages.pg-15-ext-hemar;
     };};
-    writers = prev.writers // legacyPackages.writers;
   }
 )

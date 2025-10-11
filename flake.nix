@@ -42,15 +42,31 @@
   }@inputs: let
     flake    = ./.;
     nixpkgs  = nixpkgs-25-05;
-    overlays = [ self.overlays.default ];
     self-lib = import ./lib { inherit flake self inputs; };
+    
+    # Create overlay that includes legacy packages
+    overlayWithLegacy = system: final: prev: 
+      let
+        baseOverlay = (import ./overlay { inherit flake self inputs nixpkgs; }) final prev;
+        legacyPackages = import ./legacy { inherit system pkgs self; };
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ (import rust-overlay) ];
+        };
+      in
+        baseOverlay // legacyPackages;
+    
+    overlays = [ self.overlays.default ];
   in self-lib.forAllSystemsWithPkgs ([(import rust-overlay)] ++ overlays) ({
     system,
     pkgs,
   }: {
-    packages.${system}         = import ./package      { inherit system pkgs self; };
-    legacyPackages.${system}   = import ./legacy       { inherit system pkgs self; };
-    devShells.${system}        = import ./devshell     { inherit system pkgs self; };
+    packages.${system}         = import ./package      { inherit system self pkgs; };
+    devShells.${system}        = import ./devshell     { inherit system self pkgs; };
+    legacyPackages.${system}   = import ./legacy       {
+      inherit system self;
+      pkgs = import nixpkgs { inherit system; };
+    };
     nixosConfigurations = {
       "devvm-manual|${system}" = import ./nixos/system/devvm-manual/default.nix 
         { inherit flake self inputs system; };

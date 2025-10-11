@@ -1,25 +1,35 @@
 { symlinkJoin, writeShellApplication, socat, dash, hectic, curl }:
 let
-  base64 = writeShellApplication {
+  shell = "${dash}/bin/dash";
+  bashOptions = [
+    "errexit"
+    "nounset"
+  ];
+
+  base64 = hectic.writeShellApplication {
+    inherit shell bashOptions;
     name = "base64";
     runtimeInputs = [ ];
     text = builtins.readFile ./base64.sh;
   };
 
   # TODO: writeDashApplication
-  probe = writeShellApplication {
+  probe = hectic.writeShellApplication {
+    inherit shell bashOptions;
     name = "probe";
     runtimeInputs = [ socat dash probe-loop ];
     text = builtins.readFile ./probe.sh;
   };
 
-  probe-loop = writeShellApplication {
+  probe-loop = hectic.writeShellApplication {
+    inherit shell bashOptions;
     name = "probe-loop";
     runtimeInputs = [ base64 ];
     text = builtins.readFile ./probe-loop.sh;
   };
 
-  sentinel = writeShellApplication {
+  sentinel = hectic.writeShellApplication {
+    inherit shell bashOptions;
     name = "sentinel";
     runtimeInputs = [ hectic.shellplot curl ];
     text = builtins.readFile ./sentinel.sh;

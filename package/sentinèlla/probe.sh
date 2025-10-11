@@ -1,15 +1,5 @@
 #!/usr/bin/env dash
 
-#
-#
-#
-#
-#
-#
-#
-#
-
-set -euo pipefail
 socat -V >/dev/null
 dash -c 'echo ok' >/dev/null
 
