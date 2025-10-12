@@ -1,4 +1,4 @@
-{ symlinkJoin, writeShellApplication, socat, dash, hectic, curl }:
+{ symlinkJoin, writeShellApplication, socat, dash, hectic, curl, gawk }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -13,19 +13,18 @@ let
     text = builtins.readFile ./base64.sh;
   };
 
-  # TODO: writeDashApplication
   probe = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "probe";
-    runtimeInputs = [ socat dash probe-loop ];
+    runtimeInputs = [ socat dash router ];
     text = builtins.readFile ./probe.sh;
   };
 
-  probe-loop = hectic.writeShellApplication {
+  router = hectic.writeShellApplication {
     inherit shell bashOptions;
-    name = "probe-loop";
-    runtimeInputs = [ base64 ];
-    text = builtins.readFile ./probe-loop.sh;
+    name = "router";
+    runtimeInputs = [ base64 gawk ];
+    text = builtins.readFile ./router.sh;
   };
 
   sentinel = hectic.writeShellApplication {

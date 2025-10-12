@@ -1,7 +1,7 @@
-#!/usr/bin/env dash
+#!/bin/dash
 
 # router.sh — POSIX sh HTTP backend (for socat)
-# usage: socat -T5 -t5 TCP-LISTEN:${port},reuseaddr,fork EXEC:"sh ${currentfile}"
+# usage: socat -T5 -t5 TCP-LISTEN:${port},reuseaddr,fork EXEC:"dash ${currentfile}"
 # Routes:
 #   GET /status  -> check $URLS (0/0 if unset)
 #   GET /disk    -> check $VOLUMES (all if unset)
