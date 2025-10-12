@@ -1,3 +1,5 @@
+#!/bin/dash
+
 mod="${1:?}"
 
 case "$mod" in
