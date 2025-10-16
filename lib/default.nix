@@ -1,5 +1,5 @@
 { flake, inputs, self }: let
-  nixpkgs = inputs.nixpkgs-25-05;
+  nixpkgs = inputs.nixpkgs;
   lib = nixpkgs.lib;
   recursiveUpdate = nixpkgs.lib.recursiveUpdate;
 
