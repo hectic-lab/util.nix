@@ -9,7 +9,7 @@
   name = builtins.baseNameOf ./.;
 
 in self.lib.nixpkgs-lib.nixosSystem {
-  pkgs = import inputs.nixpkgs-25-05 { 
+  pkgs = import inputs.nixpkgs { 
     inherit system;
     overlays = [ self.overlays.default ];
   };

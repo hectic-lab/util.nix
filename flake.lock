@@ -37,7 +37,7 @@
       "inputs": {
         "flake-compat": "flake-compat",
         "nixpkgs": [
-          "nixpkgs-25-05"
+          "nixpkgs"
         ],
         "utils": "utils"
       },
@@ -58,7 +58,7 @@
     "disko": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs-25-05"
+          "nixpkgs"
         ]
       },
       "locked": {
@@ -171,7 +171,7 @@
     "home-manager": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs-25-05"
+          "nixpkgs"
         ]
       },
       "locked": {
@@ -258,7 +258,7 @@
         "hyprutils": "hyprutils",
         "hyprwayland-scanner": "hyprwayland-scanner",
         "nixpkgs": [
-          "nixpkgs-25-05"
+          "nixpkgs"
         ],
         "pre-commit-hooks": "pre-commit-hooks",
         "systems": "systems_2",
@@ -493,13 +493,28 @@
         "type": "github"
       }
     },
-    "nixpkgs-25-05": {
+    "nixos-hardware": {
       "locked": {
-        "lastModified": 1752436162,
-        "narHash": "sha256-Kt1UIPi7kZqkSc5HVj6UY5YLHHEzPBkgpNUByuyxtlw=",
+        "lastModified": 1760106635,
+        "narHash": "sha256-2GoxVaKWTHBxRoeUYSjv0AfSOx4qw5CWSFz2b+VolKU=",
+        "owner": "NixOS",
+        "repo": "nixos-hardware",
+        "rev": "9ed85f8afebf2b7478f25db0a98d0e782c0ed903",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nixos-hardware",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1760423683,
+        "narHash": "sha256-Tb+NYuJhWZieDZUxN6PgglB16yuqBYQeMJyYBGCXlt8=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "dfcd5b901dbab46c9c6e80b265648481aafb01f8",
+        "rev": "a493e93b4a259cd9fea8073f89a7ed9b1c5a1da2",
         "type": "github"
       },
       "original": {
@@ -513,7 +528,7 @@
       "inputs": {
         "flake-parts": "flake-parts",
         "nixpkgs": [
-          "nixpkgs-25-05"
+          "nixpkgs"
         ],
         "nuschtosSearch": "nuschtosSearch",
         "systems": "systems_4"
@@ -586,7 +601,8 @@
         "home-manager": "home-manager",
         "hyprland": "hyprland",
         "impermanence": "impermanence",
-        "nixpkgs-25-05": "nixpkgs-25-05",
+        "nixos-hardware": "nixos-hardware",
+        "nixpkgs": "nixpkgs",
         "nixvim": "nixvim",
         "rust-overlay": "rust-overlay"
       }
@@ -594,7 +610,7 @@
     "rust-overlay": {
       "inputs": {
         "nixpkgs": [
-          "nixpkgs-25-05"
+          "nixpkgs"
         ]
       },
       "locked": {
