@@ -5,6 +5,20 @@
 
   envErrorMessage = varName: "Error: The ${varName} environment variable is not set.";
 
+  AllSystems = [
+    "aarch64-darwin"
+    "aarch64-linux"    
+    "armv5tel-linux"     
+    "armv6l-linux"    
+    "armv7l-linux"      
+    "i686-linux"
+    "mipsel-linux"
+    "powerpc64le-linux"
+    "riscv64-linux"
+    "x86_64-darwin"
+    "x86_64-linux"
+  ];
+
   commonSystems = [
     "x86_64-linux"
     "aarch64-linux"
@@ -28,7 +42,7 @@
     ) {}
     supportedSystems;
 
-  forAllSystemsWithPkgs = pkgOverlays: f: forSystemsWithPkgs commonSystems pkgOverlays f;
+  forAllSystemsWithPkgs = pkgOverlays: f: forSystemsWithPkgs AllSystems pkgOverlays f;
 
   parseEnv = import ./parse-env.nix;
 
@@ -44,10 +58,10 @@
     else {};
 in {
   # -- For all systems --
-  inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSystemsWithPkgs commonSystems;
+  inherit dotEnv minorEnvironment parseEnv forAllSystemsWithPkgs forSystemsWithPkgs commonSystems AllSystems;
 
   forSystems = systems: nixpkgs.lib.genAttrs systems;
-  forAllSystems = nixpkgs.lib.genAttrs commonSystems;
+  forAllSystems = nixpkgs.lib.genAttrs AllSystems;
 
   shellModules = {
     logs = builtins.readFile ./shell/logs.sh;
