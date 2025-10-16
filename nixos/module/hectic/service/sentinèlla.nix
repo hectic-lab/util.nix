@@ -68,6 +68,15 @@ in {
       };
       sentinel = {
         enable   = lib.mkEnableOption "enable sentinèlla sentinel services, that reported servers statuses based on probe polls";
+        respondents = lib.mkOption {
+          type = lib.types.listOf lib.types.attrsOf (
+            lib.types.submodule {
+              options = {
+
+	      };
+	    }
+	  );
+	};
         environmentPath = lib.mkOption {
           type = lib.types.path;
 	  example = ''
@@ -115,7 +124,32 @@ in {
       };
     })
     (lib.mkIf cfg.sentinel.enable {
-      
+      systemd.services."sentinella-sentinel" = {
+        description = "Hectic server health check";
+        after = [ "network.target" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = "${self.packages.${system}."sentinèlla"}/bin/probe";
+          Environment = [
+            "URLS=${lib.concatStringsSep "," cfg.probe.urls}"
+            "VOLUMES=${lib.concatStringsSep "," cfg.probe.volumes}"
+            "PORT=${builtins.toString cfg.probe.port}"
+          ];
+          Restart = "always";
+          RestartSec = "5s";
+          
+          # Shutdown configuration
+          TimeoutStopSec = "30s";
+          KillSignal = "SIGTERM";
+          KillMode = "mixed";
+          
+          # Security and process management
+          RemainAfterExit = false;
+          StandardOutput = "journal";
+          StandardError = "journal";
+	};
+      };
     })
   ];
 }
