@@ -18,9 +18,10 @@
   hectic = {
     archetype.dev.enable = true;
     hardware.hetzner-cloud.enable = true;
+    hardware.lenovo-ideapad-15arh7.enable = true;
   };
  
-  environment.systemPackages = with pkgs.writers; [
+  environment.systemPackages = with pkgs.hectic.writers; [
     (writeMinCBin "minc-hello-world" ["<stdio.h>"] /*c*/ ''
       printf("hello world\n");
     '')

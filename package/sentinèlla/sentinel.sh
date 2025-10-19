@@ -3,23 +3,35 @@
 # Env:
 #   SERVERS="http://host1:8080,http://host2:8080"
 #   TOKENS="-,b64token2"             # CSV aligned with SERVERS; "-" means no auth
-#   TOKEN="..."                      # Telegram bot token
-#   CHAT_ID="..."                    # Telegram chat id
+#   TG_TOKEN="..."                   # Telegram bot token
+#   TG_CHAT_ID="..."                 # Telegram chat id
 #   TIMEOUT=5                        # curl timeout seconds (default 5)
 #   POLLING_INTERVAL_SEC=3           # default 3
-#   STATE_DIR=/tmp/sentinel          # default /tmp/sentinel
+#   STATE_DIR=/var/lib/sentinel      # default /var/lib/sentinel
+#   SPAM=0                           # if 1 will notify every poling, default 0
 
 set -eu
 
 TIMEOUT=${TIMEOUT:-5}
 POLLING_INTERVAL_SEC=${POLLING_INTERVAL_SEC:-3}
-STATE_DIR=${STATE_DIR:-$(mktemp -d)}
 SERVERS=${SERVERS:-}
 TOKENS=${TOKENS:-}
 TOKEN=${TOKEN:-}
 CHAT_ID=${CHAT_ID:-}
+SPAM=${SPAM:-0}
+
+STATE_DIR=${STATE_DIR:-/var/lib/sentinel}
+mkdir -p "$STATE_DIR" 2>/dev/null || {
+  # TODO: some sort of message?
+  STATE_DIR="$HOME/.local/$(basename "$STATE_DIR")"
+  mkdir -p "$STATE_DIR"
+}
+
+mkdir -p "$STATE_DIR" 2>/dev/null || mkdir -p "$HOME/.local/$(basename "$STATE_DIR")"
 
 [ -n "$SERVERS" ] || { printf >&2 'SERVERS not set\n'; exit 1; }
+[ -n "$TOKEN" ]   || { printf >&2 'TOKEN not set\n';   exit 1; }
+[ -n "$CHAT_ID" ] || { printf >&2 'CHAT_ID not set\n'; exit 1; }
 
 # If TOKENS unset, synthesize "-" for each server
 if [ -z "$TOKENS" ]; then
@@ -27,13 +39,11 @@ if [ -z "$TOKENS" ]; then
   TOKENS=$(awk -v n="$n" 'BEGIN{for(i=1;i<=n;i++){printf("-"); if(i<n)printf(",")}}')
 fi
 
-mkdir -p "$STATE_DIR"
-
 # --- helpers ---
 
-# get_csv VAR idx -> echo idx-th field (1-based) from CSV string VAR
+# get_csv(csv_variable, index)
+# echo idx-th field (1-based) from CSV string VAR
 get_csv() {
-  # shellcheck disable=SC2001
   printf '%s' "$1" | sed 's/,/\n/g' | awk -v n="$2" 'NR==n{print; exit}'
 }
 
@@ -48,6 +58,7 @@ notify() {
   fi
 }
 
+# sid(text)
 sid() { printf '%s' "$1" | cksum | awk '{print $1}'; }
 
 parse_summary() {
@@ -65,6 +76,7 @@ list_failures() {
 
 # --- main loop ---
 while :; do
+  log info "pooling ${WHITE}${POLLING_INTERVAL_SEC}${NC} sec"
   i=1
   while :; do
     srv=$(get_csv "$SERVERS" "$i") || true
@@ -78,6 +90,8 @@ while :; do
     tmpb=$(mktemp) || exit 1
     code=$(sh -c "curl -sS -m \"$TIMEOUT\" -w '%{http_code}' -o \"$tmpb\" $auth_h \"$url\"") || code="000"
     body=$(cat "$tmpb"); rm -f "$tmpb"
+
+    log info "server ${WHITE}${srv}${NC}\ncode ${WHITE}${code}${NC}\nbody ${WHITE}${body}${NC}"
 
     ok="down"; tot=0; good=0
     if [ "$code" = "200" ]; then

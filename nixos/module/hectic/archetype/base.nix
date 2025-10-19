@@ -10,6 +10,10 @@
 }: let
   cfg = config.hectic.archetype.base;
 in {
+  imports = [
+    inputs.disko.nixosModules.default
+  ];
+
   options.hectic.archetype.base.enable = lib.mkEnableOption "Enable archetupe.dev";
 
   config = lib.mkIf cfg.enable {
