@@ -76,6 +76,41 @@
       "devvm-hemar|${system}"  = import ./nixos/system/devvm-hemar/default.nix 
         { inherit flake self inputs system; };
     };
+
+    #nixosTests = let
+    #  testLib = import (nixpkgs + "/nixos/lib/testing-python.nix") { inherit pkgs; };
+    #in {       
+    #  "hardware/lenovo-ideapad-15arh7" = testLib.makeTest {
+    #    name = "hardware/lenovo-ideapad-15arh7";
+    #    nodes.machine = { ... }: {
+    #      imports = [ self.nixosModules.hectic ];
+    #      services.hardware.lenovo-ideapad-15arh7.enable = true;
+    #    };
+    #    testScript = ''
+    #      start_all()
+    #      machine.wait_for_unit("my-service.service")
+    #      machine.succeed("journalctl -u my-service -b | grep -qi hello")
+    #    '';
+    #  };
+    #};
+
+    checks = let 
+      mkSys = system: opts:
+      (nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          self.nixosModules.hectic
+          { services.hardware.lenovo-ideapad-15arh7 = opts; }
+        ];
+      });
+
+      cases = {
+        enable          = { enable = true;  };
+        disabled        = { enable = false; };
+        customFoo       = { enable = true; foo = "bar"; };
+      };
+    in nixpkgs.lib.mapAttrs
+        (name: opts: (mkSys system opts).config.system.build.toplevel) cases;
   }) // {
     lib = self-lib;
     overlays.default           = import ./overlay      { inherit flake self inputs nixpkgs; };

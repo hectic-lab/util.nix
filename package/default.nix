@@ -14,24 +14,6 @@
       name = "extension-builder";
       path = ./buildPostgresqlExtension.nix;
     }));
-  buildHemarExt = pkgs: versionSuffix: let
-      postgresql = pkgs."postgresql_${versionSuffix}";
-      c-hectic = self.packages.${pkgs.system}.c-hectic;
-  in buildPostgresqlExtension pkgs {
-      stdenv = pkgs.clangStdenv;
-      inherit postgresql;
-    } {
-      pname = "hemar";
-      version = "0.1";
-      src = ./c/hemar;
-      nativeBuildInputs = (with pkgs; [pkg-config]) ++ [ c-hectic ];
-      dontShrinkRPath = true;
-      postFixup = ''
-        echo ">>> postFixup running..."
-        ${pkgs.patchelf}/bin/patchelf --set-rpath ${c-hectic}/lib $out/lib/hemar.so
-      '';
-      preInstall = ''mkdir $out'';
-    };
   buildPgrxExtension = pkgs: 
     pkgs.callPackage (import (builtins.path {
       name = "extension-builder";
@@ -260,17 +242,14 @@ in {
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   sops                         = pkgs.callPackage ./sops.nix                          {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
-  pg-17-ext-hemar              = buildHemarExt     pkgs "17";
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
   pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";
   pg-17-ext-plsh               = buildPlShExt      pkgs "17";
-  pg-16-ext-hemar              = buildHemarExt     pkgs "16";
   pg-16-ext-http               = buildHttpExt      pkgs "16";
   pg-16-ext-smtp-client        = buildSmtpExt      pkgs "16";
   pg-16-ext-plhaskell          = buildPlHaskellExt pkgs "16";
   pg-16-ext-plsh               = buildPlShExt      pkgs "16";
-  pg-15-ext-hemar              = buildHemarExt     pkgs "15";
   pg-15-ext-http               = buildHttpExt      pkgs "15";
   pg-15-ext-smtp-client        = buildSmtpExt      pkgs "15";
   pg-15-ext-plhaskell          = buildPlHaskellExt pkgs "15";
