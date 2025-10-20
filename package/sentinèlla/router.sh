@@ -3,6 +3,7 @@
 # router.sh — POSIX sh HTTP backend (for socat)
 # usage: socat -T5 -t5 TCP-LISTEN:${port},reuseaddr,fork EXEC:"dash ${currentfile}"
 # Routes:
+#   GET /        -> {"status":...,"disk":...}
 #   GET /status  -> check $URLS (0/0 if unset)
 #   GET /disk    -> check $VOLUMES (all if unset)
 # Env:
@@ -13,6 +14,10 @@
 
 : "${TIMEOUT:=5}"
 : "${VOLUMES:=$(df -P | awk 'NR>1{print $6}')}"
+
+route_summary() {
+  printf '%s' '{"status":'"$(route_status)"',"disk":'"$(route_disk)"'}'
+}
 
 route_status() {
     if [ -z "${URLS:-}" ]; then
@@ -103,8 +108,9 @@ tmp=$(mktemp) || exit 1
 trap 'rm -f "$tmp"' EXIT INT HUP
 
 case "$req" in
-  "GET /status "*) route_status >"$tmp"; status='200 OK'; ctype='application/json' ;;
-  "GET /disk "*)   route_disk   >"$tmp"; status='200 OK'; ctype='application/json' ;;
+  "GET / "*)       route_summary >"$tmp"; status='200 OK'; ctype='application/json' ;;
+  "GET /status "*) route_status  >"$tmp"; status='200 OK'; ctype='application/json' ;;
+  "GET /disk "*)   route_disk    >"$tmp"; status='200 OK'; ctype='application/json' ;;
   *)               printf 'Not found\n' >"$tmp"; status='404 Not Found'; ctype='text/plain' ;;
 esac
 

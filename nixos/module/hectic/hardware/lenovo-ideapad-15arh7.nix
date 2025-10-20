@@ -12,6 +12,16 @@
   cfg = config.hectic.hardware.lenovo-ideapad-15arh7;
   hasDisko = false;
 in {
+  # FIXME: FUCK
+  #imports = [
+  #  "${inputs.nixos-hardware}/common/cpu/amd"
+  #  "${inputs.nixos-hardware}/common/cpu/amd/pstate.nix"
+  #  "${inputs.nixos-hardware}/common/gpu/amd"
+  #  "${inputs.nixos-hardware}/common/gpu/nvidia/prime-sync.nix"
+  #  "${inputs.nixos-hardware}/common/pc/laptop"
+  #  "${inputs.nixos-hardware}/common/pc/laptop/ssd"
+  #];
+
   options.hectic.hardware.lenovo-ideapad-15arh7 = {
     enable = lib.mkEnableOption "Enable lenovo-legion hardware configurations";
     swapSize = lib.mkOption {
@@ -35,16 +45,6 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    zlaupa = 12;
-    imports = [
-      "${inputs.nixos-hardware}/common/cpu/amd"
-      "${inputs.nixos-hardware}/common/cpu/amd/pstate.nix"
-      "${inputs.nixos-hardware}/common/gpu/amd"
-      "${inputs.nixos-hardware}/common/gpu/nvidia/prime-sync.nix"
-      "${inputs.nixos-hardware}/common/pc/laptop"
-      "${inputs.nixos-hardware}/common/pc/laptop/ssd"
-    ];
-
     /* common */
     hardware.nvidia = {
       modesetting.enable = true;

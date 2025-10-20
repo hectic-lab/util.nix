@@ -1,4 +1,4 @@
-{ symlinkJoin, writeTextFile, socat, dash, hectic, curl, gawk }:
+{ symlinkJoin, writeTextFile, socat, dash, hectic, curl, gawk, jq }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -30,7 +30,7 @@ let
   sentinel = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "sentinel";
-    runtimeInputs = [ hectic.shellplot curl ];
+    runtimeInputs = [ hectic.shellplot curl jq ];
 
     text = ''
       ${builtins.readFile ./log.sh}

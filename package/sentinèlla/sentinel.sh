@@ -75,6 +75,10 @@ list_failures() {
 }
 
 # --- main loop ---
+
+# NOTE: remove temp response body on any exit
+trap 'rm -f "$tmpb" 2> /dev/null' EXIT INT HUP
+
 while :; do
   log info "pooling ${WHITE}${POLLING_INTERVAL_SEC}${NC} sec"
   i=1
@@ -83,7 +87,7 @@ while :; do
     [ -n "${srv:-}" ] || break
     tok=$(get_csv "$TOKENS" "$i") || tok="-"
 
-    url="${srv%/}/status"
+    url="${srv%/}"
     auth_h=""
     [ "${tok}" != "-" ] && [ -n "${tok}" ] && auth_h="-H Authorization: Basic\ $tok"
 
