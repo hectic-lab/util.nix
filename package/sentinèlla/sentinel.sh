@@ -61,10 +61,12 @@ notify() {
 # sid(text)
 sid() { printf '%s' "$1" | cksum | awk '{print $1}'; }
 
+# <stream> | parse_summary
 parse_summary() {
-  sed -n 's/.*"summary":{"total":\([0-9][0-9]*\),"ok":\([0-9][0-9]*\)}.*/\1 \2/p'
+  jq -r '.status.summary | "\(.total) \(.ok)"'
 }
 
+# list_failures
 list_failures() {
   awk '
     BEGIN{FS="\""; u=""; c=""}
@@ -72,6 +74,11 @@ list_failures() {
     /"code":/ {c=$0; sub(/.*"code":/,"",c); sub(/,.*/,"",c)}
     /"ok":false/ { if(u!=""){ printf "%s(%s) ", u, c; u=""; c="" } }
   '
+}
+
+# server_status_message(msg_prefix, server, ok_amount, total_amount, fail_list)
+server_status_message() {
+    msg=$(printf '%s: %s [%s/%s]%s' "${1:?}" "${2:?}" "${3:?}" "${4:?}" "$5")
 }
 
 # --- main loop ---
@@ -110,7 +117,7 @@ while :; do
       fails=$(printf '%s' "$body" | list_failures | sed 's/[ ]$//')
       [ -n "$fails" ] && fail_list=" — ${fails}"
     fi
-    msg=$(printf '%s: %s [%s/%s]%s' "$msg_prefix" "$srv" "$good" "$tot" "$fail_list")
+    msg=$(server_status_message "$msg_prefix" "$srv" "$good" "$tot" "$fail_list")
 
     sfile="${STATE_DIR}/$(sid "$srv").state"
     last=""; [ -f "$sfile" ] && last=$(cat "$sfile")
