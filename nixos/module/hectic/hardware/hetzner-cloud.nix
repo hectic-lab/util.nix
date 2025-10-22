@@ -25,16 +25,16 @@ in {
     #    then will use "/dev/sda15" (default hetzner cloud boot device)
     #  '';
     #};
-    ip = lib.mkOption {
+    ipv4 = lib.mkOption {
       type        = lib.types.strMatching "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
       example     = "188.243.124.246";
       description = ''
         
       '';
     };
-    gatewayIp = lib.mkOption {
-      type        = lib.types.strMatching "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
-      example     = "188.243.124.246";
+    ipv6 = lib.mkOption {
+      type        = lib.types.strMatching "^([0-9a-fA-F]{1,4}:){3}[0-9a-fA-F]{1,4}$";
+      example     = "2a01:4f8:1c1a:d883";
       description = ''
         
       '';
@@ -53,50 +53,68 @@ in {
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    boot.loader.grub.device = cfg.device;
-    boot.initrd.availableKernelModules = [
-      "ata_piix"
-      "uhci_hcd"
-      "xen_blkfront"
-    ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
-    boot.initrd.kernelModules = ["nvme"];
+  config = lib.mkIf cfg.enable (lib.mkMerge
+  [
+    {
+      boot.initrd.availableKernelModules = [
+        "ata_piix"
+        "uhci_hcd"
+        "xen_blkfront"
+      ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
 
-    networking.useDHCP = false;
-    networking.interfaces.ens3 = {
-      ipv4.addresses = [
-        { address = cfg.ip; prefixLength = 24; }
-      ];
-    };
-    networking.defaultGateway = cfg.gatewayIp;
-    networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
+      systemd.network.enable = true;
+      systemd.network.networks."30-wan" = {
+        matchConfig.Name = "ens3";
+        networkConfig.DHCP = "no";
+        address = [
+          "${cfg.ipv4}/32"
+          "${cfg.ipv6}::/64"
+        ];
+        routes = [
+          { Gateway = "172.31.1.1"; GatewayOnLink = true; }
+          { Gateway = "fe80::1"; }
+        ];
+      };
 
-    disko.devices.disk.vda = {
-      device = cfg.device;
-      type = "disk";
-      content = {
-        type = "gpt";
-        partitions = {
-          ESP = {
-            size = "512M";
-            type = "EF00";
+      disko.devices = {
+        disk = {
+          main = {
+            type = "disk";
+            device = cfg.device;
             content = {
-              type = "filesystem";
-              format = "vfat";
-              mountpoint = "/boot";
-              mountOptions = [ "umask=0077" ];
-            };
-          };
-          root = {
-            size = "100%";
-            content = {
-              type = "filesystem";
-              format = "ext4";
-              mountpoint = "/";
+              type = "gpt";
+              partitions = {
+                boot = {
+                  size = "1M";
+                  type = "EF02";
+                  priority = 1;
+                };
+                ESP = {
+                  size = "512M";
+                  type = "EF00";
+                  content = {
+                    type = "filesystem";
+                    format = "vfat";
+                    mountpoint = "/boot";
+                  };
+                };
+                root = {
+                  size = "100%";
+                  content = {
+                    type = "filesystem";
+                    format = "ext4";
+                    mountpoint = "/";
+                  };
+                };
+              };
             };
           };
         };
       };
-    };
-  };
+    } 
+    (lib.mkIf (pkgs.system == "aarch64-linux") {
+      boot.initrd.kernelModules = [ "virtio_gpu" ];
+      boot.kernelParams = [ "console=tty" ];
+    })
+  ]);
 }
