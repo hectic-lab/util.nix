@@ -25,9 +25,23 @@ in {
     #    then will use "/dev/sda15" (default hetzner cloud boot device)
     #  '';
     #};
+    ip = lib.mkOption {
+      type        = lib.types.strMatching "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
+      example     = "188.243.124.246";
+      description = ''
+        
+      '';
+    };
+    gatewayIp = lib.mkOption {
+      type        = lib.types.strMatching "^([0-9]{1,3}\\.){3}[0-9]{1,3}$";
+      example     = "188.243.124.246";
+      description = ''
+        
+      '';
+    };
     device = lib.mkOption {
       type = lib.types.str;
-      default = "/dev/sda/";
+      default = "/dev/sda";
       example = "/dev/disk/by-uuid/f184a16b-6eca-41cb-b48a-ff37cdce1d79";
       description = ''
         boot device uuid 
@@ -47,6 +61,15 @@ in {
       "xen_blkfront"
     ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
     boot.initrd.kernelModules = ["nvme"];
+
+    networking.useDHCP = false;
+    networking.interfaces.ens3 = {
+      ipv4.addresses = [
+        { address = cfg.ip; prefixLength = 24; }
+      ];
+    };
+    networking.defaultGateway = cfg.gatewayIp;
+    networking.nameservers = [ "1.1.1.1" "8.8.8.8" ];
 
     disko.devices.disk.vda = {
       device = cfg.device;
