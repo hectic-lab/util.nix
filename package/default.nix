@@ -1,4 +1,4 @@
-{ self, system, pkgs }: let
+{ self, system, pkgs, inputs }: let
   rust = {
     nativeBuildInputs = [
       pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
@@ -239,7 +239,7 @@ in {
   support-bot                  = pkgs.callPackage ./support-bot                       {};
   nix-derivation-hash          = pkgs.callPackage ./nix-derivation-hash               {};
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
-  deploy                       = pkgs.callPackage ./deploy                            {};
+  deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   sops                         = pkgs.callPackage ./sops.nix                          {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};

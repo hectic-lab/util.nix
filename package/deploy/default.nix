@@ -1,4 +1,4 @@
-{ symlinkJoin, writeTextFile, socat, dash, hectic, curl, gawk, jq }:
+{ inputs, symlinkJoin, dash, hectic, ssh-to-age, system }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -9,7 +9,10 @@ let
   deploy = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "deploy";
-    runtimeInputs = [];
+    runtimeInputs = [ 
+      ssh-to-age
+      inputs.nixos-anywhere.packages.${system}.nixos-anywhere
+    ];
 
     text = builtins.readFile ./deploy.sh;
   };

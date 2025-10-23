@@ -57,7 +57,7 @@ if ! [ ${target_host+x} ]; then
   exit 1
 fi
 
-if ssh "$target_host" 'cat /etc/os-release 2>/dev/null || echo "no /etc/os-release"' \
+if ssh  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$target_host" 'cat /etc/os-release 2>/dev/null || echo "no /etc/os-release"' \
   | grep -q '^NAME=NixOS$'
 then
   is_target_host_nixos=1
@@ -79,9 +79,9 @@ if [ "$server_init" -eq 1 ]; then
   fi
 
   # shellcheck disable=SC2068
-  nix run nixos-anywhere -- $@ # --flake .#x86_64-linux --target-host proxydoe
+  nixos-anywhere -- $@ # --flake .#x86_64-linux --target-host proxydoe
   
-  server_public_age_key=$(ssh "$target_host" cat /etc/ssh/ssh_host_ed25519_key.pub | ssh-to-age)
+  server_public_age_key=$(ssh  -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$target_host" cat /etc/ssh/ssh_host_ed25519_key.pub | ssh-to-age)
 
   # shellcheck disable=SC2016
   printf 'server'"'"'s public age key is `%s` use it in sops file and run regular deploys' "$server_public_age_key"
