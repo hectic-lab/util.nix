@@ -36,6 +36,10 @@
       url = "github:NixOS/nixos-hardware";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixos-anywhere = {
+      url = "github:nix-community/nixos-anywhere";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
@@ -64,7 +68,7 @@
     system,
     pkgs,
   }: {
-    packages.${system}         = import ./package      { inherit system self pkgs; };
+    packages.${system}         = import ./package      { inherit system self pkgs inputs; };
     devShells.${system}        = import ./devshell     { inherit system self pkgs; };
     legacyPackages.${system}   = import ./legacy       {
       inherit system self;
