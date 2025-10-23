@@ -51,6 +51,17 @@ in {
 	!! So use IDs
       '';
     };
+    networkMatchConfigName = lib.mkOption {
+      type = lib.types.strMatching "^(enp1s0|ens3)$";
+      example = "enp1s0";
+      description = ''
+        type of network conection, 
+	on older hetzner servers may be `ens3`
+        on newer probably `enp1s0`
+
+	you can use `networkctl list` on server to know it
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge
@@ -65,7 +76,7 @@ in {
       networking.useDHCP = lib.mkDefault true;
       systemd.network.enable = true;
       systemd.network.networks."30-wan" = {
-        matchConfig.Name = "ens3";
+        matchConfig.Name = cfg.networkMatchConfigName;
         networkConfig.DHCP = "no";
         address = [
           "${cfg.ipv4}/32"
