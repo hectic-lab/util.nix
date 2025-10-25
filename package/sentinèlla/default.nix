@@ -24,7 +24,11 @@ let
     inherit shell bashOptions;
     name = "router";
     runtimeInputs = [ base64 gawk ];
-    text = builtins.readFile ./router.sh;
+    text = ''
+      ${builtins.readFile ./log.sh}
+      ${builtins.readFile ./colors.sh}
+      ${builtins.readFile ./router.sh}
+    '';
   };
 
   sentinel = hectic.writeShellApplication {

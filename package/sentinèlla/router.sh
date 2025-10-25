@@ -51,6 +51,7 @@ route_status() {
             tot=$((tot+1))
             res=$(curl -sS -m "$TIMEOUT" -o /dev/null -w '%{http_code} %{time_total}' "$u" 2>/dev/null) || res="000 0"
             code=${res%% *}; ttot=${res#* }
+	    log info "$u -> $code"
             case $code in 2*|3*) ok=true; okcnt=$((okcnt+1));; *) ok=false;; esac
             [ $first -eq 0 ] && printf ','; first=0
             printf '{"url":"%s","code":%s,"time_s":%s,"ok":%s}' "$u" "$code" "$ttot" "$ok"

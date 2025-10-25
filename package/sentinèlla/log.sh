@@ -17,5 +17,5 @@ log() {
     # shellcheck disable=SC1003
     fmt="$(printf "%s" "$1" | sed 's/\\033\[0m/''\'"$color"'/g')"
     shift
-    printf "%b\n" "$color$fmt$NC" "$@"
+    printf "%b\n" "$color$fmt$NC" "$@" >&2
 }
