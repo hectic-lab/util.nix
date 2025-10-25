@@ -1,7 +1,6 @@
 #!/bin/dash
 
 # requirements: ssh-to-age nixos-anywhere
-# jjjn
 
 # ssh proxydoe 'cat /etc/os-release 2>/dev/null || echo "no /etc/os-release"' | grep '^NAME=NixOS$'
 # NAME=NixOS

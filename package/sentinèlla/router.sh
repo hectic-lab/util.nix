@@ -12,6 +12,26 @@
 #   TIMEOUT=5
 #   AUTH_FILE="/path/htpasswd-like"  # lines: user:pass
 
+# output example
+# {
+#   "checks": [],
+#   "summary": {
+#     "total": 0,
+#     "ok": 0
+#   }
+#   "disk": {
+#     "volumes": [
+#       {
+#         "mount": "/dev",
+#         "size_blocks": 195760,
+#         "used": 0,
+#         "avail": 195760,
+#         "use_percent": "0%"
+#       }
+#     ]
+#   }
+# }
+
 : "${TIMEOUT:=5}"
 : "${VOLUMES:=$(df -P | awk 'NR>1{print $6}')}"
 
