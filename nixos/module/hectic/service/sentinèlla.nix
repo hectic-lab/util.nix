@@ -132,8 +132,8 @@ in {
           Type = "simple";
           ExecStart = "${self.packages.${system}."sentinèlla"}/bin/probe";
           Environment = [
-            "URLS=${lib.concatStringsSep "," cfg.probe.urls}"
-            "VOLUMES=${lib.concatStringsSep "," cfg.probe.volumes}"
+            "URLS=${lib.concatStringsSep " " cfg.probe.urls}"
+            "VOLUMES=${lib.concatStringsSep " " cfg.probe.volumes}"
             "PORT=${builtins.toString cfg.probe.port}"
           ];
           Restart = "always";
