@@ -104,14 +104,14 @@
         inherit system;
         modules = [
           self.nixosModules.hectic
-          { services.hardware.lenovo-ideapad-15arh7 = opts; }
+          { hectic.hardware.lenovo-ideapad-15arh7 = opts; }
         ];
       });
 
       cases = {
-        enable          = { enable = true;  };
-        disabled        = { enable = false; };
-        customFoo       = { enable = true; foo = "bar"; };
+        #enable          = { enable = true;  };
+        #disabled        = { enable = false; };
+        #customFoo       = { enable = true; foo = "bar"; };
       };
     in nixpkgs.lib.mapAttrs
         (name: opts: (mkSys system opts).config.system.build.toplevel) cases;

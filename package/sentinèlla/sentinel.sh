@@ -1,5 +1,7 @@
 #!/bin/dash
 # sentinel.sh — polls probe backends (/status) and notifies on status change via Telegram
+# requirements:
+#   curl, awk, sqlite, jq
 # Env:
 #   SERVERS="http://host1:8080,http://host2:8080"
 #   TOKENS="-,b64token2"             # CSV aligned with SERVERS; "-" means no auth
@@ -11,6 +13,24 @@
 #   SPAM=0                           # if 1 will notify every poling, default 0
 
 set -eu
+
+#SQLITE_SCHEME="
+#CREATE TABLE IF NOT EXISTS status (
+#  id     INTEGER  PRIMARY KEY,  -- integer in sqlite almoust infinity
+#  time   DATETIME DEFAULT CURRENT_TIMESTAMP,
+#  status TEXT     NOT NULL
+#);
+#
+#CREATE TABLE IF NOT EXISTS disk (
+#  id     INTEGER  PRIMARY KEY,  -- integer in sqlite almoust infinity
+#  time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+#  server TEXT     NOT NULL,
+#  disk   TEXT     NOT NULL,
+#  space  INTEGER  NOT NULL
+#);"
+
+PREFIX_OK="OK  "
+PREFIX_FAIL="FAIL"
 
 TIMEOUT=${TIMEOUT:-5}
 POLLING_INTERVAL_SEC=${POLLING_INTERVAL_SEC:-3}
@@ -48,14 +68,14 @@ get_csv() {
 }
 
 notify() {
-  msg=$1
+  msg=${1:?}
   if [ -n "$TOKEN" ] && [ -n "$CHAT_ID" ]; then
     curl -sS -m "$TIMEOUT" -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
       -d "chat_id=${CHAT_ID}" \
-      --data-urlencode "text=${msg}" >/dev/null || printf >&2 'notify failed: %s\n' "$msg"
-  else
-    printf >&2 '%s\n' "$msg"
+      --data-urlencode "text=${msg}" >/dev/null || log error "notify failed: $msg"
   fi
+
+  log notice "notify message: ${WHITE}${msg}${NC}"
 }
 
 # sid(text)
@@ -78,7 +98,7 @@ list_failures() {
 
 # server_status_message(msg_prefix, server, ok_amount, total_amount, fail_list)
 server_status_message() {
-    msg=$(printf '%s: %s [%s/%s]%s' "${1:?}" "${2:?}" "${3:?}" "${4:?}" "$5")
+    printf '%s: %s [%s/%s]%s' "${1:?}" "${2:?}" "${3:?}" "${4:?}" "$5"
 }
 
 # --- main loop ---
@@ -102,26 +122,26 @@ while :; do
     code=$(sh -c "curl -sS -m \"$TIMEOUT\" -w '%{http_code}' -o \"$tmpb\" $auth_h \"$url\"") || code="000"
     body=$(cat "$tmpb"); rm -f "$tmpb"
 
-    log info "server ${WHITE}${srv}${NC}\ncode ${WHITE}${code}${NC}\nbody ${WHITE}${body}${NC}"
+    #log info "server ${WHITE}${srv}${NC}\ncode ${WHITE}${code}${NC}\nbody ${WHITE}${body}${NC}"
 
-    ok="down"; tot=0; good=0
+    ok="down"; total=0; good=0
     if [ "$code" = "200" ]; then
-      s=$(printf '%s' "$body" | parse_summary || true)
-      [ -n "$s" ] && { tot=${s%% *}; good=${s#* }; }
-      [ "$tot" -eq "$good" ] && ok="up"
+      summary=$(printf '%s' "$body" | parse_summary || true)
+      [ -n "$summary" ] && { total=${summary%% *}; good=${summary#* }; }
+      [ "$total" -eq "$good" ] && ok="up"
     fi
 
-    msg_prefix=$( [ "$ok" = "up" ] && printf 'OK' || printf 'FAIL' )
+    msg_prefix=$( [ "$ok" = "up" ] && printf '%s' "$PREFIX_OK" || printf '%s' "$PREFIX_FAIL" )
     fail_list=""
     if [ "$ok" = "down" ] && [ -n "$body" ]; then
       fails=$(printf '%s' "$body" | list_failures | sed 's/[ ]$//')
       [ -n "$fails" ] && fail_list=" — ${fails}"
     fi
-    msg=$(server_status_message "$msg_prefix" "$srv" "$good" "$tot" "$fail_list")
+    msg=$(server_status_message "$msg_prefix" "$srv" "$good" "$total" "$fail_list")
 
     sfile="${STATE_DIR}/$(sid "$srv").state"
     last=""; [ -f "$sfile" ] && last=$(cat "$sfile")
-    cur="${ok}:${good}/${tot}:${code}"
+    cur="${ok}:${good}/${total}:${code}"
     if [ "$cur" != "$last" ]; then
       notify "$msg"
       printf '%s' "$cur" >"$sfile"
