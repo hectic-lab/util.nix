@@ -93,6 +93,10 @@ while [ $# -gt 0 ]; do
       fi
       shift 2
       ;;
+    --)
+      shift
+      break
+      ;;
     *)
       shift
       ;;
@@ -179,7 +183,7 @@ if [ "${server_history+x}" ]; then
   exit 0
 fi
 
-if [ "${push_server+x}" ]; then
+if [ "${push_deploy+x}" ]; then
   if [ "${server_init+x}" ]; then
     if [ "$is_target_host_nixos" -eq 1 ]; then
       printf 'target host already is nixos, are you realy want to reinstall nixos?\nThis may delete all data [y/N]\n' 
