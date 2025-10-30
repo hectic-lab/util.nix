@@ -52,7 +52,7 @@ in {
       '';
     };
     networkMatchConfigName = lib.mkOption {
-      type = lib.types.strMatching "^(enp1s0|ens3|eth0)$";
+      type = lib.types.strMatching "^(enp1s0|ens3)$";
       example = "enp1s0";
       description = ''
         type of network conection, 
