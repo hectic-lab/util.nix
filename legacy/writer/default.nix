@@ -1,7 +1,6 @@
-{
-  callPackage
-}: rec {
+{ callPackage }: rec {
   writeShellApplication = callPackage ./writeShellApplication.nix  {};
+  writeDash             = callPackage ./writeDash.nix              {};
   writeC                = callPackage ./writeC.nix                 {};
   writeCBin             = name: writeC "/bin/${name}";
   writeMinCBin          = name: includes: body: writeMinC "/bin/${name}" includes body;

@@ -1,5 +1,5 @@
-{ inputs, self, nixpkgs, ... }: let
-  lib = nixpkgs.lib;
+{ inputs, self, ... }: let
+  lib = inputs.nixpkgs.lib;
 in final: prev: (
   let
     packages = self.packages.${prev.system};
