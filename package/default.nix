@@ -1,4 +1,4 @@
-{ self, system, pkgs, inputs, ... }: let
+{ self, pkgs, inputs, ... }: let
   rust = {
     nativeBuildInputs = [
       pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
@@ -108,118 +108,15 @@
     nativeBuildInputs = with pkgs; [pkg-config curl];
   };
 in {
-  py3-datetime = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "DateTime";
-    version = "5.5";
-    
-    src = pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-IexjMfh6f8tXvXxZ6KaL//5vy/Ws27x7NW1qmgIBkdM=";
-    };
-  };
-  py3-marzban = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "marzban";
-    version = "0.4.3";
-    
-    src = pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-z71Wl4AuET3oES7/48u+paL9F12SdrkohcEee/tkWVk=";
-    };
-
-    format = "pyproject";
-    
-    propagatedBuildInputs = with pkgs.python3Packages; [
-      httpx
-      paramiko
-      sshtunnel
-    ];
-    nativeBuildInputs = (with pkgs.python3Packages; [
-      setuptools
-      wheel
-      setuptools-scm
-      httpx
-      pydantic
-      paramiko
-      sshtunnel
-    ]) ++ (with self.packages.${system}; [
-      py3-datetime
-    ]);
-
-    doCheck = false;
-  };
-  py3-asyncpayments = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "asyncpayments";
-    version = "1.4.6";
-    
-    src = pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-t7AZiRb7DHZgJHPNQwAEuc0mrTQ14+82d19VomTjs8U=";
-    };
-
-    format = "pyproject";
-    
-    nativeBuildInputs = with pkgs.python3Packages; [ setuptools wheel setuptools-scm ];
-    propagatedBuildInputs = with pkgs.python3Packages; [ aiohttp requests ];
-    
-    doCheck = false;
-  };
-  py3-payok = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "payok";
-    version = "1.2";
-    
-    src = pkgs.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-UN+MSNGhrPpw7hZRLAx8XY3jC0ldo+DlbaSJ64wWBHo=";
-    };
-    
-    propagatedBuildInputs = with pkgs.python3Packages; [ requests ];
-    
-    doCheck = false;
-  };
-  py3-asyncio = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "asyncio";
-    version = "3.4.3";
-    src = pkgs.python3Packages.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-gzYP+LyXmA5P8lyWTHvTkj0zPRd6pPf7c2sBnybHy0E=";
-    };
-  };
-  py3-cryptomus = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "cryptomus";
-    version = "1.1";
-    src = pkgs.python3Packages.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-f0BBGfemKxMdz+LMvawWqqRfmF+TrCpMwgtJEYt+fgU=";
-    };
-  };
-  py3-modulegraph = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "modulegraph";
-    version = "0.19.6";
-    src = pkgs.python3Packages.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-yRTIyVoOEP6IUF1OnCKEtOPbxwlD4wbMZWfjbMVBv0s=";
-    };
-  };
-  py3-swifter = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "swifter";
-    version = "1.4.0";
-    src = pkgs.python3Packages.fetchPypi {
-      inherit pname version;
-      sha256 = "sha256-4bt0R2ohs/B6F6oYyX/cuoWZcmvRfacy8J2rzFDia6A=";
-    };
-  };
-  py3-aiogram-newsletter = pkgs.python3Packages.buildPythonPackage rec {
-    pname = "aiogram-newsletter";
-    version = "0.0.10";
-
-    src = pkgs.fetchFromGitHub {
-      inherit pname version;
-      owner = "nessshon";
-      repo = "aiogram-newsletter";
-      rev = "bb8a42e4bcff66a9a606fc92ccc27b1d094b20fc";
-      sha256 = "sha256-atKhccp8Pr8anJUo+M9hnYkYrcgnB9SxrpmsiVusJZs=";
-    };
-  };
+  py3-datetime                 = pkgs.callPackage ./py3-datetime.nix                  {};
+  py3-marzban                  = pkgs.callPackage ./py3-marzban.nix                   { inherit self; };
+  py3-asyncpayments            = pkgs.callPackage ./py3-asyncpayments.nix             {};
+  py3-payok                    = pkgs.callPackage ./py3-payok.nix                     {};
+  py3-asyncio                  = pkgs.callPackage ./py3-asyncio.nix                   {};
+  py3-cryptomus                = pkgs.callPackage ./py3-cryptomus.nix                 {};
+  py3-modulegraph              = pkgs.callPackage ./py3-modulegraph.nix               {};
+  py3-swifter                  = pkgs.callPackage ./py3-swifter.nix                   {};
+  py3-aiogram-newsletter       = pkgs.callPackage ./py3-swifter.nix                   {};
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};
   nvim-pager                   = pkgs.callPackage ./nvim-pager.nix                    {};
