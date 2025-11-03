@@ -1,4 +1,4 @@
-{ self, system, pkgs, inputs }: let
+{ self, system, pkgs, inputs, ... }: let
   rust = {
     nativeBuildInputs = [
       pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
@@ -243,6 +243,7 @@ in {
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   sops                         = pkgs.callPackage ./sops.nix                          {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
+  migrator                     = pkgs.callPackage ./migratior                         {};
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
   pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";

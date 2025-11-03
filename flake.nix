@@ -68,57 +68,15 @@
     system,
     pkgs,
   }: {
-    packages.${system}         = import ./package      { inherit system self pkgs inputs; };
-    devShells.${system}        = import ./devshell     { inherit system self pkgs; };
-    legacyPackages.${system}   = import ./legacy       {
-      inherit system self;
-      pkgs = import nixpkgs { inherit system; };
-    };
-    nixosConfigurations = {
-      "devvm-manual|${system}" = import ./nixos/system/devvm-manual/default.nix 
-        { inherit flake self inputs system; };
-      "devvm-hemar|${system}"  = import ./nixos/system/devvm-hemar/default.nix 
-        { inherit flake self inputs system; };
-    };
-
-    #nixosTests = let
-    #  testLib = import (nixpkgs + "/nixos/lib/testing-python.nix") { inherit pkgs; };
-    #in {       
-    #  "hardware/lenovo-ideapad-15arh7" = testLib.makeTest {
-    #    name = "hardware/lenovo-ideapad-15arh7";
-    #    nodes.machine = { ... }: {
-    #      imports = [ self.nixosModules.hectic ];
-    #      services.hardware.lenovo-ideapad-15arh7.enable = true;
-    #    };
-    #    testScript = ''
-    #      start_all()
-    #      machine.wait_for_unit("my-service.service")
-    #      machine.succeed("journalctl -u my-service -b | grep -qi hello")
-    #    '';
-    #  };
-    #};
-
-    checks = let 
-      mkSys = system: opts:
-      (nixpkgs.lib.nixosSystem {
-        inherit system;
-        modules = [
-          self.nixosModules.hectic
-          { hectic.hardware.lenovo-ideapad-15arh7 = opts; }
-        ];
-      });
-
-      cases = {
-        #enable          = { enable = true;  };
-        #disabled        = { enable = false; };
-        #customFoo       = { enable = true; foo = "bar"; };
-      };
-    in nixpkgs.lib.mapAttrs
-        (name: opts: (mkSys system opts).config.system.build.toplevel) cases;
+    packages.${system}         = import ./package      { inherit flake self inputs pkgs system; };
+    devShells.${system}        = import ./devshell     { inherit flake self inputs pkgs system; };
+    legacyPackages.${system}   = import ./legacy       { inherit flake self inputs pkgs system; };
+    nixosConfigurations        =                       { };
+    checks.${system}           = import ./test         { inherit flake self inputs pkgs system; };
   }) // {
     lib = self-lib;
-    overlays.default           = import ./overlay      { inherit flake self inputs nixpkgs; };
-    nixosModules               = import ./nixos/module { inherit flake self inputs nixpkgs; };
-    templates                  = import ./template     { inherit flake self inputs nixpkgs; };
+    overlays.default           = import ./overlay      { inherit flake self inputs; };
+    nixosModules               = import ./nixos/module { inherit flake self inputs; };
+    templates                  = import ./template     { inherit flake self inputs; };
   };
 }

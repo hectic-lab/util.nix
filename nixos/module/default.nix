@@ -2,10 +2,9 @@
   flake,
   self,
   inputs,
-  nixpkgs,
 }:
 with builtins;
-with nixpkgs.lib;
+with inputs.nixpkgs.lib;
 with self.lib;
 let
   # Combine hectic modules into one

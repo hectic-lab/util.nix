@@ -1,8 +1,4 @@
-{ 
-  system,
-  pkgs,
-  self 
-}: 
+{ system, pkgs, self, ... }: 
 (import ./dev { inherit self system pkgs; }) 
 // {
   c          = import ./c.nix          { inherit self system pkgs; };
