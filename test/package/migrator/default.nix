@@ -41,4 +41,4 @@
     test=${testDrv}
     ${builtins.readFile ./lauch.sh}
   '';
-in builtins.trace testDir (lib.mapAttrs (name: drv: mkPgTest name drv) testDrvs)
+in lib.mapAttrs (name: drv: mkPgTest name drv) testDrvs
