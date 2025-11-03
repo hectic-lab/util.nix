@@ -243,7 +243,7 @@ in {
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   sops                         = pkgs.callPackage ./sops.nix                          {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
-  migrator                     = pkgs.callPackage ./migratior                         {};
+  migrator                     = pkgs.callPackage ./migrator                          {};
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
   pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";
