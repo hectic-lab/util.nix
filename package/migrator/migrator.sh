@@ -6,11 +6,14 @@ if ! command -v psql >/dev/null; then
 fi
 
 MIGRATION_DIR="${MIGRATION_DIR:-migration}"
+quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
+REMAINING_ARS=
 
 while [ $# -gt 0 ]; do
+  log debug "$1"
   case $1 in
     migrate|create|fetch)
-      [ -n "$SUBCOMMAND" ] || (printf 'ambiguous subcommand, decide %s or %s' "$SUBCOMMAND" "$1"; exit 1)
+      [ "${SUBCOMMAND+x}" ] && { printf 'ambiguous subcommand, decide %s or %s\n' "$SUBCOMMAND" "$1"; exit 1; }
       SUBCOMMAND=$1
       shift
     ;;
@@ -22,15 +25,12 @@ while [ $# -gt 0 ]; do
       INHERITS_LIST="${INHERITS_LIST:+$INHERITS_LIST }$2"
       shift 2
     ;;
-    --*|-*) ;; # skip all unrecognized arguments
-    *)
-      printf 'subcommand %s does not exists' "$1"
-      exit 1
-    ;;
+    --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
+    *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
   esac
 done
 
-[ -z "$SUBCOMMAND" ] || (log error "no subcomand specified"; exit 1)
+[ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
 
 help() {
   # inherits: List one or more tables the migration table must inherit from
@@ -57,7 +57,7 @@ migrate() {
         shift 2
       ;;
       --*|-*)
-        printf 'argument %s does not exists' "$1"
+        printf 'migrate argument %s does not exists' "$1"
         exit 1
       ;;
       *)
@@ -87,10 +87,10 @@ migrate() {
     fs_migration=$(echo "$fs_migrations" | sed -n "$((i+1))p")
     if [ -z "$fs_migration" ] || [ "$fs_migration" != "$db_migration" ]; then
       if [ -z "$FORCE" ]; then
-        echo "Unrelated migration tree detected. Use --force to proceed." >&2
+        log error "unrelated migration tree detected. Use --force to proceed."
         exit 2
       else
-        echo "Unrelated migration tree forced. Proceeding..." >&2
+        log error "unrelated migration tree forced. Proceeding..."
         break
       fi
     fi
@@ -99,15 +99,36 @@ migrate() {
 }
 
 create() {
+  local time_stamp name file_name file_path
+
   while [ $# -gt 0 ]; do
     case $1 in
       --name|-n)
 	# shellcheck disable=SC2034
-        NAME=$2
+        MIGRATION_NAME=$2
         shift 2
+      ;;
+      --*|-*)
+        log error "create argument $1 does not exists"
+        exit 1
+      ;;
+      *)
+        log error "create subcommand $1 does not exists"
+        exit 1
       ;;
     esac
   done
+
+  mkdir -p "$MIGRATION_DIR" 2>/dev/null
+
+  time_stamp="$(date '+%Y%m%d%H%M%S')"
+  name="${MIGRATION_NAME:-$(generate_word)}"
+  file_name="${time_stamp}-${name}.sql"
+  file_path="${MIGRATION_DIR}/${file_name}"
+
+  printf '%s Write your migration SQL here\n' '--' > "$file_path"
+
+  log notice "created migration: ${WHITE}${file_path}${NC}"
 }
 
 fetch() {
@@ -122,4 +143,22 @@ fetch() {
   done
 }
 
-"$SUBCOMMAND"
+generate_word() {
+  C="b c d f g h j k l m n p r s t v w z"
+  V="a e i o u"
+  N=${N:-5}
+  
+  w=
+  for i in $(seq 3); do
+    c=$(echo "$C" | tr ' ' '\n' | shuf -n1)
+    v=$(echo "$V" | tr ' ' '\n' | shuf -n1)
+    w="${w}${c}${v}"
+  done
+  printf '%s' "$w"
+}
+
+log debug "subcommand: $SUBCOMMAND"
+log debug "subcommand args: $REMAINING_ARS"
+
+eval "set -- $REMAINING_ARS"
+"$SUBCOMMAND" "$@"
