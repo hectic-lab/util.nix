@@ -22,13 +22,35 @@ while [ $# -gt 0 ]; do
       shift 2
     ;;
     --inherits)
-      INHERITS_LIST="${INHERITS_LIST:+$INHERITS_LIST }$2"
+      INHERITS_LIST="${INHERITS_LIST:+$INHERITS_LIST\"}$2"
       shift 2
+    ;;
+    --init-dry-run)
+      INIT_DRY_RUN=1
+      shift
     ;;
     --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
     *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
   esac
 done
+
+INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
+
+init() {
+  log debug "inherits: ${WHITE}${INHERITS_LIST}${NC}"
+  local create_table
+  create_table="$(printf '%s\n' \
+    'CREATE SCHEMA IF NOT EXISTS hectic;' \
+    'CREATE TABLE IF NOT EXISTS hectic.migration (' \
+    '    id SERIAL PRIMARY KEY,' \
+    '    name TEXT UNIQUE NOT NULL,'\
+    '    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()' \
+    ')')"
+
+  printf '%s INHERITS(%s)' "$create_table" "$INHERITS_LIST"
+}
+
+[ "${INIT_DRY_RUN+x}" ] && { printf '%s\n' "$(init)"; exit; }
 
 [ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
 
