@@ -40,5 +40,9 @@
     ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
     test=${testDrv}
     ${builtins.readFile ./lauch.sh}
+
+    # success marker for Nix
+    # shellcheck disable=SC2154
+    mkdir -p "$out"
   '';
 in lib.mapAttrs (name: drv: mkPgTest name drv) testDrvs
