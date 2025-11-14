@@ -3,7 +3,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     hutil = {
-      url = "github:hectic-lab/util.nix?ref=fix/postgres-extension";
+      url = "github:hectic-lab/util.nix";
       inputs = {
         nixpkgs.follows = "nixpkgs";
       };
