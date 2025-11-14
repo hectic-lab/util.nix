@@ -9,7 +9,7 @@
       };
     };
     util = {
-      url = "github:hectic-lab/util.nix?ref=fix/postgres-extension";
+      url = "github:hectic-lab/util.nix";
       inputs = {
         nixpkgs.follows = "nixpkgs";
       };
