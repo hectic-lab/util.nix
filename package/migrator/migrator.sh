@@ -12,7 +12,7 @@ REMAINING_ARS=
 while [ $# -gt 0 ]; do
   log debug "$1"
   case $1 in
-    migrate|create|fetch)
+    migrate|create|fetch|list)
       [ "${SUBCOMMAND+x}" ] && { printf 'ambiguous subcommand, decide %s or %s\n' "$SUBCOMMAND" "$1"; exit 1; }
       SUBCOMMAND=$1
       shift
@@ -59,7 +59,69 @@ help() {
   echo help
 }
 
+migrate_down() {
+  DOWN_NUMBER=1
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --*|-*)
+        printf 'migrate argument %s does not exists' "$1"
+        exit 1
+      ;;
+      ''|*[!0-9]*)
+	log error "down argument not a number";
+	exit 1;
+      ;;
+      *)
+	DOWN_NUMBER=$2
+	shift 2;
+      ;;
+    esac
+  done
+
+  : "$DOWN_NUMBER"
+}
+
+migrate_up() {
+  UP_NUMBER=1
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --*|-*)
+        printf 'migrate argument %s does not exists' "$1"
+        exit 1
+      ;;
+      ''|*[!0-9]*)
+	log error "up argument not a number";
+	exit 1;
+      ;;
+      *)
+	UP_NUMBER=$2
+	shift 2;
+      ;;
+    esac
+  done
+
+  : "$UP_NUMBER"
+  #ls "$MIGRATION_DIR" -1 | sort
+}
+
+migrate_to() {
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --*|-*)
+        printf 'migrate argument %s does not exists' "$1"
+        exit 1
+      ;;
+      *)
+	MIGRATION_NAME=
+      ;;
+    esac
+  done
+
+  [ "${MIGRATION_NAME+x}" ] || { log error "no migration name specified"; exit 1; }
+}
+
 migrate() {
+  local fs_migrations db_migrations db_migration fs_migration psql_args var #target_migration
   while [ $# -gt 0 ]; do
     case $1 in
       up|down|to)
@@ -78,25 +140,27 @@ migrate() {
 	VARIABLE_LIST="${VARIABLE_LIST:+$VARIABLE_LIST }$2"
         shift 2
       ;;
-      --*|-*)
-        printf 'migrate argument %s does not exists' "$1"
-        exit 1
-      ;;
-      *)
-        printf 'migrate subcommand %s does not exists' "$1"
-        exit 1
-      ;;
+      --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
+      *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
+      #--*|-*)
+      #  printf 'migrate argument %s does not exists' "$1"
+      #  exit 1
+      #;;
+      #*)
+      #  printf 'migrate subcommand %s does not exists' "$1"
+      #  exit 1
+      #;;
     esac
   done
 
-  # Get the list of new migrations from disk
+  init
+
   fs_migrations=$(
     find "$MIGRATION_DIR" -maxdepth 1 -type f -name '*.sql' \
       | sort \
       | xargs -n1 basename
   )
 
-  # Get the list of already applied migrations from DB
   db_migrations=$(
     psql -Atqc "SELECT name FROM hectic.migration ORDER BY name ASC" \
       | awk NF
@@ -106,7 +170,7 @@ migrate() {
   # (meaning all DB-applied migration filenames should appear in the same order at the start).
   i=0
   for db_migration in $db_migrations; do
-    fs_migration=$(echo "$fs_migrations" | sed -n "$((i+1))p")
+    fs_migration=$(printf '%s' "$fs_migrations" | sed -n "$((i+1))p")
     if [ -z "$fs_migration" ] || [ "$fs_migration" != "$db_migration" ]; then
       if [ -z "$FORCE" ]; then
         log error "unrelated migration tree detected. Use --force to proceed."
@@ -117,6 +181,34 @@ migrate() {
       fi
     fi
     i=$((i+1))
+  done
+
+  eval "set -- $REMAINING_ARS"
+  #target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
+
+  printf '%s\n' "$fs_migrations" | while IFS= read -r fs_migration; do
+    # skip already applied migrations
+    printf '%s' "$db_migrations" | grep -qxF "$fs_migration" && continue
+
+    psql_args="-d $DB_URL"
+    for var in $VARIABLE_LIST; do
+        psql_args="$psql_args -v $var"
+    done
+
+    escaped_name=$(printf "%s" "$fs_migration" | sed "s/'/''/g")
+    escaped_path=$(printf "%s/%s" "$MIGRATION_DIR" "$fs_migration" | sed "s/'/''/g")
+
+    # shellcheck disable=SC2086
+    if ! psql $psql_args <<SQL
+BEGIN;
+\i '$escaped_path';
+INSERT INTO hectic.migration (name) VALUES ('$escaped_name');
+COMMIT;
+SQL
+    then
+      log error "Migration failed: ${WHITE}$fs_migration${NC}"
+      return 3
+    fi
   done
 }
 
@@ -163,6 +255,10 @@ fetch() {
       ;;
     esac
   done
+}
+
+list() {
+  ls "$MIGRATION_DIR" -1
 }
 
 generate_word() {
