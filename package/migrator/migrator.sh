@@ -9,10 +9,18 @@ MIGRATION_DIR="${MIGRATION_DIR:-migration}"
 quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
 REMAINING_ARS=
 
+# cat filename | sha256sum()
+# sha256sum(filename)
+sha256sum() {
+  local file
+  file="${1:-'-'}"
+  cksum --algorithm=sha256 --untagged "$file" | awk '{printf $1}'
+}
+
 while [ $# -gt 0 ]; do
   log debug "$1"
   case $1 in
-    migrate|create|fetch|list)
+    migrate|create|fetch|list|init)
       [ "${SUBCOMMAND+x}" ] && { printf 'ambiguous subcommand, decide %s or %s\n' "$SUBCOMMAND" "$1"; exit 1; }
       SUBCOMMAND=$1
       shift
@@ -25,10 +33,6 @@ while [ $# -gt 0 ]; do
       INHERITS_LIST="${INHERITS_LIST:+$INHERITS_LIST\"}$2"
       shift 2
     ;;
-    --init-dry-run)
-      INIT_DRY_RUN=1
-      shift
-    ;;
     --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
     *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
   esac
@@ -36,21 +40,78 @@ done
 
 INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
 
+# shellcheck disable=SC2120
 init() {
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --dry-run)
+        INIT_DRY_RUN=1
+        shift
+      ;;
+      --db-url|-u)
+        DB_URL="$2"
+        shift 2
+      ;;
+      --*|-*)
+        printf 'init argument %s does not exists' "$1"
+        exit 1
+      ;;
+      *)
+        printf 'init command %s does not exists' "$1"
+        exit 1
+      ;;
+    esac
+  done
+
+  error_handler_no_db_url
+
+  [ "${INIT_DRY_RUN+x}" ] && { printf '%s\n' "$(init_sql)"; exit; }
+
+  psql_args="$(form_psql_args)"
+
+  # shellcheck disable=SC2086
+  if ! printf '%s' "$(init_sql)" | psql $psql_args; then
+    log error "Migration failed: ${WHITE}$fs_migration${NC}"
+    return 3
+  fi
+}
+
+# error_handler_no_db_url()
+error_handler_no_db_url() {
+  [ "${DB_URL+x}" ] || { log error "no ${WHITE}DB_URL${NC} or ${WHITE}--db-url${NC} specified"; exit 1; }
+}
+
+init_sql() {
   log debug "inherits: ${WHITE}${INHERITS_LIST}${NC}"
   local create_table
   create_table="$(printf '%s\n' \
+    "BEGIN;" \
+    "CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{15}-.*$');" \
+    '' \
+    "CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');" \
+    '' \
+    'CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS $$' \
+    'BEGIN' \
+    '  NEW.hash = lower(NEW.hash);' \
+    '  RETURN NEW;' \
+    'END;' \
+    '$$ LANGUAGE plpgsql;' \
+    '' \
+    'CREATE TRIGGER hectic.t_sha256_lower' \
+    'BEFORE INSERT OR UPDATE ON hectic.migration' \
+    'FOR EACH ROW EXECUTE FUNCTION sha256_lower();' \
+    '' \
     'CREATE SCHEMA IF NOT EXISTS hectic;' \
     'CREATE TABLE IF NOT EXISTS hectic.migration (' \
-    '    id SERIAL PRIMARY KEY,' \
-    '    name TEXT UNIQUE NOT NULL,'\
-    '    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()' \
-    ')')"
+    '    id          SERIAL                 PRIMARY KEY,' \
+    '    name        hectic.migration_name  UNIQUE NOT NULL,'\
+    '    hash        hectic.sha256          UNIQUE NOT NULL,'\
+    '    applied_at  TIMESTAMPTZ            NOT NULL DEFAULT NOW()' \
+    ')' \
+    'COMMIT;')"
 
   printf '%s INHERITS(%s)' "$create_table" "$INHERITS_LIST"
 }
-
-[ "${INIT_DRY_RUN+x}" ] && { printf '%s\n' "$(init)"; exit; }
 
 [ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
 
@@ -142,21 +203,20 @@ migrate() {
       ;;
       --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
       *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
-      #--*|-*)
-      #  printf 'migrate argument %s does not exists' "$1"
-      #  exit 1
-      #;;
-      #*)
-      #  printf 'migrate subcommand %s does not exists' "$1"
-      #  exit 1
-      #;;
     esac
   done
+
+  error_handler_no_db_url
+
+  [ -n "$FORCE" ] && {
+    log error "migrate --force not implemented"
+    exit 1
+  }
 
   init
 
   fs_migrations=$(
-    find "$MIGRATION_DIR" -maxdepth 1 -type f -name '*.sql' \
+    find "$MIGRATION_DIR" -maxdepth 1 -type d -regex '^.*/[0-9]{15}-.*$' \
       | sort \
       | xargs -n1 basename
   )
@@ -186,17 +246,25 @@ migrate() {
   eval "set -- $REMAINING_ARS"
   #target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
 
+  
+}
+
+form_psql_args() {
+  psql_args="-d $DB_URL -v ON_ERROR_STOP=1"
+  for var in $VARIABLE_LIST; do
+    psql_args="$psql_args -v $var"
+  done
+}
+
+migrate_inner() {
   printf '%s\n' "$fs_migrations" | while IFS= read -r fs_migration; do
     # skip already applied migrations
     printf '%s' "$db_migrations" | grep -qxF "$fs_migration" && continue
 
-    psql_args="-d $DB_URL"
-    for var in $VARIABLE_LIST; do
-        psql_args="$psql_args -v $var"
-    done
+    psql_args="$(form_psql_args)"
 
     escaped_name=$(printf "%s" "$fs_migration" | sed "s/'/''/g")
-    escaped_path=$(printf "%s/%s" "$MIGRATION_DIR" "$fs_migration" | sed "s/'/''/g")
+    escaped_path=$(printf "%s/%s/up.sql" "$MIGRATION_DIR" "$fs_migration" | sed "s/'/''/g")
 
     # shellcheck disable=SC2086
     if ! psql $psql_args <<SQL
@@ -255,6 +323,8 @@ fetch() {
       ;;
     esac
   done
+
+  error_handler_no_db_url
 }
 
 list() {
