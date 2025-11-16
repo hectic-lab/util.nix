@@ -1,1 +1,1 @@
-migrator list
+#migrator list
