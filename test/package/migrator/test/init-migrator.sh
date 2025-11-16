@@ -1,5 +1,7 @@
 #!/bin/dash
 
+HECTIC_NAMESPACE=test-init-migrator
+
 log info "hectic.migration table inheritance"
 if ! migration_table_sql="$(migrator --inherits tablename --inherits 'table name' init --dry-run)"; then
   log error "test failed: error on migration table init dry run"

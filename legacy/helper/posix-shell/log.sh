@@ -20,11 +20,11 @@
 #   When you use NC to reset terminal colors inside log output,
 #   it resets back to the log level’s color instead of the terminal default.
 
-: "${HLOG_NAMESPACE:="$(basename "$0")"}"
-: "${HLOG_LEVEL:=trace}"  # e.g. "info;ns1=debug;ns2=trace"
+: "${HECTIC_NAMESPACE="$(basename "$0")"}"
+: "${HECTIC_LOG:=trace}"  # e.g. "info;ns1=debug;ns2=trace"
 
 validate_log_level_spec() {
-    spec=$HLOG_LEVEL
+    spec=$HECTIC_LOG
 
     levels="trace debug info notice warn error"
 
@@ -58,7 +58,7 @@ validate_log_level_spec() {
     return 0
 }
 
-validate_log_level_spec || { printf "%b%b\n" "${BBLACK}${HLOG_NAMESPACE}> " "${color}invalid HLOG_LEVEL syntax${NC}" "$@" >&2; exit 1; }
+validate_log_level_spec || { printf "%b%b\n" "${BBLACK}${HECTIC_NAMESPACE}> " "${color}invalid HECTIC_LOG syntax${NC}" "$@" >&2; exit 1; }
 
 log_level_num() {
     case $1 in
@@ -74,8 +74,8 @@ log_level_num() {
 
 
 log_effective_level() {
-    spec=$HLOG_LEVEL
-    ns=$HLOG_NAMESPACE
+    spec=$HECTIC_LOG
+    ns=$HECTIC_NAMESPACE
 
     default_level=
     ns_level=
@@ -133,5 +133,5 @@ log() {
     # shellcheck disable=SC1003
     fmt="$(printf "%s$delimetr" "$@" | sed 's/\\033\[0m/''\'"$color"'/g')"
     shift
-    printf "%b%b\n" "${BBLACK}${HLOG_NAMESPACE}> " "$color$fmt$NC" >&2
+    printf "%b%b\n" "${BBLACK}${HECTIC_NAMESPACE}> " "$color$fmt$NC" >&2
 }

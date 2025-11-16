@@ -1,3 +1,7 @@
+#!/bin/dash
+
+HECTIC_NAMESPACE=test-missing-psql
+
 # remove psql from $PATH
 dir=$(dirname -- "$(command -v psql)")
 PATH=$(printf '%s' "$PATH" | awk -v RS=: -v ORS=: -v d="$dir" '$0!=d{print}')

@@ -1,5 +1,7 @@
 #!/bin/dash
 
+set -eu
+
 if ! command -v psql >/dev/null; then
     log error "Required tool (psql) are not installed."
     exit 127
@@ -16,6 +18,8 @@ sha256sum() {
   file="${1:-'-'}"
   cksum --algorithm=sha256 --untagged "$file" | awk '{printf $1}'
 }
+
+INHERITS_LIST=
 
 while [ $# -gt 0 ]; do
   log debug "$1"
