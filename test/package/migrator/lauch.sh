@@ -3,6 +3,9 @@
 # $out  - nix derivation output
 # $test - test and assertion file
 
+HECTIC_NAMESPACE=test-laucher
+export HECTIC_LOG=trace
+
 test_derivation="$(basename "$test")"
 test_name="${test_derivation#*-*-}"
 
@@ -60,6 +63,8 @@ log info "run test ${WHITE}${test_name}${NC}"
 
 # run test
 . "${test}/run.sh"
+
+HECTIC_NAMESPACE=test-laucher
 
 log info "finish test pipeline"
 

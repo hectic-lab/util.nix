@@ -1,7 +1,8 @@
-#
-# first migration
-#
+#!/bin/dash
 
+HECTIC_NAMESPACE=test-create-migration
+
+log notice "case: ${WHITE}first migration"
 if ! migrator create; then
   log error "test failed: error on migration creation"
   exit 1
@@ -17,10 +18,7 @@ if [ "$(find ./migration -maxdepth 1 -type f | wc -l)" -eq 0 ]; then
   exit 1
 fi
 
-#
-#  next migration
-#
-
+log notice "case: ${WHITE}next migration"
 if ! migrator create; then
   log error "test failed: error on migration creation"
   exit 1
@@ -31,10 +29,7 @@ if [ "$(find ./migration -maxdepth 1 -type f | wc -l)" -eq 1 ]; then
   exit 1
 fi
 
-#
-#  migration with custom name
-#
-
+log notice "case: ${WHITE}migration with custom name"
 if ! migrator create --name test; then
   log error "test failed: error on migration creation"
   exit 1
@@ -50,10 +45,7 @@ if ! find ./migration -maxdepth 1 -type f -name '*test.sql' \
     log eror "test failed: migration have unexpected name"
 fi
 
-#
-#  migration with custom name that contains space
-#
-
+log notice "case: ${WHITE}migration with custom name that contains space"
 if ! migrator create --name 'test name'; then
   log error "test failed: error on migration creation"
   exit 1
