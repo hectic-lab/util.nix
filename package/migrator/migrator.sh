@@ -17,6 +17,7 @@ if ! command -v psql >/dev/null; then
     exit 127
 fi
 
+VERSION='0.0.1'
 MIGRATION_DIR="${MIGRATION_DIR:-migration}"
 quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
 REMAINING_ARS=
@@ -29,14 +30,14 @@ sha256sum() {
   cksum --algorithm=sha256 --untagged "$file" | awk '{printf $1}'
 }
 
-INHERITS_LIST=
-VARIABLE_LIST=
-
 while [ $# -gt 0 ]; do
   log debug "$1"
   case $1 in
     migrate|create|fetch|list|init)
-      [ "${SUBCOMMAND+x}" ] && { printf 'ambiguous subcommand, decide %s or %s\n' "$SUBCOMMAND" "$1"; exit 2; }
+      [ "${SUBCOMMAND+x}" ] && { 
+	log error "ambiguous subcommand, decide ${WHITE}$SUBCOMMAND ${NC}or ${WHITE}$1";
+	exit 2;
+      }
       SUBCOMMAND=$1
       shift
     ;;
@@ -45,7 +46,7 @@ while [ $# -gt 0 ]; do
       shift 2
     ;;
     --inherits)
-      INHERITS_LIST="${INHERITS_LIST:+$INHERITS_LIST\"}$2"
+      INHERITS_LIST="${INHERITS_LIST+$INHERITS_LIST\"}$2"
       shift 2
     ;;
     --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
@@ -53,7 +54,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
+[ ${INHERITS_LIST+x} ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
 
 # shellcheck disable=SC2120
 init() {
@@ -68,7 +69,7 @@ init() {
         shift 2
       ;;
       --set|-v)
-	VARIABLE_LIST="${VARIABLE_LIST:+$VARIABLE_LIST }$2"
+	VARIABLE_LIST="${VARIABLE_LIST+$VARIABLE_LIST }$2"
         shift 2
       ;;
       --*|-*)
@@ -88,24 +89,26 @@ init() {
 
   psql_args="$(form_psql_args)"
 
-  oldIFS="$IFS"
-  IFS=','
-  check_inherits=
-  for table in $INHERITS_LIST; do
-    check_inherits="$(printf '%s\nSELECT 1 FROM %s LIMIT 1;' "$check_inherits" "$table")"
-  done
-  IFS="$oldIFS"
+  [ ${INHERITS_LIST+x} ] && {
+    oldIFS="$IFS"
+    IFS=','
+    check_inherits=
+    for table in $INHERITS_LIST; do
+      check_inherits="$(printf '%s\nSELECT 1 FROM %s LIMIT 1;' "$check_inherits" "$table")"
+    done
+    IFS="$oldIFS"
 
-  check_inherits=$(printf '%s\n' \
-    'BEGIN;' \
-    "$check_inherits" \
-    'COMMIT;')
+    check_inherits=$(printf '%s\n' \
+      'BEGIN;' \
+      "$check_inherits" \
+      'COMMIT;')
 
-  # shellcheck disable=SC2086
-  if ! psql $psql_args -c "$check_inherits"; then
-    log error "init failed: ${WHITE}one of inherits table does not exists: ${CYAN}$INHERITS_LIST"
-    exit 5
-  fi
+    # shellcheck disable=SC2086
+    if ! psql $psql_args -c "$check_inherits"; then
+      log error "init failed: ${WHITE}one of inherits table does not exists: ${CYAN}$INHERITS_LIST"
+      exit 5
+    fi
+  }
 
   # shellcheck disable=SC2086
   if ! psql $psql_args -c "$(init_sql)"; then
@@ -120,7 +123,6 @@ error_handler_no_db_url() {
 }
 
 init_sql() {
-  log debug "inherits: ${WHITE}${INHERITS_LIST}${NC}"
   local sql
   sql="$(printf '%s\n' \
     "BEGIN;" \
@@ -138,15 +140,24 @@ init_sql() {
     'END;' \
     '$$ LANGUAGE plpgsql;' \
     '' \
-    'CREATE SCHEMA IF NOT EXISTS hectic;' \
+    'CREATE TABLE IF NOT EXISTS hectic.version (' \
+    '    name          TEXT                 PRIMARY KEY,' \
+    '    version       TEXT                 NOT NULL,' \
+    '    installed_at  TIMESTAMPTZ          NOT NULL DEFAULT NOW()' \
+    ');' \
+    '' \
+    "INSERT INTO hectic.version (name, version) VALUES ('migrator', '$VERSION')" \
+    '' \
     'CREATE TABLE IF NOT EXISTS hectic.migration (' \
     '    id          SERIAL                 PRIMARY KEY,' \
-    '    name        hectic.migration_name  UNIQUE NOT NULL,'\
-    '    hash        hectic.sha256          UNIQUE NOT NULL,'\
+    '    name        hectic.migration_name  UNIQUE NOT NULL,' \
+    '    hash        hectic.sha256          UNIQUE NOT NULL,' \
     '    applied_at  TIMESTAMPTZ            NOT NULL DEFAULT NOW()' \
     ')')"
 
-  sql="$(printf '%s INHERITS(%s);\n' "$sql" "$INHERITS_LIST")"
+  [ ${INHERITS_LIST+x} ] && sql="$(printf '%s INHERITS(%s)' "$sql" "$INHERITS_LIST")"
+
+  sql="$(printf '%s;\n' "$sql")"
 
   printf '%s\n' \
     "$sql" \
@@ -224,14 +235,22 @@ migrate_to() {
   [ "${MIGRATION_NAME+x}" ] || { log error "no migration name specified"; exit 1; }
 }
 
+migration_list() {
+  find "$MIGRATION_DIR" -maxdepth 1 -type d -regextype posix-extended -regex '^.*/[0-9]{14}-.*$' -printf '%f\n' | sort
+}
+
 migrate() {
   local fs_migrations db_migrations db_migration fs_migration psql_args var #target_migration
 
   while [ $# -gt 0 ]; do
     case $1 in
       up|down|to)
-        [ -n "$MIGRATE_SUBCOMMAND" ] || (printf 'ambiguous migrate subcommand, decide %s or %s' "$MIGRATE_SUBCOMMAND" "$1"; exit 1)
+        [ "${MIGRATE_SUBCOMMAND+x}" ] && {
+	  log error "ambiguous migrate subcommand, decide ${WHITE}$MIGRATE_SUBCOMMAND ${NC}or ${WHITE}$1";
+	  exit 2
+        }
 	MIGRATE_SUBCOMMAND="$1"
+	shift
       ;;
       --db-url|-u)
         DB_URL="$2"
@@ -242,7 +261,7 @@ migrate() {
         shift
       ;;
       --set|-v)
-	VARIABLE_LIST="${VARIABLE_LIST:+$VARIABLE_LIST }$2"
+	VARIABLE_LIST="${VARIABLE_LIST+$VARIABLE_LIST }$2"
         shift 2
       ;;
       --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
@@ -252,23 +271,23 @@ migrate() {
 
   error_handler_no_db_url
 
-  [ -n "$FORCE" ] && {
+  [ "${FORCE+x}" ] && {
     log error "migrate --force not implemented"
     exit 1
   }
 
   init
 
-  fs_migrations=$(
-    find "$MIGRATION_DIR" -maxdepth 1 -type d -regex '^.*/[0-9]{15}-.*$' \
-      | sort \
-      | xargs -n1 basename
-  )
+  fs_migrations=$(migration_list)
 
   db_migrations=$(
-    psql -Atqc "SELECT name FROM hectic.migration ORDER BY name ASC" \
+    psql "$DB_URL" --no-align --tuples-only --quiet \
+      --command "SELECT name FROM hectic.migration ORDER BY name ASC" \
       | awk NF
   )
+
+  db_mig_count=$(printf '%s' "$db_migrations" | wc)
+  log debug "$db_mig_count"
 
   # Check if the DB migrations form a proper prefix of disk migrations
   # (meaning all DB-applied migration filenames should appear in the same order at the start).
@@ -295,7 +314,7 @@ migrate() {
 
 form_psql_args() {
   psql_args="-d $DB_URL -v ON_ERROR_STOP=1"
-  for var in $VARIABLE_LIST; do
+  for var in ${VARIABLE_LIST:-}; do
     psql_args="$psql_args -v $var"
   done
 }
@@ -307,14 +326,20 @@ migrate_inner() {
 
     psql_args="$(form_psql_args)"
 
-    escaped_name=$(printf "%s" "$fs_migration" | sed "s/'/''/g")
-    escaped_path=$(printf "%s/%s/up.sql" "$MIGRATION_DIR" "$fs_migration" | sed "s/'/''/g")
+    direction=1
+    mig_direction=$([ "$direction" -gt 0 ] && printf 'up.sql' || printf 'down.sql')
+
+    escaped_name=$(printf '%s' "$fs_migration" | sed "s/'/''/g")
+    mig_path=$(printf '%s/%s/%s' "$MIGRATION_DIR" "$fs_migration" "$mig_direction")
+    escaped_path=$(printf '%s' "$mig_path" | sed "s/'/''/g")
+
+    log trace "mig name: $escaped_name; mig path: $escaped_path"
 
     # shellcheck disable=SC2086
     if ! psql $psql_args <<SQL
 BEGIN;
 \i '$escaped_path';
-INSERT INTO hectic.migration (name) VALUES ('$escaped_name');
+INSERT INTO hectic.migration (name, hash) VALUES ('$escaped_name', '$(sha256sum "$mig_path")');
 COMMIT;
 SQL
     then
@@ -372,7 +397,39 @@ fetch() {
 }
 
 list() {
-  ls "$MIGRATION_DIR" -1
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --raw|-r)
+        RAW=1
+        shift
+      ;;
+      --*|-*)
+        log error "init argument $1 does not exists"
+        exit 9
+      ;;
+      *)
+        log error "init subcommand $1 does not exists"
+        exit 9
+      ;;
+    esac
+  done
+
+  [ "${RAW+x}" ] && {
+    migration_list
+    exit
+  }
+
+  migration_list | while read -r name; do
+    dir="./${MIGRATION_DIR}/${name}"
+    up="$dir/up.sql"
+    down="$dir/down.sql"
+  
+    if [ ! -f "$up" ] || [ ! -f "$down" ]; then
+      echo "$name: missing $( [ ! -f "$up" ] && echo up.sql ) $( [ ! -f "$down" ] && echo down.sql )"
+    else
+      echo "$name"
+    fi
+  done
 }
 
 generate_word() {
