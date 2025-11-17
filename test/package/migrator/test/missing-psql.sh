@@ -2,6 +2,8 @@
 
 HECTIC_NAMESPACE=test-missing-psql
 
+log notice "test case: ${WHITE}error: run migrator without postgresql tools installed"
+
 # remove psql from $PATH
 dir=$(dirname -- "$(command -v psql)")
 PATH=$(printf '%s' "$PATH" | awk -v RS=: -v ORS=: -v d="$dir" '$0!=d{print}')
@@ -18,8 +20,10 @@ set -e
 
 log debug "migrator error code: $migrator_error_code"
 
-if [ "$migrator_error_code" -eq 127 ]; then
-  log notice "test passed"
-else
-  log error "test failed"
+if [ "$migrator_error_code" -eq 0 ]; then
+  log error "test failed: ${WHITE}no error handled"
+elif [ "$migrator_error_code" -ne 127 ]; then
+  log error "test failed: ${WHITE}unexpected error code"
 fi
+
+log notice "test passed"

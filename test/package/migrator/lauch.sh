@@ -62,7 +62,10 @@ export DATABASE_URL
 log info "run test ${WHITE}${test_name}${NC}"
 
 # run test
-. "${test}/run.sh"
+mkdir './test'
+cp -r "$test"/* './test/'
+cd './test'
+. './run.sh'
 
 HECTIC_NAMESPACE=test-laucher
 
