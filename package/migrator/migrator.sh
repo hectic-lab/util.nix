@@ -1,5 +1,15 @@
 #!/bin/dash
 
+# error codes
+#   1   - generic error
+#   2   - ambiguous, when you try to use something that cannot be used in same time
+#   3   - missing required argument / variable
+#   4   -
+#   5   - provided table that not exists
+#   9   - argument or command not found
+#   13  - program bug / unexpected system / database incompatibles
+#   127 - command not found (dependency)
+
 set -eu
 
 if ! command -v psql >/dev/null; then
@@ -20,12 +30,13 @@ sha256sum() {
 }
 
 INHERITS_LIST=
+VARIABLE_LIST=
 
 while [ $# -gt 0 ]; do
   log debug "$1"
   case $1 in
     migrate|create|fetch|list|init)
-      [ "${SUBCOMMAND+x}" ] && { printf 'ambiguous subcommand, decide %s or %s\n' "$SUBCOMMAND" "$1"; exit 1; }
+      [ "${SUBCOMMAND+x}" ] && { printf 'ambiguous subcommand, decide %s or %s\n' "$SUBCOMMAND" "$1"; exit 2; }
       SUBCOMMAND=$1
       shift
     ;;
@@ -56,40 +67,66 @@ init() {
         DB_URL="$2"
         shift 2
       ;;
+      --set|-v)
+	VARIABLE_LIST="${VARIABLE_LIST:+$VARIABLE_LIST }$2"
+        shift 2
+      ;;
       --*|-*)
         printf 'init argument %s does not exists' "$1"
-        exit 1
+        exit 9
       ;;
       *)
         printf 'init command %s does not exists' "$1"
-        exit 1
+        exit 9
       ;;
     esac
   done
 
-  error_handler_no_db_url
-
   [ "${INIT_DRY_RUN+x}" ] && { printf '%s\n' "$(init_sql)"; exit; }
+
+  error_handler_no_db_url
 
   psql_args="$(form_psql_args)"
 
+  oldIFS="$IFS"
+  IFS=','
+  check_inherits=
+  for table in $INHERITS_LIST; do
+    check_inherits="$(printf '%s\nSELECT 1 FROM %s LIMIT 1;' "$check_inherits" "$table")"
+  done
+  IFS="$oldIFS"
+
+  check_inherits=$(printf '%s\n' \
+    'BEGIN;' \
+    "$check_inherits" \
+    'COMMIT;')
+
   # shellcheck disable=SC2086
-  if ! printf '%s' "$(init_sql)" | psql $psql_args; then
-    log error "Migration failed: ${WHITE}$fs_migration${NC}"
-    return 3
+  if ! psql $psql_args -c "$check_inherits"; then
+    log error "init failed: ${WHITE}one of inherits table does not exists: ${CYAN}$INHERITS_LIST"
+    exit 5
+  fi
+
+  # shellcheck disable=SC2086
+  if ! psql $psql_args -c "$(init_sql)"; then
+    log error "init failed"
+    exit 13
   fi
 }
 
 # error_handler_no_db_url()
 error_handler_no_db_url() {
-  [ "${DB_URL+x}" ] || { log error "no ${WHITE}DB_URL${NC} or ${WHITE}--db-url${NC} specified"; exit 1; }
+  [ "${DB_URL+x}" ] || { log error "no ${WHITE}DB_URL${NC} or ${WHITE}--db-url${NC} specified"; exit 3; }
 }
 
 init_sql() {
   log debug "inherits: ${WHITE}${INHERITS_LIST}${NC}"
-  local create_table
-  create_table="$(printf '%s\n' \
+  local sql
+  sql="$(printf '%s\n' \
     "BEGIN;" \
+    '' \
+    'CREATE SCHEMA IF NOT EXISTS hectic;' \
+    '' \
     "CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{15}-.*$');" \
     '' \
     "CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');" \
@@ -101,20 +138,22 @@ init_sql() {
     'END;' \
     '$$ LANGUAGE plpgsql;' \
     '' \
-    'CREATE TRIGGER hectic.t_sha256_lower' \
-    'BEFORE INSERT OR UPDATE ON hectic.migration' \
-    'FOR EACH ROW EXECUTE FUNCTION sha256_lower();' \
-    '' \
     'CREATE SCHEMA IF NOT EXISTS hectic;' \
     'CREATE TABLE IF NOT EXISTS hectic.migration (' \
     '    id          SERIAL                 PRIMARY KEY,' \
     '    name        hectic.migration_name  UNIQUE NOT NULL,'\
     '    hash        hectic.sha256          UNIQUE NOT NULL,'\
     '    applied_at  TIMESTAMPTZ            NOT NULL DEFAULT NOW()' \
-    ')' \
-    'COMMIT;')"
+    ')')"
 
-  printf '%s INHERITS(%s)' "$create_table" "$INHERITS_LIST"
+  sql="$(printf '%s INHERITS(%s);\n' "$sql" "$INHERITS_LIST")"
+
+  printf '%s\n' \
+    "$sql" \
+    'CREATE TRIGGER hectic_t_sha256_lower' \
+    'BEFORE INSERT OR UPDATE ON hectic.migration' \
+    'FOR EACH ROW EXECUTE FUNCTION hectic.sha256_lower();' \
+    'COMMIT;'
 }
 
 [ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
@@ -187,6 +226,7 @@ migrate_to() {
 
 migrate() {
   local fs_migrations db_migrations db_migration fs_migration psql_args var #target_migration
+
   while [ $# -gt 0 ]; do
     case $1 in
       up|down|to)
@@ -278,8 +318,8 @@ INSERT INTO hectic.migration (name) VALUES ('$escaped_name');
 COMMIT;
 SQL
     then
-      log error "Migration failed: ${WHITE}$fs_migration${NC}"
-      return 3
+      log error "migration failed: ${WHITE}$fs_migration${NC}"
+      exit 4
     fi
   done
 }
@@ -296,16 +336,16 @@ create() {
       ;;
       --*|-*)
         log error "create argument $1 does not exists"
-        exit 1
+        exit 9
       ;;
       *)
         log error "create subcommand $1 does not exists"
-        exit 1
+        exit 9
       ;;
     esac
   done
 
-  mkdir -p "$MIGRATION_DIR" 2>/dev/null
+  [ -d "$MIGRATION_DIR" ] || mkdir -p "$MIGRATION_DIR"
 
   time_stamp="$(date '+%Y%m%d%H%M%S')"
   name="${MIGRATION_NAME:-$(generate_word)}"
@@ -349,8 +389,8 @@ generate_word() {
   printf '%s' "$w"
 }
 
-log debug "subcommand: $SUBCOMMAND"
-log debug "subcommand args: $REMAINING_ARS"
+log debug "subcommand: $WHITE$SUBCOMMAND"
+log debug "subcommand args: $WHITE$REMAINING_ARS"
 
 eval "set -- $REMAINING_ARS"
 "$SUBCOMMAND" "$@"
