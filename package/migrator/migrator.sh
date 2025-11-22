@@ -1,5 +1,7 @@
 #!/bin/dash
 
+#version="$(psql "$DB_URL" -c "SELECT version FROM hectic.version WHERE name = 'migrator';")"
+
 # error codes
 #   1   - generic error
 #   2   - ambiguous, when you try to use something that cannot be used in same time
@@ -31,7 +33,7 @@ sha256sum() {
 }
 
 while [ $# -gt 0 ]; do
-  log debug "$1"
+  log debug "arg: $1"
   case $1 in
     migrate|create|fetch|list|init)
       [ "${SUBCOMMAND+x}" ] && { 
@@ -124,47 +126,70 @@ error_handler_no_db_url() {
 
 init_sql() {
   local sql
-  sql="$(printf '%s\n' \
-    "BEGIN;" \
-    '' \
-    'CREATE SCHEMA IF NOT EXISTS hectic;' \
-    '' \
-    "CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{15}-.*$');" \
-    '' \
-    "CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');" \
-    '' \
-    'CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS $$' \
-    'BEGIN' \
-    '  NEW.hash = lower(NEW.hash);' \
-    '  RETURN NEW;' \
-    'END;' \
-    '$$ LANGUAGE plpgsql;' \
-    '' \
-    'CREATE TABLE IF NOT EXISTS hectic.version (' \
-    '    name          TEXT                 PRIMARY KEY,' \
-    '    version       TEXT                 NOT NULL,' \
-    '    installed_at  TIMESTAMPTZ          NOT NULL DEFAULT NOW()' \
-    ');' \
-    '' \
-    "INSERT INTO hectic.version (name, version) VALUES ('migrator', '$VERSION')" \
-    '' \
-    'CREATE TABLE IF NOT EXISTS hectic.migration (' \
-    '    id          SERIAL                 PRIMARY KEY,' \
-    '    name        hectic.migration_name  UNIQUE NOT NULL,' \
-    '    hash        hectic.sha256          UNIQUE NOT NULL,' \
-    '    applied_at  TIMESTAMPTZ            NOT NULL DEFAULT NOW()' \
-    ')')"
 
-  [ ${INHERITS_LIST+x} ] && sql="$(printf '%s INHERITS(%s)' "$sql" "$INHERITS_LIST")"
+  inherits=
+  [ ${INHERITS_LIST+x} ] && inherits="$(printf 'INHERITS(%s)' "$INHERITS_LIST")"
 
-  sql="$(printf '%s;\n' "$sql")"
+  sql="$(cat <<EOF
+BEGIN;
 
-  printf '%s\n' \
-    "$sql" \
-    'CREATE TRIGGER hectic_t_sha256_lower' \
-    'BEFORE INSERT OR UPDATE ON hectic.migration' \
-    'FOR EACH ROW EXECUTE FUNCTION hectic.sha256_lower();' \
-    'COMMIT;'
+DO \$$
+DECLARE
+  version TEXT;
+BEGIN
+  CREATE SCHEMA IF NOT EXISTS hectic;
+    
+  -- NOTE(yukkop): check version table exists
+  IF EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname = 'version'
+      AND n.nspname = 'hectic'
+      AND c.relkind = 'r'
+  ) THEN
+    SELECT hectic.version.version FROM hectic.version  WHERE name = 'migrator' INTO version;
+    IF version != '$VERSION' THEN
+      RAISE EXCEPTION 'Incampetible migrator versions: % and $VERSION', version; -- TODO(yukkop): show versions
+    END IF;
+  ELSE
+    CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{15}-.*');
+    CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');
+
+    CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn$
+    BEGIN
+      NEW.hash = lower(NEW.hash);
+      RETURN NEW;
+    END;
+    \$fn$ LANGUAGE plpgsql;
+
+    CREATE TABLE hectic.version (
+        name          TEXT                 PRIMARY KEY,
+        version       TEXT                 NOT NULL,
+        installed_at  TIMESTAMPTZ          NOT NULL DEFAULT NOW()
+    );
+
+    INSERT INTO hectic.version (name, version) VALUES ('migrator', '$VERSION');
+
+    CREATE TABLE hectic.migration (
+        id          SERIAL                 PRIMARY KEY,
+        name        hectic.migration_name  UNIQUE NOT NULL,
+        hash        hectic.sha256          UNIQUE NOT NULL,
+        applied_at  TIMESTAMPTZ            NOT NULL DEFAULT NOW()
+    )$inherits;
+
+    CREATE TRIGGER hectic_t_sha256_lower
+    BEFORE INSERT OR UPDATE ON hectic.migration
+    FOR EACH ROW EXECUTE FUNCTION hectic.sha256_lower();
+  END IF;
+END;
+\$$;
+
+COMMIT;
+EOF
+  )"
+
+  printf '%s' "$sql"
 }
 
 [ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
@@ -269,8 +294,6 @@ migrate() {
     esac
   done
 
-  error_handler_no_db_url
-
   [ "${FORCE+x}" ] && {
     log error "migrate --force not implemented"
     exit 1
@@ -286,8 +309,9 @@ migrate() {
       | awk NF
   )
 
-  db_mig_count=$(printf '%s' "$db_migrations" | wc)
-  log debug "$db_mig_count"
+  log debug "db mig: $db_migrations"
+  db_mig_count=$(printf '%s' "$db_migrations" | wc -l)
+  log debug "mig count: $db_mig_count"
 
   # Check if the DB migrations form a proper prefix of disk migrations
   # (meaning all DB-applied migration filenames should appear in the same order at the start).
@@ -307,7 +331,11 @@ migrate() {
   done
 
   eval "set -- $REMAINING_ARS"
-  #target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
+  target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
+
+  log debug "target_migration: ${target_migration}"
+
+  exit 1
 
   
 }
