@@ -1,5 +1,9 @@
 #!/bin/dash
 
+# shellcheck disable=SC1091
+. "${WORKSPACE:?}/src/plex/plex.sh"
+init_plex jq
+
 # Syntax scheme:
 #
 # hemar
@@ -162,8 +166,8 @@
 #
 # AbstarctSyntaxTree (ATS) = {
 #    e = [Element]  # elements array
-#}
-AST=''
+# }
+#AST=''
 
 # 0 - text
 # 1 - deside tag type
@@ -217,6 +221,8 @@ find_open_pattern() {
 
 parse() {
   char="$1"
+
+  data_pointer=
 
   case "$STAGE" in
     0)

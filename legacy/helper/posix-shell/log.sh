@@ -115,7 +115,7 @@ log_allowed() {
 # log(level, text...)
 log() {
     delimetr=${DELIMETR:-' '};
-    level="${1:?}"; shift
+    level="${1:?}"
     log_allowed "$level" || return 0
 
     case "$level" in
@@ -125,8 +125,13 @@ log() {
         notice)  color="$CYAN"     ;;
         warn)    color="$YELLOW"   ;;
         error)   color="$RED"      ;;
-        *)       color="$WHITE"    ;;
+        *)       
+	  color="$WHITE"
+	  NO_SHIFT=1
+	;;
     esac
+
+    [ ${NO_SHIFT+x} ] || shift
 
 
 

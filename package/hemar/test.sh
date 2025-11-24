@@ -1,6 +1,6 @@
 #!/bin/dash
 
-WORKSPACE="$(cd "$(dirname "$0")" && pwd)"
-
-#. "${WORKSPACE:?}/test/plex.sh"
-. "${WORKSPACE:?}/test/plex/time.sh"
+# shellcheck disable=SC1091
+#. "${WORKSPACE:?}/test/plex/jq_backend_time.sh"
+#. "${WORKSPACE:?}/test/plex/env_backend_time.sh"
+. "${WORKSPACE:?}/test/plex/jq_backend.sh"
