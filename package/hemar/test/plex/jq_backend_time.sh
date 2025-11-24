@@ -1,8 +1,8 @@
 #!/bin/dash
 
-. "${WORKSPACE:?}/plex.sh"
-
-MY_STRUCT=''
+# shellcheck disable=SC1091
+. "${WORKSPACE:?}/src/plex/plex.sh"
+init_plex yq-go
 
 math() {
   awk "BEGIN {print $1}"
@@ -16,8 +16,11 @@ elapsed() {
   decrease=${4:-0}
   avg=$(math "$time/$count-$decrease")
 
-  printf '\n[%s]\nelapsed %s seconds\n%s per second\n' \
-    "$task" "$avg" "$(math "1/$avg")" >&2
+  if [ "$time" -eq 0 ]; then
+    log info "\n[$WHITE${task}$NC]\ninstant\n"
+  else
+    log info "\n[$WHITE${task}$NC]\nelapsed $WHITE${avg}$NC seconds\n$WHITE$(math "1/$avg")$NC per second\n"
+  fi
   printf '%s' "$avg"
 }
 
@@ -40,11 +43,14 @@ randomword() {
 }
 
 WORDS=$(randomword $((8 * UNIQ_8_WORDS_COUNT)))
+WORDS=0123456789abcdefg
 
 new_word() {
   local prefix
-  prefix=${WORDS%"${WORDS#"$__WORD_OFFSET_PATERN"}"}
-  WORDS=${WORDS#"$__WORD_OFFSET_PATERN"}$prefix
+  # shellcheck disable=SC2295
+  prefix=${WORDS%"${WORDS#${__WORD_OFFSET_PATERN:?}}"}
+  # shellcheck disable=SC2295
+  WORDS=${WORDS#${__WORD_OFFSET_PATERN:?}}$prefix
   printf '%s' "$prefix"
 }
 
@@ -65,7 +71,16 @@ bench_set() {
         d=$((d + 1))
       done
     fi
+    set +e
     plex_set 'MY_STRUCT' "$key" "$i"
+    error_code=$?
+    log warning "error_code: $error_code"
+    set -e
+    if [ $error_code != 0 ]; then
+	log error "key: $WHITE$key$NC, i: $WHITE$i$NC, struct: $WHITE$(jq . "$PLEX_TEMP/MY_STRUCT")$NC"
+	exit 1
+    fi
+
     i=$((i + 1))
   done
   end=$(date +%s)
@@ -76,7 +91,7 @@ DEFAULT_TRIES=1000
 ACCURATE_TRIES=10000
 SUPPER_ACCURATE_TRIES=100000
 
-WORD_CREATE_ACCURACY="$ACCURATE_TRIES"
+WORD_CREATE_ACCURACY="$SUPPER_ACCURATE_TRIES"
 BENCH_ACCURACY="$DEFAULT_TRIES"
 
 count="$WORD_CREATE_ACCURACY"
@@ -88,11 +103,15 @@ while [ "$i" -lt "${count:?}" ]; do
   i=$((i + 1))
 done
 end=$(date +%s)
-wordtime=$(elapsed 'Word creation' "$((end - start))" "$count")
+time=$((end - start))
+log debug "word creation time: $time"
+wordtime=$(elapsed 'Word creation' "$time" "$count")
 
 bench_set 'Set element with depth 1 length 8' 1 "$BENCH_ACCURACY" "$wordtime"
 bench_set 'Set element with depth 2 length 8' 2 "$BENCH_ACCURACY" "$wordtime"
 bench_set 'Set element with depth 3 length 8' 3 "$BENCH_ACCURACY" "$wordtime"
+
+log notice -
 
 count="$WORD_CREATE_ACCURACY"
 set_word_length 2
@@ -108,4 +127,3 @@ wordtime=$(elapsed 'Word creation' "$((end - start))" "$count")
 bench_set 'Set element with depth 1 length 2' 1 "$BENCH_ACCURACY" "$wordtime"
 bench_set 'Set element with depth 2 length 2' 2 "$BENCH_ACCURACY" "$wordtime"
 bench_set 'Set element with depth 3 length 2' 3 "$BENCH_ACCURACY" "$wordtime"
-

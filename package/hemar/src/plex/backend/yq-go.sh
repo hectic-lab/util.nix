@@ -1,0 +1,40 @@
+#!/bin/dash
+
+PLEX_TEMP="$(mktemp -d)"
+trap 'rm -rf $PLEX_TEMP' EXIT
+
+#plex_set(name, key, value)
+plex_set() {
+    local plexfile key val
+    plexfile="${PLEX_TEMP:?}/${1:?}" key="${2:?}" val="${3:?}"
+
+    touch "$plexfile"
+
+    yq -i ".$key += \"$val\"" "$plexfile" 
+}
+
+#plex_child(plexfile, key)
+plex_child() {
+    plex_fetch "${1:?}" "${2:?}"
+}
+
+#plex_val(plexfile, key)
+plex_val() {
+    plex_fetch "${1:?}" "${2:?}"
+}
+
+#plex_val(plexfile, key)
+plex_fetch() {
+    local plexfile key
+    plexfile="${PLEX_TEMP:?}/${1:?}" key="${2:?}"
+
+    yq -i ".$key" "$plexfile" 
+}
+
+#plex_push(name, prefix, val)
+plex_push() {
+  local plexfile prefix val
+  plexfile="${PLEX_TEMP:?}/${1:?}" prefix="${2:?}" val="${3:?}"
+
+  yq -i ".$prefix += [\"$val\"]" "$plexfile" 
+}

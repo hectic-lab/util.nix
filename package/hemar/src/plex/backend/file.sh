@@ -2,29 +2,12 @@
 
 PLEX_TEMP="$(mktemp -d)"
 
+#plex_set(name, key, value)
 plex_set() {
     local plexfile key val regex base esc_key esc
     plexfile="${PLEX_TEMP:?}${1:?}" key="${2:?}" val="${3:?}"
 
-    # construct regex for ancestors
-    regex="^$key="
-
-    base=$key
-    while expr "$base" : '.*\.' >/dev/null; do
-        base=$(printf '%s\n' "$base" | sed 's/\.[^.]*$//')
-        esc=$(printf '%s\n' "$base" | sed 's/\./\\./g')
-        regex="$regex|^$esc="
-    done
-
-    # add descendants
-    esc_key="$(printf '%s\n' "$key" | sed 's/\./\\./g')"
-    regex="$regex|^${esc_key}\."
-
-    # remove old
-    grep -v -E "$regex" "$plexfile" > "$plexfile.tmp" && mv "$plexfile.tmp" "$plexfile"
-
-    # add new
-    printf '%s=%s\n' "$key" "$val" >> "$plexfile"
+    find PLEX_
 }
 
 plex_child() {
