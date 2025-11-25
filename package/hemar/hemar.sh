@@ -29,6 +29,7 @@ log notice "running"
 #   '{[' ws include-header ws ']}'
 #   '{[' ws "end"          ws ']}'
 #   '{[' ws function       ws ']}'
+#   '{[' ws '{['           ws ']}'
 # 
 # # loop tag
 # loop-statemant
@@ -96,6 +97,7 @@ log notice "running"
 #   'r'
 #   't'
 #   'u' hex hex hex hex
+#   ws
 # 
 # hex
 #   digit
@@ -166,6 +168,7 @@ log notice "running"
 #    e = [Element]  # elements array
 # }
 AST=$(mktemp)
+AST_key='.'
 trap 'rm -f "$AST"' EXIT INT HUP
 
 yq -o j -i '.' "$AST"
@@ -254,11 +257,10 @@ json_escape() {
 
 # finds close pattern and store the char to the stage buffers separating by spaces
 find_close_pattern() {
-  local char="${1:?}"
+  local buf char="${1:?}"
 
   regular_char() {
     [ ${TAG_ws_started+x} ] && { 
-	log debug 'b?'
 	unset TAG_ws_started
         if [ "${TAG_first_ws_handled+x}" ]; then
 	  buf_next
@@ -274,6 +276,8 @@ find_close_pattern() {
   elif [ "${TAG_close_tag_flag+x}" ]; then
     unset TAG_close_tag_flag
     if [ "$char" = '}' ]; then
+
+      log debug "cur buf: $WHITE$(cat "$STAGE_BUFFER_1")"
       # removes first and last white spaces from the buffer
       sed -i 's/[[:space:]]$//g' "$CURRENT_STAGE_BUFFER"
       sed -i 's/^[[:space:]]//g' "$CURRENT_STAGE_BUFFER"
@@ -284,30 +288,50 @@ find_close_pattern() {
     fi
   else
     # shellcheck disable=SC1003
-    if [ "$char" = '\' ]; then
-      TAG_escape_flag=1
-    fi
-    if [ "$char" = '"' ]; then
-      if [ ${TAG_escape_flag+x} ]; then
-        unset TAG_escape_flag
-      else
-	if [ ${TAG_double_quote_flag+x} ]; then
-	  unset TAG_double_quote_flag
+    case "$char" in
+      '"')
+	if [ "${TAG_escape_flag+x}" ]; then
+          unset TAG_escape_flag
 	else
-          TAG_double_quote_flag=1
+          if [ ${TAG_double_quote_flag+x} ]; then
+            unset TAG_double_quote_flag
+            return 1
+          else 
+            TAG_double_quote_flag=1
+            return 1
+          fi
 	fi
-      fi
-    fi
+      ;;
+      '\')
+        if [ "${TAG_escape_flag+x}" ]; then
+          unset TAG_escape_flag
+        else
+          TAG_escape_flag=1
+          return 1
+        fi
+      ;;
+      '.'|'/'|b|f|n|r|t)
+      ;;
+      ']')
+      ;;
+      u)
+      ;;
+      *)
+        if [ "${TAG_escape_flag+x}" ]; then
+          if is_ws "$char"; then
+	    unset TAG_escape_flag
+	  else 
+	    log error "unexpected char \`$char\` after escape symbol"
+	    exit 1
+	  fi
+        elif is_ws "$char" && ! [ "${TAG_double_quote_flag+x}" ]; then 
+          TAG_ws_started=1
+	  return 1
+        fi
+      ;;
+    esac
 
-    if is_ws "$char"; then
-      if [ "${TAG_double_quote_flag+x}" ]; then 
-        regular_char "$char"
-      else
-	TAG_ws_started=1
-      fi
-    else
-      regular_char "$char"
-    fi
+    regular_char "$char"
   fi
 
   return 1
@@ -321,8 +345,6 @@ find_open_pattern() {
   elif [ "${open_tag_flag+x}" ]; then
     unset open_tag_flag
     if [ "$char" = '[' ]; then
-      # removes last char from buffer ({) is part of open pattern
-      truncate -s -1 "$CURRENT_STAGE_BUFFER"
       return 0
     else
       printf '{%s' "$char" >> "$CURRENT_STAGE_BUFFER"
@@ -343,7 +365,7 @@ parse() {
       if find_open_pattern "$char"; then
 	log debug "open pattern founded"
 	buf=$(cat "$CURRENT_STAGE_BUFFER")
-        yq -o j -i ". += [{
+        yq -o j -i "$AST_key += [{
 	  \"type\": \"text\",
 	  \"value\": \"$(json_escape "$buf")\"
         }]" "$AST"
@@ -354,18 +376,30 @@ parse() {
     ;;
     1)
       if find_close_pattern "$char"; then
-	case "$STAGE_BUFFER_1" in
+	case "$(cat "$STAGE_BUFFER_1")" in
 	  compute)
+	    log error 'compute unimplemented'
 	  ;;
 	  include)
+	    log error 'include unimplemented'
 	  ;;
 	  for)
+	    path=$STAGE_BUFFER_2
+
+	    log error 'for unimplemented'
 	  ;;
           end)
+	    log error 'end unimplemented'
+	  ;;
+          '{[')
+            yq -o j -i "$AST_key += [{
+	      \"type\": \"text\",
+	      \"value\": \"{[\"
+            }]" "$AST"
 	  ;;
           *)         # interpolation tag
 	    buf=$(cat "$STAGE_BUFFER_1")
-            yq -o j -i ". += [{
+            yq -o j -i "$AST_key += [{
 	      \"type\": \"interpolation\",
 	      \"path\": \"$(json_escape "$buf")\"
             }]" "$AST"
@@ -433,7 +467,7 @@ if [ "$STAGE" -eq 0 ]; then
   fi
     
   buf=$(cat "$STAGE_BUFFER_1")
-  yq -o j -i ". += [{
+  yq -o j -i "$AST_key += [{
     \"type\": \"text\",
     \"value\": \"$(json_escape "$buf")\"
   }]" "$AST"

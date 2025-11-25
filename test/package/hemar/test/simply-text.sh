@@ -1,6 +1,6 @@
-answer="$(echo 'some text' | hemar -c)"
+answer="$(printf '%s' 'some text' | hemar -c)"
 
-expected="$(printf '[
+expected="$(printf '%s' '[
   {
     "type":  "text",
     "value": "some text"
@@ -9,9 +9,9 @@ expected="$(printf '[
 
 json_diff "$answer" "$expected"
 
-answer="$(echo 'some [] {} text' | hemar -c)"
+answer="$(printf '%s' 'some [] {} text' | hemar -c)"
 
-expected="$(printf '[
+expected="$(printf '%s' '[
   {
     "type":  "text",
     "value": "some [] {} text"
@@ -20,9 +20,9 @@ expected="$(printf '[
 
 json_diff "$answer" "$expected"
 
-answer="$(echo 'some {' | hemar -c)"
+answer="$(printf '%s' 'some {' | hemar -c)"
 
-expected="$(printf '[
+expected="$(printf '%s' '[
   {
     "type":  "text",
     "value": "some {"
