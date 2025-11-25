@@ -1,8 +1,6 @@
 #!/bin/dash
 
-# shellcheck disable=SC1091
-. "${WORKSPACE:?}/src/plex/plex.sh"
-init_plex jq
+log notice "running"
 
 # Syntax scheme:
 #
@@ -118,10 +116,10 @@ init_plex jq
 # # paterns
 # ws
 #   ""
-#   '0020' ws
-#   '000A' ws
-#   '000D' ws
-#   '0009' ws
+#   '\x20' ws
+#   '\x0a' ws
+#   '\x0d' ws
+#   '\x09' ws
 # 
 # nopatern
 #   '{' '0020' . '10FFFF' - '['
@@ -167,7 +165,12 @@ init_plex jq
 # AbstarctSyntaxTree (ATS) = {
 #    e = [Element]  # elements array
 # }
-#AST=''
+AST=$(mktemp)
+trap 'rm -f "$AST"' EXIT INT HUP
+
+yq -o j -i '.' "$AST"
+
+log debug "AST path: ${WHITE}${AST}"
 
 # 0 - text
 # 1 - deside tag type
@@ -176,44 +179,156 @@ init_plex jq
 # 4 - include
 # 5 - compute
 STAGE=0
-STAGE_BUFFER="$(mktemp)"
-open_tag_flag=0
 
-# finds close pattern and store the char to the STAGE_BUFFER
-find_close_pattern() {
-  char="${1:?}"
-  if   [ "${close_tag_flag:?}" -eq 0 ] && [ "$char" = ']' ]; then
-    close_tag_flag=1
-  elif [ "${close_tag_flag:?}" -eq 1 ] && [ "$char" = '}' ]; then
-    close_tag_flag=0
+# is_ws(char) -> bool
+is_ws() {
+  ord=$(printf '%d' "'$1")
+  case $ord in
+    32|10|13|9) # <-> \x20 | \x0a | \x0d | \x09 <-> space | \n | \r | \t 
+      return 0
+    ;;            
+  esac            
+  return 1
+}
 
-    # removes first and last white spaces from the buffer
-    sed -i 's/[[:space:]]$//g' "$STAGE_BUFFER"
-    sed -i 's/^[[:space:]]//g' "$STAGE_BUFFER"
-    
-    # removes last char from buffer (]) is part of close pattern
-    truncate -s -1 "$STAGE_BUFFER"
-    return 0
+# remove_last_double_quote(text) -> text
+remove_last_double_quote() {
+  printf '%s' "$1" | sed 's/\(.*\)"\(.*\)/\1\2/'
+}
+
+#buf_read(buf?) -> text
+buf_read() {
+  local buf
+  if [ ${1+x} ]; then
+    buf=${1}
   else
-    printf '%s' "$char" >> "$STAGE_BUFFER"
+    buf=${CURRENT_STAGE_BUFFER}
+  fi
+
+  cat "$buf"
+}
+
+#buf_next()
+buf_next() {
+  case "$CURRENT_STAGE_BUFFER" in
+    "$STAGE_BUFFER_1")
+      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_2"
+    ;;
+    "$STAGE_BUFFER_2")
+      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_3"
+    ;;
+    "$STAGE_BUFFER_3")
+      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_4"
+    ;;
+    "$STAGE_BUFFER_4")
+      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_1"
+    ;;
+  esac
+}
+
+buf_reset() {
+  : > "$STAGE_BUFFER_1"
+  : > "$STAGE_BUFFER_2"
+  : > "$STAGE_BUFFER_3"
+  : > "$STAGE_BUFFER_4"
+
+  CURRENT_STAGE_BUFFER="$STAGE_BUFFER_1"
+}
+
+STAGE_BUFFER_1="$(mktemp)"
+STAGE_BUFFER_2="$(mktemp)"
+STAGE_BUFFER_3="$(mktemp)"
+STAGE_BUFFER_4="$(mktemp)"
+CURRENT_STAGE_BUFFER=$STAGE_BUFFER_1
+trap 'rm -f "$STAGE_BUFFER_1" "$STAGE_BUFFER_2" "$STAGE_BUFFER_3" "$STAGE_BUFFER_4"' EXIT INT HUP
+log debug "stage buffer 1: ${WHITE}$STAGE_BUFFER_1"
+log debug "stage buffer 2: ${WHITE}$STAGE_BUFFER_2"
+log debug "stage buffer 3: ${WHITE}$STAGE_BUFFER_3"
+log debug "stage buffer 4: ${WHITE}$STAGE_BUFFER_4"
+
+# json_escape(value) -> str
+json_escape() {
+  # TODO: escape functionality
+  printf '%s' "${1}" | sed 's/"/\\"/g' 
+}
+
+# finds close pattern and store the char to the stage buffers separating by spaces
+find_close_pattern() {
+  local char="${1:?}"
+
+  regular_char() {
+    [ ${TAG_ws_started+x} ] && { 
+	log debug 'b?'
+	unset TAG_ws_started
+        if [ "${TAG_first_ws_handled+x}" ]; then
+	  buf_next
+	else
+	  TAG_first_ws_handled=1
+	fi
+    }
+    printf '%s' "$1" >> "$CURRENT_STAGE_BUFFER"
+  }
+
+  if   [ ! "${TAG_close_tag_flag+x}" ] && [ "$char" = ']' ]; then
+    TAG_close_tag_flag=1
+  elif [ "${TAG_close_tag_flag+x}" ]; then
+    unset TAG_close_tag_flag
+    if [ "$char" = '}' ]; then
+      # removes first and last white spaces from the buffer
+      sed -i 's/[[:space:]]$//g' "$CURRENT_STAGE_BUFFER"
+      sed -i 's/^[[:space:]]//g' "$CURRENT_STAGE_BUFFER"
+
+      return 0
+    else
+      regular_char ']'"$char"
+    fi
+  else
+    # shellcheck disable=SC1003
+    if [ "$char" = '\' ]; then
+      TAG_escape_flag=1
+    fi
+    if [ "$char" = '"' ]; then
+      if [ ${TAG_escape_flag+x} ]; then
+        unset TAG_escape_flag
+      else
+	if [ ${TAG_double_quote_flag+x} ]; then
+	  unset TAG_double_quote_flag
+	else
+          TAG_double_quote_flag=1
+	fi
+      fi
+    fi
+
+    if is_ws "$char"; then
+      if [ "${TAG_double_quote_flag+x}" ]; then 
+        regular_char "$char"
+      else
+	TAG_ws_started=1
+      fi
+    else
+      regular_char "$char"
+    fi
   fi
 
   return 1
 }
 
-# finds open pattern and stores the char to the STAGE_BUFFER
+# finds open pattern and stores the char to the STAGE_BUFFER_1
 find_open_pattern() {
-  char="${1:?}"
-  if   [ "${open_tag_flag:?}" -eq 0 ] && [ "$char" = '{' ]; then
+  local char="${1:?}"
+  if   [ ! "${open_tag_flag+x}" ] && [ "$char" = '{' ]; then
     open_tag_flag=1
-  elif [ "${open_tag_flag:?}" -eq 1 ] && [ "$char" = '[' ]; then
-    open_tag_flag=0
-
-    # removes last char from buffer ({) is part of open pattern
-    truncate -s -1 "$STAGE_BUFFER"
-    return 0
+  elif [ "${open_tag_flag+x}" ]; then
+    unset open_tag_flag
+    if [ "$char" = '[' ]; then
+      # removes last char from buffer ({) is part of open pattern
+      truncate -s -1 "$CURRENT_STAGE_BUFFER"
+      return 0
+    else
+      printf '{%s' "$char" >> "$CURRENT_STAGE_BUFFER"
+    fi
   else
-    printf '%s' "$char" >> "$STAGE_BUFFER"
+    printf '%s' "$char" >> "$CURRENT_STAGE_BUFFER"
   fi
 
   return 1
@@ -222,39 +337,86 @@ find_open_pattern() {
 parse() {
   char="$1"
 
-  data_pointer=
-
   case "$STAGE" in
+    # Text Stage - save char in STAGE_BUFFER_1 until next tag opens
     0)
       if find_open_pattern "$char"; then
-	plex_set "$data_pointer"''
+	log debug "open pattern founded"
+	buf=$(cat "$CURRENT_STAGE_BUFFER")
+        yq -o j -i ". += [{
+	  \"type\": \"text\",
+	  \"value\": \"$(json_escape "$buf")\"
+        }]" "$AST"
+
+        buf_reset
         STAGE=1
       fi
-      ;;
+    ;;
     1)
       if find_close_pattern "$char"; then
-        STAGE=0
-      fi
-      ;;
-    2)
+	case "$STAGE_BUFFER_1" in
+	  compute)
+	  ;;
+	  include)
+	  ;;
+	  for)
+	  ;;
+          end)
+	  ;;
+          *)         # interpolation tag
+	    buf=$(cat "$STAGE_BUFFER_1")
+            yq -o j -i ". += [{
+	      \"type\": \"interpolation\",
+	      \"path\": \"$(json_escape "$buf")\"
+            }]" "$AST"
+	  ;;
+	esac
 
-      ;;
+        # zero-initialization
+        unset TAG_ws_started TAG_double_quote_flag TAG_escape_flag TAG_first_ws_handled TAG_close_tag_flag
+
+	buf_reset
+	STAGE=1
+      fi
+    ;;
+    2)
+        
+    ;;
     3)
     
-      ;;
+    ;;
     4)
 
-      ;;
+    ;;
     *)
-
-      ;;
+      log error "error: ${WHITE}impossible stage"
+      exit 13
+    ;;
   esac
 }
+
+while [ $# -gt 0 ]; do
+  case $1 in
+    -c|--compact-output)
+      OUTPUT_ARGS="${OUTPUT_ARGS+$OUTPUT_ARGS }-I=0"
+      shift
+    ;;
+    --*|-*)
+      log error "argument $1 does not exists"
+      exit 9
+    ;;
+    *)
+      log error "subcommand $1 does not exists"
+      exit 9
+    ;;
+  esac
+done
 
 # Using dd to read one character at a time
 input=$(cat)
 i=1
 while :; do
+    #log trace "loop"
     char=$(printf '%s' "$input" | dd bs=1 skip=$((i-1)) count=1 2>/dev/null)
     [ -z "$char" ] && break
 
@@ -262,3 +424,21 @@ while :; do
 
     i=$((i+1))
 done
+
+# finish TEXT tag if file ends on it
+if [ "$STAGE" -eq 0 ]; then
+  if [ "${open_tag_flag+x}" ]; then
+    unset open_tag_flag
+    printf '{' >> "$STAGE_BUFFER_1"
+  fi
+    
+  buf=$(cat "$STAGE_BUFFER_1")
+  yq -o j -i ". += [{
+    \"type\": \"text\",
+    \"value\": \"$(json_escape "$buf")\"
+  }]" "$AST"
+fi
+
+# return the output
+# shellcheck disable=SC2086
+yq ${OUTPUT_ARGS:-} -o j "$AST"

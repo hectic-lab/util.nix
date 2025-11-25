@@ -12,6 +12,7 @@ let
     runtimeInputs = [ ];
 
     text = ''
+      # shellcheck disable=SC2034
       WORKSPACE=${./.}
       ${builtins.readFile hectic.helpers.posix-shell.log}
       ${builtins.readFile ./test.sh}
@@ -24,6 +25,7 @@ let
     runtimeInputs = [ ];
 
     text = ''
+      # shellcheck disable=SC2034
       WORKSPACE=${./.}
       ${builtins.readFile hectic.helpers.posix-shell.log}
       ${builtins.readFile ./hemar.sh}
