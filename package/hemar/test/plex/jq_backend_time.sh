@@ -74,7 +74,6 @@ bench_set() {
     set +e
     plex_set 'MY_STRUCT' "$key" "$i"
     error_code=$?
-    log warning "error_code: $error_code"
     set -e
     if [ $error_code != 0 ]; then
 	log error "key: $WHITE$key$NC, i: $WHITE$i$NC, struct: $WHITE$(jq . "$PLEX_TEMP/MY_STRUCT")$NC"
