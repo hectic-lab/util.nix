@@ -310,12 +310,6 @@ find_close_pattern() {
           return 1
         fi
       ;;
-      '.'|'/'|b|f|n|r|t)
-      ;;
-      ']')
-      ;;
-      u)
-      ;;
       *)
         if [ "${TAG_escape_flag+x}" ]; then
           if is_ws "$char"; then

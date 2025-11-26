@@ -142,7 +142,8 @@ in {
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   migrator                     = pkgs.callPackage ./migrator                          {};
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
-  hemar                        = pkgs.callPackage ./hemar                             {};
+  hemar-parser                 = pkgs.callPackage ./hemar/parser                      {};
+  hemar-grammar                = pkgs.callPackage ./hemar/grammar                     {};
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
   pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";
