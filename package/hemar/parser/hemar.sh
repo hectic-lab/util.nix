@@ -41,15 +41,15 @@ log notice "running"
 # 
 # # fucntion tag
 # function
-#   "compute" language function-body
-#   "compute" - function-body
+#   'compute' language function-body
+#   'compute' - function-body
 # 
 # language
-#   "dash"
-#   "plpgsql"
+#   'dash'
+#   'plpgsql'
 # 
 # function-body
-#   ""
+#   ''
 #   '0020' . '10FFFF', function-body
 # 
 # function-character
@@ -58,12 +58,73 @@ log notice "running"
 # 
 # # path
 # path
-#   "."
+#   '.'
 #   segmented-path
 # 
 # segmented-path
 #   segment
-#   segment "." segmented-path
+# Syntax scheme:
+#
+# hemar
+#   elements
+# 
+# elements
+#   element
+#   element ws elements
+# 
+# element
+#   tag
+#   text
+# 
+# text
+#   text-item
+#   text-item text
+# 
+# text-item
+#   '0020' . '10FFFF' - '{'
+#   nopatern
+# 
+# tag
+#   '{[' ws path           ws ']}'
+#   '{[' ws loop-statement ws ']}'
+#   '{[' ws include-header ws ']}'
+#   '{[' ws "end"          ws ']}'
+#   '{[' ws function       ws ']}'
+#   '{[' ws '{['           ws ']}'
+# 
+# # loop tag
+# loop-statemant
+#   "for" string "in" path
+# 
+# # include tag
+# include-header
+#   "include" path
+# 
+# # fucntion tag
+# function
+#   'compute' language function-body
+#   'compute' - function-body
+# 
+# language
+#   'dash'
+#   'plpgsql'
+# 
+# function-body
+#   ''
+#   '0020' . '10FFFF', function-body
+# 
+# function-character
+#   '0020' . '10FFFF' - ']'
+#   ncpatern
+# 
+# # path
+# path
+#   '.'
+#   segmented-path
+# 
+# segmented-path
+#   segment
+#   segment '.' segmented-path
 # 
 # segment
 #   string
@@ -77,17 +138,26 @@ log notice "running"
 # 
 # # types
 # string
-#   character
-#   character string
+#   unquoted-string
+#   quoted-string
+#
+# unquoted-string
+#   unquoted-character
+#   unquoted-character quoted-string
+#
+# unquoted-character
+#   '0020' . '10FFFF' - '"' - '\' - '.' - ws - ']'
+#   ']' '0020' . '10FFFF' - '"' - '\' - '.' - ws - '}'
+#
+# quoted-string
+#   unquoted-character
+#   unquoted-character string
 # 
-# character
-#   '0020' . '10FFFF' - '"' - '\' - '.' - ']'
+# quoted-character
+#   '0020' . '10FFFF' - '"' - '\'
 #   '\' escape
-#   ncpatern
 # 
 # escape
-#   '.'
-#   ']}'
 #   '"'
 #   '\'
 #   '/'
@@ -97,7 +167,6 @@ log notice "running"
 #   'r'
 #   't'
 #   'u' hex hex hex hex
-#   ws
 # 
 # hex
 #   digit
@@ -117,7 +186,7 @@ log notice "running"
 # 
 # # paterns
 # ws
-#   ""
+#   ''
 #   '\x20' ws
 #   '\x0a' ws
 #   '\x0d' ws
@@ -126,8 +195,72 @@ log notice "running"
 # nopatern
 #   '{' '0020' . '10FFFF' - '['
 # 
-# ncpatern
-#   ']' '0020' . '10FFFF' - '}'
+# segment
+#   string
+#   index
+# 
+# index
+#   '\'     digit
+#   '\'     onenine digits
+#   '\' '-' digit
+#   '\' '-' onenine digits
+# 
+# # types
+# string
+#   unquoted-string
+#   quoted-string
+#
+# unquoted-string
+#   unquoted-character
+#   unquoted-character quoted-string
+#
+# unquoted-character
+#   '0020' . '10FFFF' - '"' - '\' - '.' - ws - ']'
+#   ']' '0020' . '10FFFF' - '"' - '\' - '.' - ws - '}'
+#
+# quoted-string
+#   unquoted-character
+#   unquoted-character string
+# 
+# quoted-character
+#   '0020' . '10FFFF' - '"' - '\'
+#   '\' escape
+#   ncpatern
+# 
+# escape
+#   '"'
+#   '\'
+#   '/'
+#   'b'
+#   'f'
+#   'n'
+#   'r'
+#   't'
+#   'u' hex hex hex hex
+# 
+# hex
+#   digit
+#   'A' . 'F'
+#   'a' . 'f'
+# 
+# digits
+#   digit
+#   digit digits
+# 
+# digit
+#   '0'
+#   onenine
+# 
+# onenine
+#   '1' . '9'
+# 
+# # paterns
+# ws
+#   ''
+#   '\x20' ws
+#   '\x0a' ws
+#   '\x0d' ws
+#   '\x09' ws
 
 
 # AST Plex:
