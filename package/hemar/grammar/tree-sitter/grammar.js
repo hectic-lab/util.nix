@@ -1,5 +1,5 @@
 module.exports = grammar({
-  name: "mytempl",
+  name: "hemar",
 
   rules: {
     source_file: $ => repeat($.element),
@@ -31,7 +31,7 @@ module.exports = grammar({
     string: $ => choice(
       // no whitespace, ], \, ., "
       token(prec(-1, /[^] .\\"]+/)),
-    // " ... " with "" = escaped "
+      // " ... " with "" = escaped "
       token(prec(-1, /"([^"]|"")*"/)),
     ),
 
