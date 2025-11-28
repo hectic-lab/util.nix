@@ -112,3 +112,25 @@ segment with text
 	(element
           (text))
       (done))))
+==================
+brace
+==================
+{[ {[ ]}
+---
+(source_file
+  (element
+    (actual_bracket)))
+==================
+indexes
+==================
+{[ [1].[0].[12].[-2].[-3] ]}
+---
+(source_file
+  (element
+    (interpolation
+      (path
+        (index)
+        (index)
+        (index)
+        (index)
+        (index))))))

@@ -1,8 +1,8 @@
-(interpolation) @keyword
-(segment)       @keyword
+(interpolation)      @keyword
+(segment)            @keyword
 
-(for "for" @keyword)
-(for "in"  @keyword)
+(for "for"   @keyword)
+(for "in"    @keyword)
 (done "done" @keyword)
 
 (path)   @field

@@ -1,5 +1,10 @@
 [
   {
+    "type": "actual_bracket",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "done",
     "named": true,
     "fields": {}
@@ -12,6 +17,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "actual_bracket",
+          "named": true
+        },
         {
           "type": "interpolation",
           "named": true
@@ -47,6 +56,11 @@
     }
   },
   {
+    "type": "index",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "interpolation",
     "named": true,
     "fields": {},
@@ -69,6 +83,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "index",
+          "named": true
+        },
         {
           "type": "string",
           "named": true
@@ -122,6 +140,14 @@
   },
   {
     "type": ".",
+    "named": false
+  },
+  {
+    "type": "[",
+    "named": false
+  },
+  {
+    "type": "]",
     "named": false
   },
   {
