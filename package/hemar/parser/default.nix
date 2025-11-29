@@ -1,4 +1,4 @@
-{ dash, hectic, symlinkJoin }:
+{ dash, hectic, symlinkJoin, yq-go }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -22,7 +22,7 @@ let
   hemar = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "hemar";
-    runtimeInputs = [ ];
+    runtimeInputs = [ yq-go ];
 
     text = ''
       # shellcheck disable=SC2034

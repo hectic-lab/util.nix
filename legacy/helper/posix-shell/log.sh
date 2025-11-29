@@ -62,13 +62,13 @@ validate_log_level_spec || { printf "%b%b\n" "${BBLACK}${HECTIC_NAMESPACE}> " "$
 
 log_level_num() {
     case $1 in
-        trace)  printf %s 0 ;;
-        debug)  printf %s 1 ;;
-        info)   printf %s 2 ;;
-        notice) printf %s 3 ;;
-        warn)   printf %s 4 ;;
-        error)  printf %s 5 ;;
-        *)      printf %s 2 ;; # default info
+        trace)        printf %s 0 ;;
+        debug)        printf %s 1 ;;
+        info)         printf %s 2 ;;
+        notice)       printf %s 3 ;;
+        warn)         printf %s 4 ;;
+        error|panic)  printf %s 5 ;;
+        *)            printf %s 2 ;; # default info
     esac
 }
 
@@ -119,12 +119,13 @@ log() {
     log_allowed "$level" || return 0
 
     case "$level" in
-        trace)   color="$MAGENTA"  ;;
-        debug)   color="$BLUE"     ;;
-        info)    color="$GREEN"    ;;
-        notice)  color="$CYAN"     ;;
-        warn)    color="$YELLOW"   ;;
-        error)   color="$RED"      ;;
+        trace)         color="$MAGENTA"  ;;
+        debug)         color="$BLUE"     ;;
+        info)          color="$GREEN"    ;;
+        notice)        color="$CYAN"     ;;
+        warn)          color="$YELLOW"   ;;
+	error)         color="$RED"      ;;
+	panic)         color="$BRED"     ;;
         *)       
 	  color="$WHITE"
 	  NO_SHIFT=1
@@ -133,10 +134,19 @@ log() {
 
     [ ${NO_SHIFT+x} ] || shift
 
-
+    # shellcheck disable=SC2059
+    # shellcheck disable=SC2046
+    [ "$level" = panic ] && printf "${BBLACK}${HECTIC_NAMESPACE}> $BRED%b$NC\n" \
+      '' \
+      '' \
+      'this panic is unexpected behavior of program and/or bug' \
+      'please contact the developer' \
+      '' \
+      ''
 
     # shellcheck disable=SC1003
     fmt="$(printf "%s$delimetr" "$@" | sed 's/\\033\[0m/''\'"$color"'/g')"
     shift
-    printf "%b%b\n" "${BBLACK}${HECTIC_NAMESPACE}> " "$color$fmt$NC" >&2
+    # shellcheck disable=SC1003
+    printf "${BBLACK}${HECTIC_NAMESPACE}> %b\n" "$color$fmt$NC" >&2
 }
