@@ -2,65 +2,6 @@
 
 log notice "running"
 
-# Syntax scheme:
-#
-# hemar
-#   elements
-# 
-# elements
-#   element
-#   element ws elements
-# 
-# element
-#   tag
-#   text
-# 
-# text
-#   text-item
-#   text-item text
-# 
-# text-item
-#   '0020' . '10FFFF' - '{'
-#   nopatern
-# 
-# tag
-#   '{[' ws path           ws ']}'
-#   '{[' ws loop-statement ws ']}'
-#   '{[' ws include-header ws ']}'
-#   '{[' ws "end"          ws ']}'
-#   '{[' ws function       ws ']}'
-#   '{[' ws '{['           ws ']}'
-# 
-# # loop tag
-# loop-statemant
-#   "for" string "in" path
-# 
-# # include tag
-# include-header
-#   "include" path
-# 
-# # fucntion tag
-# function
-#   'compute' language function-body
-#   'compute' - function-body
-# 
-# language
-#   'dash'
-#   'plpgsql'
-# 
-# function-body
-#   ''
-#   '0020' . '10FFFF', function-body
-# 
-# function-character
-#   '0020' . '10FFFF' - ']'
-#   ncpatern
-# 
-# # path
-# path
-#   '.'
-#   segmented-path
-# 
 # segmented-path
 #   segment
 # Syntax scheme:
@@ -70,7 +11,7 @@ log notice "running"
 # 
 # elements
 #   element
-#   element ws elements
+#   element elements
 # 
 # element
 #   tag
@@ -86,36 +27,13 @@ log notice "running"
 # 
 # tag
 #   '{[' ws path           ws ']}'
-#   '{[' ws loop-statement ws ']}'
-#   '{[' ws include-header ws ']}'
-#   '{[' ws "end"          ws ']}'
-#   '{[' ws function       ws ']}'
+#   '{[' ws for            ws ']}'
+#   '{[' ws "done"         ws ']}'
 #   '{[' ws '{['           ws ']}'
 # 
 # # loop tag
-# loop-statemant
-#   "for" string "in" path
-# 
-# # include tag
-# include-header
-#   "include" path
-# 
-# # fucntion tag
-# function
-#   'compute' language function-body
-#   'compute' - function-body
-# 
-# language
-#   'dash'
-#   'plpgsql'
-# 
-# function-body
-#   ''
-#   '0020' . '10FFFF', function-body
-# 
-# function-character
-#   '0020' . '10FFFF' - ']'
-#   ncpatern
+# for
+#   "for" ws string ws "in" ws path
 # 
 # # path
 # path
@@ -131,10 +49,10 @@ log notice "running"
 #   index
 # 
 # index
-#   '\'     digit
-#   '\'     onenine digits
-#   '\' '-' digit
-#   '\' '-' onenine digits
+#   '['     digit           ']'
+#   '['     onenine digits  ']'
+#   '[' '-' onenine         ']'
+#   '[' '-' onenine digits  ']'
 # 
 # # types
 # string
@@ -146,32 +64,15 @@ log notice "running"
 #   unquoted-character quoted-string
 #
 # unquoted-character
-#   '0020' . '10FFFF' - '"' - '\' - '.' - ws - ']'
-#   ']' '0020' . '10FFFF' - '"' - '\' - '.' - ws - '}'
+#   '0020' . '10FFFF' - '"' - '\' - '.' - '[' - ']' - '{' - '}'
 #
 # quoted-string
 #   unquoted-character
 #   unquoted-character string
 # 
 # quoted-character
-#   '0020' . '10FFFF' - '"' - '\'
-#   '\' escape
-# 
-# escape
-#   '"'
-#   '\'
-#   '/'
-#   'b'
-#   'f'
-#   'n'
-#   'r'
-#   't'
-#   'u' hex hex hex hex
-# 
-# hex
-#   digit
-#   'A' . 'F'
-#   'a' . 'f'
+#   '0000' . '10FFFF' - '"'
+#   '"' '"'
 # 
 # digits
 #   digit
@@ -194,73 +95,6 @@ log notice "running"
 # 
 # nopatern
 #   '{' '0020' . '10FFFF' - '['
-# 
-# segment
-#   string
-#   index
-# 
-# index
-#   '\'     digit
-#   '\'     onenine digits
-#   '\' '-' digit
-#   '\' '-' onenine digits
-# 
-# # types
-# string
-#   unquoted-string
-#   quoted-string
-#
-# unquoted-string
-#   unquoted-character
-#   unquoted-character quoted-string
-#
-# unquoted-character
-#   '0020' . '10FFFF' - '"' - '\' - '.' - ws - ']'
-#   ']' '0020' . '10FFFF' - '"' - '\' - '.' - ws - '}'
-#
-# quoted-string
-#   unquoted-character
-#   unquoted-character string
-# 
-# quoted-character
-#   '0020' . '10FFFF' - '"' - '\'
-#   '\' escape
-#   ncpatern
-# 
-# escape
-#   '"'
-#   '\'
-#   '/'
-#   'b'
-#   'f'
-#   'n'
-#   'r'
-#   't'
-#   'u' hex hex hex hex
-# 
-# hex
-#   digit
-#   'A' . 'F'
-#   'a' . 'f'
-# 
-# digits
-#   digit
-#   digit digits
-# 
-# digit
-#   '0'
-#   onenine
-# 
-# onenine
-#   '1' . '9'
-# 
-# # paterns
-# ws
-#   ''
-#   '\x20' ws
-#   '\x0a' ws
-#   '\x0d' ws
-#   '\x09' ws
 
 
 # AST Plex:
@@ -270,8 +104,6 @@ log notice "running"
 # Text = string            # just a text body
 #
 # Interpolation = string   # path to variable 
-#
-# Include = string         # path to include data
 #
 # Section = {
 #   v = string      # item variable name for loop
@@ -300,6 +132,7 @@ log notice "running"
 # AbstarctSyntaxTree (ATS) = {
 #    e = [Element]  # elements array
 # }
+
 AST=$(mktemp)
 AST_key='.'
 trap 'rm -f "$AST"' EXIT INT HUP
@@ -327,6 +160,10 @@ is_ws() {
   return 1
 }
 
+log_buffers() {
+  log debug "buff 1: $WHITE$(cat "$STAGE_BUFFER_1")"
+}
+
 # remove_last_double_quote(text) -> text
 remove_last_double_quote() {
   printf '%s' "$1" | sed 's/\(.*\)"\(.*\)/\1\2/'
@@ -344,43 +181,16 @@ buf_read() {
   cat "$buf"
 }
 
-#buf_next()
-buf_next() {
-  case "$CURRENT_STAGE_BUFFER" in
-    "$STAGE_BUFFER_1")
-      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_2"
-    ;;
-    "$STAGE_BUFFER_2")
-      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_3"
-    ;;
-    "$STAGE_BUFFER_3")
-      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_4"
-    ;;
-    "$STAGE_BUFFER_4")
-      CURRENT_STAGE_BUFFER="$STAGE_BUFFER_1"
-    ;;
-  esac
-}
-
 buf_reset() {
   : > "$STAGE_BUFFER_1"
-  : > "$STAGE_BUFFER_2"
-  : > "$STAGE_BUFFER_3"
-  : > "$STAGE_BUFFER_4"
 
   CURRENT_STAGE_BUFFER="$STAGE_BUFFER_1"
 }
 
 STAGE_BUFFER_1="$(mktemp)"
-STAGE_BUFFER_2="$(mktemp)"
-STAGE_BUFFER_3="$(mktemp)"
-STAGE_BUFFER_4="$(mktemp)"
 CURRENT_STAGE_BUFFER=$STAGE_BUFFER_1
-trap 'rm -f "$STAGE_BUFFER_1" "$STAGE_BUFFER_2" "$STAGE_BUFFER_3" "$STAGE_BUFFER_4"' EXIT INT HUP
+trap 'rm -f "$STAGE_BUFFER_1"' EXIT INT HUP
 log debug "stage buffer 1: ${WHITE}$STAGE_BUFFER_1"
-log debug "stage buffer 2: ${WHITE}$STAGE_BUFFER_2"
-log debug "stage buffer 3: ${WHITE}$STAGE_BUFFER_3"
-log debug "stage buffer 4: ${WHITE}$STAGE_BUFFER_4"
 
 # json_escape(value) -> str
 json_escape() {
@@ -389,79 +199,176 @@ json_escape() {
 }
 
 # finds close pattern and store the char to the stage buffers separating by spaces
-find_close_pattern() {
-  local buf char="${1:?}"
+parse_tag() {
+  local char="${1:?}"
+  # NOTE: any return 1 - skip char, regular_char + return 1 - write char
+  # TAG_seen_first_ws     - we've already handled the first whitespace after `{[...]`
+  # TAG_in_ws_run      - we’re currently in a run of whitespace chars
+  # TAG_pending_close  - we saw `]` and are checking if the next char is `}`
 
-  regular_char() {
-    [ ${TAG_ws_started+x} ] && { 
-	unset TAG_ws_started
-        if [ "${TAG_first_ws_handled+x}" ]; then
-	  buf_next
-	else
-	  TAG_first_ws_handled=1
-	fi
+
+  write_char() {
+    [ ${TAG_next_argument_redgect+x} ] && {
+      log error "too many argument for tag type $WHITE${TAG_type:?}$NC on $WHITE$LINE_N$NC:$WHITE$CHAR_N$NC";
+      exit 1;
+    }
+    [ ${TAG_in_ws_run+x} ] && { 
+        unset TAG_in_ws_run
+        if [ "${TAG_seen_first_ws+x}" ]; then
+          case "${TAG_type:-unknown}" in
+            unknown) finalize_first_arg ;;
+            for) 
+              # NOTE: 
+	      # grammar: for i in key."subkey" ; so we know
+              # 1st argument after `for` - string (name of variable)
+              # 2nd                      - 'in'   (just keyword)
+              # 3rd                      - path   (path to array in Model)
+              case ${TAG_grammar_mode:-1} in
+                string)
+                ;;
+                kw_in) 
+                ;;
+                path) 
+                ;;
+              esac
+            ;;
+            *) log panic 'unexpected TAG_type'; exit 13; ;;
+          esac
+
+          # NOTE: prepare to next argument
+          buf_reset
+        else
+          TAG_seen_first_ws=1
+        fi
     }
     printf '%s' "$1" >> "$CURRENT_STAGE_BUFFER"
   }
 
-  if   [ ! "${TAG_close_tag_flag+x}" ] && [ "$char" = ']' ]; then
-    TAG_close_tag_flag=1
-  elif [ "${TAG_close_tag_flag+x}" ]; then
-    unset TAG_close_tag_flag
+  if   [ ! "${TAG_pending_close+x}" ] && [ "$char" = ']' ]; then
+    TAG_pending_close=1
+    # NOTE: skip ']' but remember to check next char for a possible '}'
+    return 1
+  elif [ "${TAG_pending_close+x}" ]; then
+    unset TAG_pending_close
     if [ "$char" = '}' ]; then
-
-      log debug "cur buf: $WHITE$(cat "$STAGE_BUFFER_1")"
-      # removes first and last white spaces from the buffer
-      sed -i 's/[[:space:]]$//g' "$CURRENT_STAGE_BUFFER"
-      sed -i 's/^[[:space:]]//g' "$CURRENT_STAGE_BUFFER"
-
+      # NOTE: found `]}` — finish bracket parsing
       return 0
     else
-      regular_char ']'"$char"
+      # NOTE: `]` was not followed by `}`, so emit the `]` we skipped
+      printf ']' >> "$CURRENT_STAGE_BUFFER"
     fi
   else
-    # shellcheck disable=SC1003
-    case "$char" in
-      '"')
-	if [ "${TAG_escape_flag+x}" ]; then
-          unset TAG_escape_flag
-	else
-          if [ ${TAG_double_quote_flag+x} ]; then
-            unset TAG_double_quote_flag
-            return 1
-          else 
-            TAG_double_quote_flag=1
-            return 1
-          fi
-	fi
-      ;;
-      '\')
-        if [ "${TAG_escape_flag+x}" ]; then
-          unset TAG_escape_flag
-        else
-          TAG_escape_flag=1
-          return 1
-        fi
-      ;;
-      *)
-        if [ "${TAG_escape_flag+x}" ]; then
-          if is_ws "$char"; then
-	    unset TAG_escape_flag
-	  else 
-	    log error "unexpected char \`$char\` after escape symbol"
-	    exit 1
-	  fi
-        elif is_ws "$char" && ! [ "${TAG_double_quote_flag+x}" ]; then 
-          TAG_ws_started=1
-	  return 1
-        fi
-      ;;
-    esac
-
-    regular_char "$char"
+    is_ws "$char" && { TAG_in_ws_run=1; return 1; }
+      
+    # NOTE: this is after char's checked on ws
+    # so if TAG_in_ws_run exists then this is first char in argument (just after ws)
+    if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ]; then
+      [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
+      TAG_in_quoted_string=1
+      return 1
+    elif [ "${TAG_in_quoted_string+x}" ]; then
+      if [ "$char" = '"' ]; then
+        TAG_end_quote_pending=1
+	return 1
+      fi
+    elif [ "${TAG_end_quote_pending+x}" ]; then
+      case "$char" in
+        '"') 
+          # NOTE: just ignoring it, because it expected behavior
+        ;;
+        '.')
+          TAG_grammar_mode=path
+        ;;
+        *)  log error "unexpected end of quote on $WHITE$LINE_N$NC:$WHITE$CHAR_N" ;;
+      esac
+    fi
   fi
 
+  grammar_check "$char"
+  write_char    "$char"
+
   return 1
+}
+
+finalize_first_arg() {
+  case "$(cat "$CURRENT_STAGE_BUFFER")" in
+    for)
+      TAG_type='for'
+      # NOTE: we know that next argument after `for` is string
+      TAG_grammar_mode=string
+      log error 'for unimplemented'
+      exit 13
+    ;;
+    done)
+      TAG_type='done'
+      TAG_next_argument_redgect=1
+      # NOTE: Do not save {[ done ]} to the AST becouse it is useless there
+    ;;
+    '{[')
+      TAG_type='actual bracket'
+      TAG_next_argument_redgect=1
+      if yq -e "${AST_key}[-1].type == \"text\"" "$AST" > /dev/null; then
+        yq -o j -i "${AST_key}[-1].value += \"{[\"" "$AST"
+      else
+        yq -o j -i "$AST_key += [{
+          \"type\": \"text\",
+          \"value\": \"{[\"
+        }]" "$AST"
+      fi
+    ;;
+    *)         # interpolation tag
+      TAG_type='interpolation'
+      TAG_next_argument_redgect=1
+      buf=$(cat "$STAGE_BUFFER_1")
+      yq -o j -i "$AST_key += [{
+        \"type\": \"interpolation\",
+        \"path\": \"$(json_escape "$buf")\"
+      }]" "$AST"
+    ;;
+  esac
+}
+
+# TAG_grammar_mode=
+# ? - uncknown  - when we start parse first word in a tag, we never know what the type it is
+# 1 - path
+# 2 - string
+# 3 - keyword in
+
+grammar_check() {
+  local char="$1"
+  case "${TAG_grammar_mode:-unknown}" in
+    unknown) 
+      # NOTE: we always know grammar mode but first argument
+      # just regular parse as string or as path if seen unquoted '.'
+
+      if ! [ "${TAG_in_quoted_string+x}" ]; then
+        unquoted_string_grammar
+      fi
+    ;;
+    path) 
+      if ! [ "${TAG_in_quoted_string+x}" ]; then
+        unquoted_string_grammar
+      fi
+    ;;
+    string) 
+      if ! [ "${TAG_in_quoted_string+x}" ]; then
+        unquoted_string_grammar
+      fi
+    ;;
+    kw_in) 
+    ;;
+    *) log panic 'unexpected TAG_grammar_mode'; exit 13; ;;
+  esac
+}
+
+unquoted_string_grammar() {
+  # shellcheck disable=SC1003
+  case "$char" in
+    '['|']'|'{'|'}'|'"'|'.'|'\')
+      log error "not allowed character $WHITE$char$NC on $WHITE$LINE_N$NC:$WHITE$CHAR_N"
+      log error "try to use quoted string"
+    ;;
+  esac
 }
 
 # finds open pattern and stores the char to the STAGE_BUFFER_1
@@ -490,11 +397,11 @@ parse() {
     # Text Stage - save char in STAGE_BUFFER_1 until next tag opens
     0)
       if find_open_pattern "$char"; then
-	log debug "open pattern founded"
-	buf=$(cat "$CURRENT_STAGE_BUFFER")
+        log debug "open pattern founded"
+        buf=$(cat "$CURRENT_STAGE_BUFFER")
         yq -o j -i "$AST_key += [{
-	  \"type\": \"text\",
-	  \"value\": \"$(json_escape "$buf")\"
+          \"type\": \"text\",
+          \"value\": \"$(json_escape "$buf")\"
         }]" "$AST"
 
         buf_reset
@@ -502,42 +409,13 @@ parse() {
       fi
     ;;
     1)
-      if find_close_pattern "$char"; then
-	case "$(cat "$STAGE_BUFFER_1")" in
-	  compute)
-	    log error 'compute unimplemented'
-	  ;;
-	  include)
-	    log error 'include unimplemented'
-	  ;;
-	  for)
-	    path=$STAGE_BUFFER_2
-
-	    log error 'for unimplemented'
-	  ;;
-          end)
-	    log error 'end unimplemented'
-	  ;;
-          '{[')
-            yq -o j -i "$AST_key += [{
-	      \"type\": \"text\",
-	      \"value\": \"{[\"
-            }]" "$AST"
-	  ;;
-          *)         # interpolation tag
-	    buf=$(cat "$STAGE_BUFFER_1")
-            yq -o j -i "$AST_key += [{
-	      \"type\": \"interpolation\",
-	      \"path\": \"$(json_escape "$buf")\"
-            }]" "$AST"
-	  ;;
-	esac
+      if parse_tag "$char"; then
+        log_buffers
 
         # zero-initialization
-        unset TAG_ws_started TAG_double_quote_flag TAG_escape_flag TAG_first_ws_handled TAG_close_tag_flag
 
-	buf_reset
-	STAGE=1
+        buf_reset
+        STAGE=1
       fi
     ;;
     2)
@@ -573,17 +451,26 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Using dd to read one character at a time
-input=$(cat)
-i=1
+CHAR_N=1
+LINE_N=1
+#LINE_NUMBER=1
 while :; do
-    #log trace "loop"
-    char=$(printf '%s' "$input" | dd bs=1 skip=$((i-1)) count=1 2>/dev/null)
-    [ -z "$char" ] && break
+    # read exactly 1 byte; preserve newlines
+    if ! char="$(dd bs=1 count=1 2>/dev/null)"; then
+        break
+    fi
 
-    parse "$char"
+    # NOTE: if $char is empty, it because `dd` returned '\n' but `$(...)` 
+    # removed it as trailing '\n', so I set $char as '\n' here
+    [ -z "$char" ] && {
+        LINE_N=$((LINE_N+1))
+        char='
+'
+    }
 
-    i=$((i+1))
+    parse "${char:?}"
+
+    CHAR_N=$((CHAR_N+1))
 done
 
 # finish TEXT tag if file ends on it
