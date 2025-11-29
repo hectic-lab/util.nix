@@ -49,7 +49,6 @@ in {
       extensions = let
         packages = {
           inherit (cfg.package.pkgs) pg_net pgjwt pg_cron http pg_smtp_client plsh;
-          hemar = self.packages.${system}.pg-15-hemar;
         };
       in
         lib.attrValues (

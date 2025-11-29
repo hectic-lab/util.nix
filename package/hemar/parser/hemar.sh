@@ -341,6 +341,8 @@ grammar_check() {
       # NOTE: we always know grammar mode but first argument
       # just regular parse as string or as path if seen unquoted '.'
 
+      !! if we here find a path so it interpolation, sure?
+
       if ! [ "${TAG_in_quoted_string+x}" ]; then
         unquoted_string_grammar
       fi
