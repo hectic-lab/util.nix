@@ -206,6 +206,38 @@ parse_tag() {
   # TAG_in_ws_run      - we’re currently in a run of whitespace chars
   # TAG_pending_close  - we saw `]` and are checking if the next char is `}`
 
+  string_grammar() {
+    if [ "${TAG_in_quoted_string+x}" ]; then
+      if [ "${TAG_end_quote_pending+x}" ]; then
+        case "$char" in
+          '"') 
+            unset TAG_end_quote_pending
+          ;;
+          '.')
+            TAG_dote=1
+	    return 1
+          ;;
+          *)  log error "unexpected end of quote on $WHITE$LINE_N$NC:$WHITE$CHAR_N" ;;
+        esac
+      elif [ "$char" = '"' ]; then
+        TAG_end_quote_pending=1
+        return 1
+      fi
+    else
+
+      # shellcheck disable=SC1003
+      case "$char" in
+        '['|']'|'{'|'}'|'"'|'\')
+          log error "not allowed character $WHITE$char$NC on $WHITE$LINE_N$NC:$WHITE$CHAR_N"
+          log error "try to use quoted string"
+        ;;
+        '.')
+          TAG_dote=1
+	  return 1
+        ;;
+      esac
+    fi
+  }
 
   write_char() {
     [ ${TAG_next_argument_redgect+x} ] && {
@@ -259,32 +291,60 @@ parse_tag() {
     fi
   else
     is_ws "$char" && { TAG_in_ws_run=1; return 1; }
-      
-    # NOTE: this is after char's checked on ws
-    # so if TAG_in_ws_run exists then this is first char in argument (just after ws)
-    if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ]; then
-      [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
-      TAG_in_quoted_string=1
-      return 1
-    elif [ "${TAG_in_quoted_string+x}" ]; then
-      if [ "$char" = '"' ]; then
-        TAG_end_quote_pending=1
-	return 1
-      fi
-    elif [ "${TAG_end_quote_pending+x}" ]; then
-      case "$char" in
-        '"') 
-          # NOTE: just ignoring it, because it expected behavior
-        ;;
-        '.')
-          TAG_grammar_mode=path
-        ;;
-        *)  log error "unexpected end of quote on $WHITE$LINE_N$NC:$WHITE$CHAR_N" ;;
-      esac
-    fi
   fi
 
-  grammar_check "$char"
+  case "${TAG_grammar_mode:-unknown}" in
+    unknown) 
+      # NOTE: we always know grammar mode but first argument
+      # just regular parse as string or as path if seen unquoted '.'
+      
+      # NOTE: this is after char's checked on ws
+      # so if TAG_in_ws_run exists then this is first char in argument (just after ws)
+      [ "${TAG_dote+x}" ] && { log panic "TAG_dote true in unknown TAG_grammar_mode"; exit 13; }
+      if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ]; then
+        [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
+        TAG_in_quoted_string=1
+        return 1
+      fi
+
+      string_grammar || return 1
+      if [ ${TAG_dote+x} ]; then
+	TAG_grammar_mode=path
+      fi
+    ;;
+    path) 
+      if [ "${TAG_dote+x}" ]; then
+	log notice "suka"
+      fi
+
+      if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ] || [ "${TAG_dote+x}" ] && [ "$char" = '"' ]; then
+        [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
+        unset TAG_dote
+        TAG_in_quoted_string=1
+        return 1
+      fi
+
+      [ "${TAG_dote+x}" ] && unset TAG_dote
+	
+
+      string_grammar || return 1
+    ;;
+    string) 
+      if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ]; then
+        [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
+        TAG_in_quoted_string=1
+        return 1
+      fi
+
+      string_grammar || return 1
+      if [ ${TAG_dote+x} ]; then
+        log error ". not allowed, use quote to escape it; on $WHITE$LINE_N$NC:$WHITE$CHAR_N$NC"
+      fi
+    ;;
+    kw_in) 
+    ;;
+    *) log panic 'unexpected TAG_grammar_mode'; exit 13; ;;
+  esac
   write_char    "$char"
 
   return 1
@@ -324,51 +384,6 @@ finalize_first_arg() {
         \"type\": \"interpolation\",
         \"path\": \"$(json_escape "$buf")\"
       }]" "$AST"
-    ;;
-  esac
-}
-
-# TAG_grammar_mode=
-# ? - uncknown  - when we start parse first word in a tag, we never know what the type it is
-# 1 - path
-# 2 - string
-# 3 - keyword in
-
-grammar_check() {
-  local char="$1"
-  case "${TAG_grammar_mode:-unknown}" in
-    unknown) 
-      # NOTE: we always know grammar mode but first argument
-      # just regular parse as string or as path if seen unquoted '.'
-
-      !! if we here find a path so it interpolation, sure?
-
-      if ! [ "${TAG_in_quoted_string+x}" ]; then
-        unquoted_string_grammar
-      fi
-    ;;
-    path) 
-      if ! [ "${TAG_in_quoted_string+x}" ]; then
-        unquoted_string_grammar
-      fi
-    ;;
-    string) 
-      if ! [ "${TAG_in_quoted_string+x}" ]; then
-        unquoted_string_grammar
-      fi
-    ;;
-    kw_in) 
-    ;;
-    *) log panic 'unexpected TAG_grammar_mode'; exit 13; ;;
-  esac
-}
-
-unquoted_string_grammar() {
-  # shellcheck disable=SC1003
-  case "$char" in
-    '['|']'|'{'|'}'|'"'|'.'|'\')
-      log error "not allowed character $WHITE$char$NC on $WHITE$LINE_N$NC:$WHITE$CHAR_N"
-      log error "try to use quoted string"
     ;;
   esac
 }
