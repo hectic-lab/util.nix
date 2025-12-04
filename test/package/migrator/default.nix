@@ -39,6 +39,8 @@
   } ''
     ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
     test=${testDrv}
+    export HECTIC_LOG=trace
+    ${builtins.readFile ./util.sh}
     ${builtins.readFile ./lauch.sh}
 
     # success marker for Nix
