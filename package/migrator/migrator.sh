@@ -37,8 +37,8 @@ while [ $# -gt 0 ]; do
   case $1 in
     migrate|create|fetch|list|init)
       [ "${SUBCOMMAND+x}" ] && { 
-	log error "ambiguous subcommand, decide ${WHITE}$SUBCOMMAND ${NC}or ${WHITE}$1";
-	exit 2;
+        log error "ambiguous subcommand, decide ${WHITE}$SUBCOMMAND ${NC}or ${WHITE}$1";
+        exit 2;
       }
       SUBCOMMAND=$1
       shift
@@ -71,7 +71,7 @@ init() {
         shift 2
       ;;
       --set|-v)
-	VARIABLE_LIST="${VARIABLE_LIST+$VARIABLE_LIST }$2"
+        VARIABLE_LIST="${VARIABLE_LIST+$VARIABLE_LIST }$2"
         shift 2
       ;;
       --*|-*)
@@ -204,16 +204,16 @@ migrate_down() {
   while [ $# -gt 0 ]; do
     case $1 in
       --*|-*)
-        printf 'migrate argument %s does not exists' "$1"
+        log error "\`migrate down\` argument $WHITE$1$NC does not exists"
         exit 1
       ;;
       ''|*[!0-9]*)
-	log error "down argument not a number";
-	exit 1;
+        log error "down argument not a number";
+        exit 1;
       ;;
       *)
-	DOWN_NUMBER=$2
-	shift 2;
+        DOWN_NUMBER=$2
+        shift 2;
       ;;
     esac
   done
@@ -226,16 +226,16 @@ migrate_up() {
   while [ $# -gt 0 ]; do
     case $1 in
       --*|-*)
-        printf 'migrate argument %s does not exists' "$1"
+        log error "\`migrate up\` argument $WHITE$1$NC does not exists"
         exit 1
       ;;
       ''|*[!0-9]*)
-	log error "up argument not a number";
-	exit 1;
+        log error "up argument not a number";
+        exit 1;
       ;;
       *)
-	UP_NUMBER=$2
-	shift 2;
+        UP_NUMBER=$2
+        shift 2;
       ;;
     esac
   done
@@ -245,19 +245,24 @@ migrate_up() {
 }
 
 migrate_to() {
+  local migration_name
   while [ $# -gt 0 ]; do
     case $1 in
       --*|-*)
-        printf 'migrate argument %s does not exists' "$1"
+        log error  "\`migrate to\` argument $WHITE$1$NC does not exists"
         exit 1
       ;;
       *)
-	MIGRATION_NAME=
+        # shellcheck disable=SC2016
+        [ "${migration_name+x}" ] && { log error '`migrate to` too many arguments'; exit 1; }
+        migration_name=$1
+        shift
       ;;
     esac
   done
 
-  [ "${MIGRATION_NAME+x}" ] || { log error "no migration name specified"; exit 1; }
+  [ "${migration_name+x}" ] || { log error "no migration name specified"; exit 1; }
+  printf '%s' "$migration_name"
 }
 
 migration_list() {
@@ -266,16 +271,18 @@ migration_list() {
 
 migrate() {
   local fs_migrations db_migrations db_migration fs_migration psql_args var #target_migration
+  MIGRATOR_REMAINING_ARS=
 
   while [ $# -gt 0 ]; do
+    log trace "migrate arg $WHITE$1"
     case $1 in
       up|down|to)
         [ "${MIGRATE_SUBCOMMAND+x}" ] && {
-	  log error "ambiguous migrate subcommand, decide ${WHITE}$MIGRATE_SUBCOMMAND ${NC}or ${WHITE}$1";
-	  exit 2
+          log error "ambiguous migrate subcommand, decide ${WHITE}$MIGRATE_SUBCOMMAND ${NC}or ${WHITE}$1";
+          exit 2
         }
-	MIGRATE_SUBCOMMAND="$1"
-	shift
+        MIGRATE_SUBCOMMAND="$1"
+        shift
       ;;
       --db-url|-u)
         DB_URL="$2"
@@ -286,13 +293,15 @@ migrate() {
         shift
       ;;
       --set|-v)
-	VARIABLE_LIST="${VARIABLE_LIST+$VARIABLE_LIST }$2"
+        VARIABLE_LIST="${VARIABLE_LIST+$VARIABLE_LIST }$2"
         shift 2
       ;;
-      --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
-      *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
+      --*|-*) MIGRATOR_REMAINING_ARS="$MIGRATOR_REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
+      *) MIGRATOR_REMAINING_ARS="$MIGRATOR_REMAINING_ARS $(quote "$1")"; shift ;;
     esac
   done
+
+  log debug "migrate REMAINING_ARGS: $WHITE$MIGRATOR_REMAINING_ARS"
 
   [ "${FORCE+x}" ] && {
     log error "migrate --force not implemented"
@@ -330,14 +339,24 @@ migrate() {
     i=$((i+1))
   done
 
-  eval "set -- $REMAINING_ARS"
+  eval "set -- $MIGRATOR_REMAINING_ARS"
   target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
 
   log debug "target_migration: ${target_migration}"
 
-  exit 1
+  index_of 
 
-  
+}
+
+idx_of() {
+  name=$1
+  [ -z "$name" ] && { echo 0; return; }
+  i=1
+  printf '%s\n' "$fs_migrations" | while IFS= read -r m; do
+    [ "$m" = "$name" ] && { echo "$i"; return; }
+    i=$((i+1))
+  done
+  echo 0
 }
 
 form_psql_args() {
@@ -383,7 +402,7 @@ create() {
   while [ $# -gt 0 ]; do
     case $1 in
       --name|-n)
-	# shellcheck disable=SC2034
+        # shellcheck disable=SC2034
         MIGRATION_NAME=$2
         shift 2
       ;;
@@ -414,7 +433,7 @@ fetch() {
   while [ $# -gt 0 ]; do
     case $1 in
       --db-url|-u)
-	# shellcheck disable=SC2034
+        # shellcheck disable=SC2034
         DB_URL=$2
         shift 2
       ;;

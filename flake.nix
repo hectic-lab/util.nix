@@ -66,15 +66,17 @@
     system,
     pkgs,
   }: {
-    packages.${system}         = import ./package      { inherit flake self inputs pkgs system; };
-    devShells.${system}        = import ./devshell     { inherit flake self inputs pkgs system; };
-    legacyPackages.${system}   = import ./legacy       { inherit flake self inputs pkgs system; };
-    nixosConfigurations        =                       { };
-    checks.${system}           = import ./test         { inherit flake self inputs pkgs system; };
+    packages.${system}         = import ./package           { inherit flake self inputs pkgs system; };
+    devShells.${system}        = import ./devshell          { inherit flake self inputs pkgs system; };
+    legacyPackages.${system}   = import ./legacy            { inherit flake self inputs pkgs system; };
+    nixosConfigurations        =                            {
+      "xray|${system}"         = import ./nixos/system/xray { inherit flake self inputs system; };
+    };
+    checks.${system}           = import ./test              { inherit flake self inputs pkgs system; };
   }) // {
     lib = self-lib;
-    overlays.default           = import ./overlay      { inherit flake self inputs; };
-    nixosModules               = import ./nixos/module { inherit flake self inputs; };
-    templates                  = import ./template     { inherit flake self inputs; };
+    overlays.default           = import ./overlay           { inherit flake self inputs; };
+    nixosModules               = import ./nixos/module      { inherit flake self inputs; };
+    templates                  = import ./template          { inherit flake self inputs; };
   };
 }
