@@ -45,10 +45,10 @@ in {
       example = "/dev/disk/by-uuid/f184a16b-6eca-41cb-b48a-ff37cdce1d79";
       description = ''
         boot device uuid 
-	if it is null then will use "/dev/sda" 
-	/dev/sda - default hetzner cloud device
-	!! But can changes on reboot if server have volumes
-	!! So use IDs
+        if it is null then will use "/dev/sda" 
+        /dev/sda - default hetzner cloud device
+        !! But can changes on reboot if server have volumes
+        !! So use IDs
       '';
     };
     networkMatchConfigName = lib.mkOption {
@@ -56,10 +56,10 @@ in {
       example = "enp1s0";
       description = ''
         type of network conection, 
-	on older hetzner servers may be `ens3`
+        on older hetzner servers may be `ens3`
         on newer probably `enp1s0`
 
-	you can use `networkctl list` on server to know it
+        you can use `networkctl list` on server to know it
       '';
     };
   };
