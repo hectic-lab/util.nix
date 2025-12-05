@@ -46,8 +46,9 @@ in {
               { 
                 names = [ 
                   "client" 
-                  # Ability speak between different matrix servers, requires .well-known
-                  #"federation"
+                  # Ability speak between different matrix servers and get
+                  # global id, requires .well-known
+                  "federation"
                 ];
                 compress = false; 
               }
@@ -126,6 +127,13 @@ in {
         enableACME = true;
         locations."/" = {
           proxyPass = "http://127.0.0.1:8008";
+        };
+        locations."=/.well-known/matrix/server" = {
+          extraConfig = ''
+            default_type application/json;
+            add_header Access-Control-Allow-Origin *;
+          '';
+          return = "200 '{\"m.server\": \"${cfg.matrixDomain}:443\"}'";
         };
       };
     };
