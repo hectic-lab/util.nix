@@ -74,7 +74,7 @@
     devShells.${system}        = import ./devshell          { inherit flake self inputs pkgs system; };
     legacyPackages.${system}   = import ./legacy            { inherit flake self inputs pkgs system; };
     nixosConfigurations        =                            {
-      "xray|${system}"         = import ./nixos/system/xray { inherit flake self inputs system; };
+      "bfs|${system}"         = import ./nixos/system/bfs   { inherit flake self inputs system; };
     };
     checks.${system}           = import ./test              { inherit flake self inputs pkgs system; };
   }) // {

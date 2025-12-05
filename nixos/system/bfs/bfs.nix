@@ -10,6 +10,7 @@
   ...
 }: let
   xrayPort = 10086;
+  matrixDomain = "accord.tube";
 in {
   # TODO:
   # white list
@@ -20,7 +21,19 @@ in {
   imports = [
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops
+    #./voice-tune.nix
+    ./matrix.nix
   ];
+
+  currentServer = {
+    matrix = {
+      postgresql   = {
+        port = 5432;
+        initialEnvFile = config.sops.secrets."init-postgresql".path;
+      };
+      matrixDomain   = "accord.tube";
+    };
+  };
 
   services.xray = {
     enable  = true;
@@ -62,25 +75,25 @@ in {
     };
   };
 
- 
   hectic = {
     archetype.base.enable = true;
     archetype.dev.enable  = true;
   };
 
   sops = {
-    gnupg.sshKeyPaths        = [ ];
-    age.sshKeyPaths          = [ "/etc/ssh/ssh_host_ed25519_key" ];
-    defaultSopsFile          = ../../../sus/bfs.xray.yaml;
+    gnupg.sshKeyPaths         = [ ];
+    age.sshKeyPaths           = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    defaultSopsFile           = ../../../sus/bfs.xray.yaml;
 
-    secrets."config"         = {};
+    secrets."config"          = {};
+    secrets."init-postgresql" = {};
   };
-
 
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
       xrayPort
+      80 443 # for acme
     ];
   };
 }
