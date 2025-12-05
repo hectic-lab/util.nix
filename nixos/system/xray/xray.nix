@@ -11,53 +11,71 @@
 }: let
   xrayPort = 10086;
 in {
+  # TODO:
+  # white list
+  # torent
+  # rate limit
+  # ping - game and speak
+ 
   imports = [
     self.nixosModules.hectic
+    inputs.sops-nix.nixosModules.sops
   ];
 
   services.xray = {
     enable  = true;
-    settings = {
-      "inbounds" = [
-        {
-          "port" = xrayPort;
-          "protocol" = "vmess";
-          "settings" = {
-            "clients" = [
-              {
-                "id" = "04ad600a-0e94-4ba6-af93-74e03fd3f58d";
-              }
-            ];
-          };
-        }
-      ];
-      "log" = {
-        "loglevel" = "warning";
-      };
-      "outbounds" = [
-        {
-          "protocol" = "freedom";
-        }
-      ];
-    };
+    settingsFile = config.sops.secrets."config".path;
   };
 
   users.users.root.openssh.authorizedKeys.keys = [
-    ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPPChQvpyOrPjRjp8pS5Yw+oJVmywDzefzZCXh1d44EY''
-    ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGP3HjFoJNGHqHoEw9XLzh766QWknfaN07GGi8lsC2Tv''
+    ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOn1KflaIX1RU9YS/qLb0GInmndYxx2vTLZC9OA+eXZl''
   ];
+
+  boot.loader.grub.device =  "/dev/vda";
+  boot.initrd.availableKernelModules = [
+    "ata_piix"
+    "uhci_hcd"
+    "xen_blkfront"
+  ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
+  boot.initrd.kernelModules = ["nvme"];
+
+  disko.devices = {
+    disk.vda = {
+      device = lib.mkDefault "/dev/vda";
+      content = {
+        type = "table";
+        format = "msdos";
+        partitions = [
+          {
+            name = "root";
+            part-type = "primary";
+            fs-type = "ext4";
+            bootable = true;
+            content = {
+              type = "filesystem";
+              format = "ext4";
+              mountpoint = "/";
+            };
+          }
+        ];
+      };
+    };
+  };
 
  
   hectic = {
     archetype.base.enable = true;
     archetype.dev.enable  = true;
-    hardware.hetzner-cloud = {
-      enable                 = true;
-      networkMatchConfigName = "enp1s0";
-      ipv4                   = "77.42.45.173";
-      ipv6                   = "2a01:4f9:c013:7230";
-    };
   };
+
+  sops = {
+    gnupg.sshKeyPaths        = [ ];
+    age.sshKeyPaths          = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    defaultSopsFile          = ../../../sus/bfs.xray.yaml;
+
+    secrets."config"         = {};
+  };
+
 
   networking.firewall = {
     enable = true;
