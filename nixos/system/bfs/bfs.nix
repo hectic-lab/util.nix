@@ -21,8 +21,9 @@ in {
   imports = [
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops
-    #./voice-tune.nix
+    ./voice-tune.nix
     ./matrix.nix
+    ./element-rtc.nix
   ];
 
   currentServer = {
@@ -42,6 +43,7 @@ in {
 
   users.users.root.openssh.authorizedKeys.keys = [
     ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOn1KflaIX1RU9YS/qLb0GInmndYxx2vTLZC9OA+eXZl''
+    ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBKPbIJATVyAw7F7vBZbHkCODXFo5gvDyqhuU0gnNUNH''
   ];
 
   boot.loader.grub.device =  "/dev/vda";

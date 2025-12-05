@@ -1,14 +1,6 @@
 { lib, config, ... }: let
-  cfg = config.currentServer.matrixDomain;
+  cfg = config.currentServer.matrix;
 in {
-  options = {
-    currentServer.matrixDomain = lib.mkOption {
-      type = lib.types.str;
-      description = ''
-        domain
-      '';
-    };
-  };
   config = {
     services.coturn = {
       enable = true;
@@ -19,13 +11,18 @@ in {
       no-cli = true;
     };
 
-    networking.firewall.allowedUDPPorts = [ 3478 5349 ];
-    networking.firewall.allowedTCPPorts = [ 3478 5349 ];
+    networking.firewall = {
+      allowedUDPPorts = [ 3478 5349 ];
+      allowedTCPPorts = [ 3478 5349 ];
+      allowedUDPPortRanges = [
+        { from = 49152; to = 65535; }
+      ];
+    };
 
     services.matrix-synapse.settings = {
       turn_uris = [
-        "turn:your.domain:3478?transport=udp"
-        "turns:your.domain:5349?transport=tcp"
+        "turn:${cfg.matrixDomain}:3478?transport=udp"
+        "turns:${cfg.matrixDomain}:5349?transport=tcp"
       ];
       turn_shared_secret = "secret";
     };
