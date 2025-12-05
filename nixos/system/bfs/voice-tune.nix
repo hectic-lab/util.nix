@@ -17,6 +17,9 @@ in {
       allowedUDPPortRanges = [
         { from = 49152; to = 65535; }
       ];
+      allowedTCPPortRanges = [
+        { from = 50000; to = 51000; }
+      ];
     };
 
     services.matrix-synapse.settings = {
