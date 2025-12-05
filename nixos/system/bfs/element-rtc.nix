@@ -46,23 +46,23 @@ in {
             default_type application/json;
             add_header Access-Control-Allow-Origin *;
           '';
-          return = "200 '{\
-            \"m.homeserver\": {\
-              \"base_url\": \"https://${cfg.matrixDomain}\"\
-            },\
-            \"m.identity_server\": {\
-              \"base_url\": \"https://vector.im\"\
-            },\
-            \"org.matrix.msc3575.proxy\": {\
-              \"url\": \"https://${cfg.matrixDomain}\"\
-            },\
-            \"org.matrix.msc4143.rtc_foci\": [\
-              {\
-                \"type\": \"livekit\",\
-                \"livekit_service_url\": \"https://${cfg.matrixDomain}/livekit/jwt\"\
-              }\
-            ]\
-          }'";
+          return = ''200 '{
+            "m.homeserver": {
+              "base_url": "https://${cfg.matrixDomain}"
+            },
+            "m.identity_server": {
+              "base_url": "https://vector.im"
+            },
+            "org.matrix.msc3575.proxy": {
+              "url": "https://${cfg.matrixDomain}"
+            },
+            "org.matrix.msc4143.rtc_foci": [
+              {
+                "type": "livekit",
+                "livekit_service_url": "https://${cfg.matrixDomain}/livekit/jwt"
+              }
+            ]
+          }' '';
         };
 
         locations."^~ /livekit/jwt/" = {
@@ -89,7 +89,9 @@ in {
     networking.firewall = {
       enable = true;
       allowedTCPPorts = [
-        8448
+        8080
+        7880
+        7881
       ];
     };
   };

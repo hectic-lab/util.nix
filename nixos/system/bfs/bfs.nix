@@ -10,7 +10,6 @@
   ...
 }: let
   xrayPort = 10086;
-  matrixDomain = "accord.tube";
 in {
   # TODO:
   # white list
@@ -24,6 +23,7 @@ in {
     ./voice-tune.nix
     ./matrix.nix
     ./element-rtc.nix
+    ./element.nix
   ];
 
   currentServer = {
