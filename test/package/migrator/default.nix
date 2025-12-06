@@ -7,7 +7,7 @@
       pkgs.runCommand "test-${name}" {} ''
         if ! [ -f ${./test + "/${name}" + /run.sh} ]; then
           echo no run.sh in test/${name}
-	  exit 1
+          exit 1
         fi
 
         mkdir -p "$out"
@@ -35,7 +35,7 @@
   mkPgTest = testName: testDrv: pkgs.runCommand "migrator-test-${testName}"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
-    buildInputs = [ migrator pkgs.postgresql ];
+    buildInputs       = [ pkgs.which migrator pkgs.postgresql ];
   } ''
     ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
     test=${testDrv}
