@@ -14,15 +14,11 @@
 
 set -eu
 
-if ! command -v psql >/dev/null; then
-    log error "Required tool (psql) are not installed."
-    exit 127
-fi
-
 VERSION='0.0.1'
 MIGRATION_DIR="${MIGRATION_DIR:-migration}"
-quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
 REMAINING_ARS=
+
+quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
 
 # cat filename | sha256sum()
 # sha256sum(filename)
@@ -31,32 +27,6 @@ sha256sum() {
   file="${1:-'-'}"
   cksum --algorithm=sha256 --untagged "$file" | awk '{printf $1}'
 }
-
-while [ $# -gt 0 ]; do
-  log debug "arg: $1"
-  case $1 in
-    migrate|create|fetch|list|init)
-      [ "${SUBCOMMAND+x}" ] && { 
-        log error "ambiguous subcommand, decide ${WHITE}$SUBCOMMAND ${NC}or ${WHITE}$1";
-        exit 2;
-      }
-      SUBCOMMAND=$1
-      shift
-    ;;
-    --migration-dir|-d)
-      MIGRATION_DIR=$2
-      shift 2
-    ;;
-    --inherits)
-      INHERITS_LIST="${INHERITS_LIST+$INHERITS_LIST\"}$2"
-      shift 2
-    ;;
-    --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
-    *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
-  esac
-done
-
-[ ${INHERITS_LIST+x} ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
 
 # shellcheck disable=SC2120
 init() {
@@ -192,8 +162,6 @@ EOF
   printf '%s' "$sql"
 }
 
-[ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
-
 help() {
   # inherits: List one or more tables the migration table must inherit from
   echo help
@@ -269,6 +237,24 @@ migration_list() {
   find "$MIGRATION_DIR" -maxdepth 1 -type d -regextype posix-extended -regex '^.*/[0-9]{14}-.*$' -printf '%f\n' | sort
 }
 
+# index_of(array, name)
+index_of() {
+  local list name m i=1
+  list=$1
+  name=$2
+  [ -z "$name" ] && return 1
+
+  # no subshell, no pipeline
+  while IFS= read -r m; do
+    [ "$m" = "$name" ] && { printf '%s\n' "$i"; return 0; }
+    i=$((i+1))
+  done <<EOF
+$list
+EOF
+
+  return 1
+}
+
 migrate() {
   local fs_migrations db_migrations db_migration fs_migration psql_args var #target_migration
   MIGRATOR_REMAINING_ARS=
@@ -342,21 +328,20 @@ migrate() {
   eval "set -- $MIGRATOR_REMAINING_ARS"
   target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
 
-  log debug "target_migration: ${target_migration}"
+  if [ -z "$db_migrations" ]; then
+    log info "it'll firs migration"
+    current_idx=0
+  else
+    current_migration=$(printf '%s\n' "$db_migrations" | tail -n1)
+    current_idx=$(index_of "$fs_migrations" "$current_migration")
+  fi
 
-  index_of 
+  log debug "[$WHITE$fs_migrations$NC]"
+  log debug "$target_migration"
 
-}
+  target_idx=$(index_of "$fs_migrations" "$target_migration")
 
-idx_of() {
-  name=$1
-  [ -z "$name" ] && { echo 0; return; }
-  i=1
-  printf '%s\n' "$fs_migrations" | while IFS= read -r m; do
-    [ "$m" = "$name" ] && { echo "$i"; return; }
-    i=$((i+1))
-  done
-  echo 0
+  log debug "indexes $WHITE$current_idx$NC $WHITE${target_idx}"
 }
 
 form_psql_args() {
@@ -493,8 +478,43 @@ generate_word() {
   printf '%s' "$w"
 }
 
-log debug "subcommand: $WHITE$SUBCOMMAND"
-log debug "subcommand args: $WHITE$REMAINING_ARS"
+if ! command -v psql >/dev/null; then
+    log error "Required tool (psql) are not installed."
+    exit 127
+fi
 
-eval "set -- $REMAINING_ARS"
-"$SUBCOMMAND" "$@"
+if ! [ "${AS_LIBRARY+x}" ]; then
+  while [ $# -gt 0 ]; do
+    log debug "arg: $1"
+    case $1 in
+      migrate|create|fetch|list|init)
+        [ "${SUBCOMMAND+x}" ] && { 
+          log error "ambiguous subcommand, decide ${WHITE}$SUBCOMMAND ${NC}or ${WHITE}$1";
+          exit 2;
+        }
+        SUBCOMMAND=$1
+        shift
+      ;;
+      --migration-dir|-d)
+        MIGRATION_DIR=$2
+        shift 2
+      ;;
+      --inherits)
+        INHERITS_LIST="${INHERITS_LIST+$INHERITS_LIST\"}$2"
+        shift 2
+      ;;
+      --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
+      *) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;
+    esac
+  done
+  
+  [ ${INHERITS_LIST+x} ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
+  [ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
+  
+  
+  log debug "subcommand: $WHITE$SUBCOMMAND"
+  log debug "subcommand args: $WHITE$REMAINING_ARS"
+  
+  eval "set -- $REMAINING_ARS"
+  "$SUBCOMMAND" "$@"
+fi
