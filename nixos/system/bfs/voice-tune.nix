@@ -2,12 +2,24 @@
   cfg = config.currentServer.matrix;
   shared_secret = "secret";
 in {
+  options = {
+    currentServer.matrix = {
+      turnSecretFile = lib.mkOption {
+        type = lib.types.path;
+        description = ''
+          path to env file with matrix secrets
+
+          just raw secret
+        '';
+      };
+    };
+  };
   config = {
     services.coturn = rec {
       enable = true;
       realm = cfg.matrixDomain;
       use-auth-secret = true;
-      static-auth-secret = shared_secret;
+      static-auth-secret-file = cfg.turnSecretFile;
       cert = "${config.security.acme.certs.${realm}.directory}/full.pem";
       pkey = "${config.security.acme.certs.${realm}.directory}/key.pem";
       listening-ips = ["188.137.254.58"];
@@ -35,7 +47,6 @@ in {
         "turn:${cfg.matrixDomain}:3478?transport=udp"
         "turn:${cfg.matrixDomain}:3478?transport=tcp"
       ];
-      turn_shared_secret = shared_secret;
     };
   };
 }

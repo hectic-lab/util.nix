@@ -10,6 +10,7 @@
   ...
 }: let
   xrayPort = 10086;
+  matrixDomain = "accord.tube";
 in {
   # TODO:
   # white list
@@ -28,6 +29,8 @@ in {
 
   currentServer = {
     matrix = {
+      secretsFile  = config.sops.secrets."matrix/secrets".path;
+      turnSecretFile = config.sops.secrets."matrix/turn-secret".path; 
       postgresql   = {
         port = 5432;
         initialEnvFile = config.sops.secrets."init-postgresql".path;
@@ -87,8 +90,14 @@ in {
     age.sshKeyPaths           = [ "/etc/ssh/ssh_host_ed25519_key" ];
     defaultSopsFile           = ../../../sus/bfs.xray.yaml;
 
-    secrets."config"          = {};
-    secrets."init-postgresql" = {};
+    secrets."config"              = {};
+    secrets."init-postgresql"     = {};
+    secrets."matrix/secrets"      = {};
+    secrets."matrix/turn-secret"  = {
+      owner = "turnserver";
+      group = "turnserver";
+      mode = "0400";
+    };
   };
 
   networking.firewall = {

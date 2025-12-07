@@ -1,47 +1,76 @@
 #!/bin/dash
 
-# LISTEN
-# ssh -NL localhost:42001:localhost:42001 root@hecticb
-#
-# socat TCP-LISTEN:42001,bind=127.0.0.1,fork - | mpv --no-cache --demuxer=rawaudio --audio-channels=mono --audio-samplerate=44100 --aid=1 -
+exec 2>err.log
 
-
-# SEND
-# ssh -NR localhost:42002:localhost:42002 root@hectic-lab
-#
-# ffmpeg -f pulse -i default -t 10 -ar 44100 -f wav tcp:127.0.0.1:42002
+PANEL_H=20
 
 old_stty=$(stty -g)
 
+main() {
+  make_panel_space
+  
+  cols=$(tput cols)
+  lines=$(tput lines)
+  top=$(( lines - PANEL_H + 1 ))
+  [ "$top" -lt 1 ] && top=1
+  
+  msg="Welcome to accord"
+  w=$(( ${#msg} + 4 ))
+  h=5
+  x=$(( (cols - w) / 2 ))
+  y=$(( top + (PANEL_H - h) / 2 ))
+  
+  draw_box "$x" "$y" "$w" "$h" "$msg"
+  
+  key=$(read_key)
+  
+  case "$key" in
+    l)
+      clear_panel
+      msg="I love you"
+      w=$(( ${#msg} + 4 ))
+      x=$(( (cols - w) / 2 ))
+      draw_box "$x" "$y" "$w" "$h" "$msg"
+      key=$(read_key)
+      ;;
+    s)
+      clear_panel
+
+      key=$(read_key)
+  esac
+}
+
+clear_panel() {
+    cols=$(tput cols)
+    lines=$(tput lines)
+    top=$(( lines - PANEL_H + 1 ))
+    [ "$top" -lt 1 ] && top=1
+
+    row=$top
+    while [ "$row" -le "$lines" ]; do
+        printf '\033[%d;1H\033[2K' "$row"
+        row=$((row+1))
+    done
+}
+
 cleanup() {
+    clear_panel
+
     stty "$old_stty"
-    tput rmcup 2>/dev/null || printf '\033[?1049l'  # leave alt screen
     tput sgr0
     tput cnorm
+
+    # NOTE(yukkop): move cursor to where panel started, so shell prompt
+    # continues “right after” previous output
+    lines=$(tput lines)
+    row=$(( lines - PANEL_H + 1 ))
+    [ "$row" -lt 1 ] && row=1
+    printf '\033[%d;1H' "$row"
 }
 trap cleanup EXIT INT TERM
 
-# enter alternate screen
-tput smcup 2>/dev/null || printf '\033[?1049h'
 stty -echo raw
 tput civis
-
-msg="Press any key to continue"
-cols=$(tput cols)
-lines=$(tput lines)
-
-w=$(( ${#msg} + 4 ))
-h=5
-x=$(( (cols - w) / 2 ))
-y=$(( (lines - h) / 2 ))
-
-clear_screan() {
-  # clear *inside* alt screen
-  printf '\033[2J'
-  printf '\033[H'
-}
-
-clear_screan
 
 draw_box() {
     x=$1
@@ -78,18 +107,13 @@ draw_box() {
     done
 }
 
-msg="Welcome to accord"
-
-cols=$(tput cols)
-lines=$(tput lines)
-
-w=$(( ${#msg} + 4 ))
-h=5
-x=$(( (cols - w) / 2 ))
-y=$(( (lines - h) / 2 ))
-
-# first page
-draw_box "$x" "$y" "$w" "$h" "$msg"
+make_panel_space() {
+    i=0
+    while [ "$i" -lt "$PANEL_H" ]; do
+        printf '\n'
+        i=$((i+1))
+    done
+}
 
 read_key() {
     k=$(dd bs=1 count=1 2>/dev/null || true)
@@ -99,17 +123,8 @@ read_key() {
     printf '%s' "$k"
 }
 
-key=$(read_key)
+. ./frames.sh
 
-case "$key" in
-  l) 
-    clear_screan
-
-    msg="I love you"
-    w=$(( ${#msg} + 4 ))
-    x=$(( (cols - w) / 2 ))
-
-    draw_box "$x" "$y" "$w" "$h" "$msg"
-    key=$(read_key)
-  ;;
-esac
+if ! [ ${AS_LIBRARY+x} ]; then
+  main
+fi
