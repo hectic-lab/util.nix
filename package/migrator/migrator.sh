@@ -342,6 +342,11 @@ migrate() {
   target_idx=$(index_of "$fs_migrations" "$target_migration")
 
   log debug "indexes $WHITE$current_idx$NC $WHITE${target_idx}"
+
+  if [ "$target_idx" -eq "$current_idx" ]; then
+    log notice "database already at ${WHITE}$target_migration${NC}"
+    exit 0
+  fi
 }
 
 form_psql_args() {
@@ -508,8 +513,8 @@ if ! [ "${AS_LIBRARY+x}" ]; then
     esac
   done
   
-  [ ${INHERITS_LIST+x} ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
-  [ "${SUBCOMMAND+x}" ] || { log error "no subcomand specified"; exit 1; }
+  [ "${INHERITS_LIST+x}" ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
+  [ "${SUBCOMMAND+x}"    ] || { log error "no subcomand specified"; exit 1; }
   
   
   log debug "subcommand: $WHITE$SUBCOMMAND"

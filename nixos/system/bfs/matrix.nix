@@ -2,33 +2,43 @@
   cfg = config.currentServer.matrix;
 in {
   options = {
-      currentServer.matrix = {
-        postgresql = {
-          port = lib.mkOption {
-            type = lib.types.port;
-            default = 5432;
-            description = ''
-              postgres port
-            '';
-          };
-          initialEnvFile = lib.mkOption {
-            type = lib.types.path;
-            description = ''
-              path to env file with postgresql initial secrets
+    currentServer.matrix = {
+      secretsFile = lib.mkOption {
+        type = lib.types.path;
+        description = ''
+          path to env file with matrix secrets
 
-              content:
-              POSTGRESQL_PASSWORD=
-            '';
-          };
-        };
-        matrixDomain = lib.mkOption {
-            type = lib.types.str;
-            description = ''
-              domain to matrix
-            '';
-          };
-
+          content:
+          registration_shared_secret:
+          macroon_secret_key
+          form_secret
+        '';
       };
+      postgresql = {
+        port = lib.mkOption {
+          type = lib.types.port;
+          default = 5432;
+          description = ''
+            postgres port
+          '';
+        };
+        initialEnvFile = lib.mkOption {
+          type = lib.types.path;
+          description = ''
+            path to env file with postgresql initial secrets
+
+            content:
+            POSTGRESQL_PASSWORD=
+          '';
+        };
+      };
+      matrixDomain = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          domain to matrix
+        '';
+      };
+    };
   };
   config  = {
     services.matrix-synapse = {
@@ -59,9 +69,9 @@ in {
         enable_registration = true;
         enable_registration_without_verification = true;
 
-        registration_shared_secret = "secret1";
-        macaroon_secret_key        = "secret2";
-        form_secret                = "secret3";
+        extraConfigFiles = [
+          cfg.secretsFile
+        ];
       };
     };
 
