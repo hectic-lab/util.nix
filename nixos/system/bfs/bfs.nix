@@ -103,7 +103,7 @@ in {
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [
-      xrayPort
+      xrayPort 8443
       80 443 # for acme
     ];
   };
