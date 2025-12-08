@@ -123,6 +123,13 @@ read_key() {
     printf '%s' "$k"
 }
 
+#: > text; for f in frame-*.png; do
+#    n=${f#frame-}   # remove prefix
+#    n=${n%.png}     # remove suffix
+#    printf "__spining_cat_frame_%s() {\n printf '%%b' '" "$n" >> text
+#    chafa -f symbols --symbols block -s 40x15 --stretch "$f" >> text
+#    printf "'\n}\n" >> text
+#done
 . ./frames.sh
 
 if ! [ ${AS_LIBRARY+x} ]; then
