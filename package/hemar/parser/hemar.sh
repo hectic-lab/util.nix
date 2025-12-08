@@ -201,10 +201,10 @@ json_escape() {
 # finds close pattern and store the char to the stage buffers separating by spaces
 parse_tag() {
   local char="${1:?}"
-  # NOTE: any return 1 - skip char, regular_char + return 1 - write char
+  # NOTE: any return 1    - skip char, regular_char + return 1 - write char
   # TAG_seen_first_ws     - we've already handled the first whitespace after `{[...]`
-  # TAG_in_ws_run      - we’re currently in a run of whitespace chars
-  # TAG_pending_close  - we saw `]` and are checking if the next char is `}`
+  # TAG_in_ws_run         - we’re currently in a run of whitespace chars
+  # TAG_pending_close     - we saw `]` and are checking if the next char is `}`
 
   string_grammar() {
     if [ "${TAG_in_quoted_string+x}" ]; then
@@ -215,7 +215,7 @@ parse_tag() {
           ;;
           '.')
             TAG_dote=1
-	    return 1
+            return 1
           ;;
           *)  log error "unexpected end of quote on $WHITE$LINE_N$NC:$WHITE$CHAR_N" ;;
         esac
@@ -227,13 +227,14 @@ parse_tag() {
 
       # shellcheck disable=SC1003
       case "$char" in
-        '['|']'|'{'|'}'|'"'|'\')
+        ']'|'}'|'"'|'\')
           log error "not allowed character $WHITE$char$NC on $WHITE$LINE_N$NC:$WHITE$CHAR_N"
           log error "try to use quoted string"
+          exit 1
         ;;
         '.')
           TAG_dote=1
-	  return 1
+          return 1
         ;;
       esac
     fi
@@ -247,11 +248,12 @@ parse_tag() {
     [ ${TAG_in_ws_run+x} ] && { 
         unset TAG_in_ws_run
         if [ "${TAG_seen_first_ws+x}" ]; then
+          log trace "tag in ws -> type: \`${TAG_type:-}\`"
           case "${TAG_type:-unknown}" in
             unknown) finalize_first_arg ;;
             for) 
               # NOTE: 
-	      # grammar: for i in key."subkey" ; so we know
+              # grammar: for i in key."subkey" ; so we know
               # 1st argument after `for` - string (name of variable)
               # 2nd                      - 'in'   (just keyword)
               # 3rd                      - path   (path to array in Model)
@@ -276,21 +278,25 @@ parse_tag() {
     printf '%s' "$1" >> "$CURRENT_STAGE_BUFFER"
   }
 
-  if   [ ! "${TAG_pending_close+x}" ] && [ "$char" = ']' ]; then
-    TAG_pending_close=1
-    # NOTE: skip ']' but remember to check next char for a possible '}'
-    return 1
-  elif [ "${TAG_pending_close+x}" ]; then
-    unset TAG_pending_close
-    if [ "$char" = '}' ]; then
-      # NOTE: found `]}` — finish bracket parsing
-      return 0
+  if ! [ "${TAG_in_quoted_string+x}" ]; then 
+    if   [ ! "${TAG_pending_close+x}" ] && [ "$char" = ']' ]; then
+      TAG_pending_close=1
+      # NOTE: skip ']' but remember to check next char for a possible '}'
+      return 1
+    elif [ "${TAG_pending_close+x}" ]; then
+      unset TAG_pending_close
+      if [ "$char" = '}' ]; then
+        finish
+
+        # NOTE: found `]}` — finish bracket parsing
+        return 0
+      else
+        # NOTE: `]` was not followed by `}`, so emit the `]` we skipped
+        printf ']' >> "$CURRENT_STAGE_BUFFER"
+      fi
     else
-      # NOTE: `]` was not followed by `}`, so emit the `]` we skipped
-      printf ']' >> "$CURRENT_STAGE_BUFFER"
+      is_ws "$char" && { TAG_in_ws_run=1; return 1; }
     fi
-  else
-    is_ws "$char" && { TAG_in_ws_run=1; return 1; }
   fi
 
   case "${TAG_grammar_mode:-unknown}" in
@@ -309,12 +315,12 @@ parse_tag() {
 
       string_grammar || return 1
       if [ ${TAG_dote+x} ]; then
-	TAG_grammar_mode=path
+        TAG_grammar_mode=path
       fi
     ;;
     path) 
       if [ "${TAG_dote+x}" ]; then
-	log notice "suka"
+        log notice "suka"
       fi
 
       if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ] || [ "${TAG_dote+x}" ] && [ "$char" = '"' ]; then
@@ -325,7 +331,7 @@ parse_tag() {
       fi
 
       [ "${TAG_dote+x}" ] && unset TAG_dote
-	
+        
 
       string_grammar || return 1
     ;;
@@ -350,7 +356,25 @@ parse_tag() {
   return 1
 }
 
+finish() {
+  case "${TAG_type:-unknown}" in
+    unknown) 
+      finish_interpolation_tag
+    ;;
+    done)
+      finish_done_tag
+    ;;
+    '{[')
+      finish_bracket_tag
+    ;;
+    for) ;;
+    *) log panic 'unexpected TAG_type on finish'; exit 13; ;;
+  esac
+}
+
 finalize_first_arg() {
+  log trace "finalize first arg"
+  log trace "buffer: $(cat "$CURRENT_STAGE_BUFFER")"
   case "$(cat "$CURRENT_STAGE_BUFFER")" in
     for)
       TAG_type='for'
@@ -360,32 +384,45 @@ finalize_first_arg() {
       exit 13
     ;;
     done)
-      TAG_type='done'
-      TAG_next_argument_redgect=1
-      # NOTE: Do not save {[ done ]} to the AST becouse it is useless there
+      finish_done_tag
     ;;
     '{[')
-      TAG_type='actual bracket'
-      TAG_next_argument_redgect=1
-      if yq -e "${AST_key}[-1].type == \"text\"" "$AST" > /dev/null; then
-        yq -o j -i "${AST_key}[-1].value += \"{[\"" "$AST"
-      else
-        yq -o j -i "$AST_key += [{
-          \"type\": \"text\",
-          \"value\": \"{[\"
-        }]" "$AST"
-      fi
+      finish_bracket_tag
     ;;
     *)         # interpolation tag
-      TAG_type='interpolation'
-      TAG_next_argument_redgect=1
-      buf=$(cat "$STAGE_BUFFER_1")
-      yq -o j -i "$AST_key += [{
-        \"type\": \"interpolation\",
-        \"path\": \"$(json_escape "$buf")\"
-      }]" "$AST"
+      finish_interpolation_tag
     ;;
   esac
+}
+
+finish_done_tag() {
+  TAG_type='done'
+  TAG_next_argument_redgect=1
+  # NOTE: Do not save {[ done ]} to the AST becouse it is useless there
+}
+
+finish_bracket_tag() {
+   TAG_type='actual bracket'
+   TAG_next_argument_redgect=1
+   if yq -e "${AST_key}[-1].type == \"text\"" "$AST" > /dev/null; then
+     yq -o j -i "${AST_key}[-1].value += \"{[\"" "$AST"
+   else
+     yq -o j -i "$AST_key += [{
+       \"type\": \"text\",
+       \"value\": \"{[\"
+     }]" "$AST"
+   fi
+}
+
+finish_interpolation_tag() {
+  log trace 'finish interpolation tag'
+  TAG_type='interpolation'
+  TAG_next_argument_redgect=1
+  buf=$(cat "$STAGE_BUFFER_1")
+  yq -o j -i "$AST_key += [{
+    \"type\": \"interpolation\",
+    \"path\": \"$(json_escape "$buf")\"
+  }]" "$AST"
 }
 
 # finds open pattern and stores the char to the STAGE_BUFFER_1
@@ -414,7 +451,7 @@ parse() {
     # Text Stage - save char in STAGE_BUFFER_1 until next tag opens
     0)
       if find_open_pattern "$char"; then
-        log debug "open pattern founded"
+        log trace "open pattern founded"
         buf=$(cat "$CURRENT_STAGE_BUFFER")
         yq -o j -i "$AST_key += [{
           \"type\": \"text\",
@@ -430,9 +467,10 @@ parse() {
         log_buffers
 
         # zero-initialization
+        unset TAG_seen_first_ws TAG_in_ws_run TAG_pending_close TAG_type TAG_next_argument_redgect TAG_grammar_mode TAG_in_quoted_string TAG_dote
 
         buf_reset
-        STAGE=1
+        STAGE=0
       fi
     ;;
     2)
@@ -470,12 +508,16 @@ done
 
 CHAR_N=1
 LINE_N=1
-#LINE_NUMBER=1
+
 while :; do
-    # read exactly 1 byte; preserve newlines
-    if ! char="$(dd bs=1 count=1 2>/dev/null)"; then
-        break
-    fi
+    hex="$(dd bs=1 count=1 2>/dev/null | od -An -t u1)"
+
+    [ -z "$hex" ] && {
+      break
+    }
+
+    # shellcheck disable=SC2059
+    char="$(printf "\\$(printf '%03o' "$hex")")"
 
     # NOTE: if $char is empty, it because `dd` returned '\n' but `$(...)` 
     # removed it as trailing '\n', so I set $char as '\n' here
@@ -485,10 +527,14 @@ while :; do
 '
     }
 
+    log trace "char: $WHITE$char"
+
     parse "${char:?}"
 
     CHAR_N=$((CHAR_N+1))
 done
+
+log debug 'finishing'
 
 # finish TEXT tag if file ends on it
 if [ "$STAGE" -eq 0 ]; then
