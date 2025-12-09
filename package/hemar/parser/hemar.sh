@@ -220,20 +220,48 @@ parse_tag() {
       if [ "${TAG_end_quote_pending+x}" ]; then
         case "$char" in
           '"') 
+            # Escaped quote: "" -> write single quote and continue in quoted string
             unset TAG_end_quote_pending
+            printf '"' >> "$CURRENT_STAGE_BUFFER"
+            return 1
           ;;
           '.')
+            # Closing quote followed by dot: exit quoted string, allow dot
+            unset TAG_end_quote_pending
+            unset TAG_in_quoted_string
             TAG_dote=1
             return 1
           ;;
-          *)  log error "unexpected end of quote on $WHITE$LINE_N$NC:$WHITE$CHAR_N" ;;
+          ']'|'}')
+            # Closing quote followed by bracket: exit quoted string, let bracket be handled
+            unset TAG_end_quote_pending
+            unset TAG_in_quoted_string
+            return 1
+          ;;
+          *)
+            if is_ws "$char"; then
+              # Closing quote followed by whitespace: exit quoted string
+              unset TAG_end_quote_pending
+              unset TAG_in_quoted_string
+              TAG_in_ws_run=1
+              return 1
+            else
+              log error "unexpected character $WHITE$char$NC after closing quote on $WHITE$LINE_N$NC:$WHITE$CHAR_N"
+              log error "expected: whitespace, dot, or end of tag"
+              exit 1
+            fi
+          ;;
         esac
       elif [ "$char" = '"' ]; then
+        # We see a quote inside quoted string: might be closing or escaped
         TAG_end_quote_pending=1
         return 1
+      else
+        # Inside quoted string, all other chars are allowed (will be written by write_char)
+        return 0
       fi
     else
-
+      # Not in quoted string: validate unquoted characters
       # shellcheck disable=SC1003
       case "$char" in
         ']'|'}'|'"'|'\')
@@ -246,6 +274,7 @@ parse_tag() {
           return 1
         ;;
       esac
+      return 0
     fi
   }
 
@@ -287,6 +316,16 @@ parse_tag() {
     printf '%s' "$1" >> "$CURRENT_STAGE_BUFFER"
   }
 
+  # Check if we need to exit quoted string due to pending quote followed by bracket
+  if [ "${TAG_in_quoted_string+x}" ] && [ "${TAG_end_quote_pending+x}" ]; then
+    if [ "$char" = ']' ] || [ "$char" = '}' ]; then
+      # Closing quote followed by bracket: exit quoted string, handle bracket
+      unset TAG_end_quote_pending
+      unset TAG_in_quoted_string
+      # Fall through to bracket handling
+    fi
+  fi
+
   if ! [ "${TAG_in_quoted_string+x}" ]; then 
     if   [ ! "${TAG_pending_close+x}" ] && [ "$char" = ']' ]; then
       TAG_pending_close=1
@@ -314,12 +353,16 @@ parse_tag() {
       # just regular parse as string or as path if seen unquoted '.'
       
       # NOTE: this is after char's checked on ws
-      # so if TAG_in_ws_run exists then this is first char in argument (just after ws)
+      # Quote is allowed: at start of tag (empty buffer), after whitespace, or after dot
       [ "${TAG_dote+x}" ] && { log panic "TAG_dote true in unknown TAG_grammar_mode"; exit 13; }
-      if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ]; then
-        [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
-        TAG_in_quoted_string=1
-        return 1
+      if [ "$char" = '"' ]; then
+        # Check if we're at start (empty buffer), after whitespace, or at tag start
+        if [ ! -s "$CURRENT_STAGE_BUFFER" ] || [ "${TAG_in_ws_run+x}" ]; then
+          [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true"; exit 13; }
+          TAG_in_quoted_string=1
+          return 1
+        fi
+        # Quote in middle of unquoted string - let string_grammar reject it
       fi
 
       string_grammar || return 1
@@ -328,15 +371,15 @@ parse_tag() {
       fi
     ;;
     path) 
-      if [ "${TAG_dote+x}" ]; then
-        log notice "suka"
-      fi
-
-      if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ] || [ "${TAG_dote+x}" ] && [ "$char" = '"' ]; then
-        [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
-        unset TAG_dote
-        TAG_in_quoted_string=1
-        return 1
+      # Quote is allowed: after whitespace or after dot
+      if [ "$char" = '"' ]; then
+        if [ "${TAG_in_ws_run+x}" ] || [ "${TAG_dote+x}" ] || [ ! -s "$CURRENT_STAGE_BUFFER" ]; then
+          [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true"; exit 13; }
+          [ "${TAG_dote+x}" ] && unset TAG_dote
+          TAG_in_quoted_string=1
+          return 1
+        fi
+        # Quote in middle of unquoted string - let string_grammar reject it
       fi
 
       [ "${TAG_dote+x}" ] && unset TAG_dote
@@ -345,10 +388,14 @@ parse_tag() {
       string_grammar || return 1
     ;;
     string) 
-      if [ "${TAG_in_ws_run+x}" ] && [ "$char" = '"' ]; then
-        [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true right after ws"; exit 13; }
-        TAG_in_quoted_string=1
-        return 1
+      # Quote is allowed: after whitespace or at segment start
+      if [ "$char" = '"' ]; then
+        if [ "${TAG_in_ws_run+x}" ] || [ ! -s "$CURRENT_STAGE_BUFFER" ]; then
+          [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true"; exit 13; }
+          TAG_in_quoted_string=1
+          return 1
+        fi
+        # Quote in middle of unquoted string - let string_grammar reject it
       fi
 
       string_grammar || return 1
@@ -462,10 +509,13 @@ parse() {
       if find_open_pattern "$char"; then
         log trace "open pattern founded"
         buf=$(cat "$CURRENT_STAGE_BUFFER")
-        yq -o j -i "$AST_key += [{
-          \"type\": \"text\",
-          \"value\": \"$(json_escape "$buf")\"
-        }]" "$AST"
+        # NOTE: Only add text element if buffer is not empty
+        if [ -n "$buf" ]; then
+          yq -o j -i "$AST_key += [{
+            \"type\": \"text\",
+            \"value\": \"$(json_escape "$buf")\"
+          }]" "$AST"
+        fi
 
         buf_reset
         STAGE=1
