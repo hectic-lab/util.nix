@@ -236,11 +236,19 @@ parse_tag() {
             return 1
           ;;
           '.')
-            # Closing quote followed by dot: exit quoted string, allow dot
+            # Closing quote followed by dot: exit quoted string
             unset TAG_end_quote_pending
             unset TAG_in_quoted_string
-            TAG_dote=1
-            return 1
+            # In path mode or transitioning to path mode, write the dot as separator
+            # Otherwise, set TAG_dote to switch to path mode on next char
+            if [ "${TAG_grammar_mode:-unknown}" = "path" ]; then
+              # Already in path mode, write the dot
+              return 0  # Allow write_char to write the dot
+            else
+              # Will transition to path mode, write the dot now
+              TAG_dote=1
+              return 0  # Write the dot, will switch to path mode on next char
+            fi
           ;;
           ']'|'}')
             # Closing quote followed by bracket: exit quoted string, let bracket be handled
@@ -274,14 +282,30 @@ parse_tag() {
       # Not in quoted string: validate unquoted characters
       # shellcheck disable=SC1003
       case "$char" in
-        ']'|'}'|'"'|'\')
+        '}'|'"'|'\')
           log error "not allowed character $WHITE$char$NC on $WHITE$LINE_N$NC:$WHITE$CHAR_N"
           log error "try to use quoted string"
           exit 1
         ;;
+        ']')
+          # `]` is allowed in paths for index notation like [0], [-1]
+          # The bracket closing logic above handles tag closing `]}`
+          return 0  # Allow write_char to write the `]`
+        ;;
+        '[')
+          # `[` is allowed in paths for index notation
+          return 0  # Allow write_char to write the `[`
+        ;;
         '.')
-          TAG_dote=1
-          return 1
+          # Dot handling: if buffer is empty, write dot (root path), otherwise it's a separator
+          if [ ! -s "$CURRENT_STAGE_BUFFER" ]; then
+            # Empty buffer + dot = root path, write the dot
+            return 0  # Allow write_char to write the dot
+          else
+            # Non-empty buffer + dot = separator
+            TAG_dote=1
+            return 1  # Skip the dot, it's a separator
+          fi
         ;;
       esac
       return 0
@@ -338,8 +362,9 @@ parse_tag() {
 
   if ! [ "${TAG_in_quoted_string+x}" ]; then 
     if   [ ! "${TAG_pending_close+x}" ] && [ "$char" = ']' ]; then
+      # Always check for tag closing `]}` by setting pending and checking next char
+      # If next char is not `}`, the `]` was part of path (index notation) and will be written
       TAG_pending_close=1
-      # NOTE: skip ']' but remember to check next char for a possible '}'
       return 1
     elif [ "${TAG_pending_close+x}" ]; then
       unset TAG_pending_close
@@ -349,12 +374,27 @@ parse_tag() {
         # NOTE: found `]}` — finish bracket parsing
         return 0
       else
-        # NOTE: `]` was not followed by `}`, so emit the `]` we skipped
+        # NOTE: `]` was not followed by `}`, so it was part of path (index notation)
+        # Emit the `]` we skipped, then process current char
         printf ']' >> "$CURRENT_STAGE_BUFFER"
+        # Current char might be another `]` (tag closing) or part of path
+        # Fall through to process it (might hit the `]` case again if it's another `]`)
+        if [ "$char" = ']' ]; then
+          # This is another `]`, might be tag closing - check again
+          TAG_pending_close=1
+          return 1
+        fi
+        # Otherwise, continue processing the char normally
       fi
     else
       is_ws "$char" && { TAG_in_ws_run=1; return 1; }
     fi
+  fi
+
+  # If TAG_dote is set in unknown mode (from exiting quoted string), switch to path mode
+  if [ "${TAG_grammar_mode:-unknown}" = "unknown" ] && [ ${TAG_dote+x} ]; then
+    TAG_grammar_mode=path
+    unset TAG_dote
   fi
 
   case "${TAG_grammar_mode:-unknown}" in
@@ -364,12 +404,15 @@ parse_tag() {
       
       # NOTE: this is after char's checked on ws
       # Quote is allowed: at start of tag (empty buffer), after whitespace, or after dot
-      [ "${TAG_dote+x}" ] && { log panic "TAG_dote true in unknown TAG_grammar_mode"; exit 13; }
       if [ "$char" = '"' ]; then
         # Check if we're at start (empty buffer), after whitespace, or at tag start
         if [ ! -s "$CURRENT_STAGE_BUFFER" ] || [ "${TAG_in_ws_run+x}" ]; then
           [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true"; exit 13; }
           TAG_in_quoted_string=1
+          # Track if path started with a quote (for distinguishing root vs quoted ".")
+          if [ ! -s "$CURRENT_STAGE_BUFFER" ]; then
+            TAG_path_was_quoted=1
+          fi
           return 1
         fi
         # Quote in middle of unquoted string - let string_grammar reject it
@@ -381,12 +424,30 @@ parse_tag() {
       fi
     ;;
     path) 
-      # Quote is allowed: after whitespace or after dot
+      # In path mode, dots are separators but need to be in buffer for parse_path() to split
+      if [ "$char" = '.' ] && [ ! "${TAG_in_quoted_string+x}" ]; then
+        # Write dot to buffer as separator (parse_path will split on it)
+        # Write it directly and skip string_grammar (which would try to skip it)
+        printf '.' >> "$CURRENT_STAGE_BUFFER"
+        return 1  # Skip further processing
+      fi
+
+      # Quote is allowed: after whitespace, after dot, or if buffer ends with dot (just wrote separator)
       if [ "$char" = '"' ]; then
-        if [ "${TAG_in_ws_run+x}" ] || [ "${TAG_dote+x}" ] || [ ! -s "$CURRENT_STAGE_BUFFER" ]; then
+        local buffer_content
+        buffer_content=$(cat "$CURRENT_STAGE_BUFFER" 2>/dev/null || true)
+        local last_char="${buffer_content#"${buffer_content%?}"}"  # Get last char
+        local after_dot=0
+        [ "$last_char" = '.' ] && after_dot=1
+        
+        if [ "${TAG_in_ws_run+x}" ] || [ "${TAG_dote+x}" ] || [ ! -s "$CURRENT_STAGE_BUFFER" ] || [ "$after_dot" = "1" ]; then
           [ "${TAG_in_quoted_string+x}" ] && { log panic "TAG_in_quoted_string already true"; exit 13; }
           [ "${TAG_dote+x}" ] && unset TAG_dote
           TAG_in_quoted_string=1
+          # Track if this segment started with a quote
+          if [ ! -s "$CURRENT_STAGE_BUFFER" ] || [ "${TAG_dote+x}" ] || [ "$after_dot" = "1" ]; then
+            TAG_path_was_quoted=1
+          fi
           return 1
         fi
         # Quote in middle of unquoted string - let string_grammar reject it
@@ -480,15 +541,115 @@ finish_bracket_tag() {
    fi
 }
 
+# parse_path(path_string, was_quoted?) -> JSON array of path segments
+parse_path() {
+  local path_str="${1}"
+  local was_quoted="${2:-0}"
+  local segments_file
+  segments_file=$(mktemp)
+  yq -o j -n "[]" > "$segments_file"
+  
+  # Handle root path - only if it's unquoted
+  if [ "$path_str" = "." ] && [ "$was_quoted" != "1" ]; then
+    yq -o j -i ". += [{\"type\":\"root\"}]" "$segments_file"
+    local result
+    result=$(cat "$segments_file")
+    rm -f "$segments_file"
+    printf '%s' "$result"
+    return 0
+  fi
+  
+  local current_segment=""
+  local in_index=0
+  local index_str=""
+  local char
+  
+  # Process each character
+  while [ -n "$path_str" ]; do
+    char="${path_str%"${path_str#?}"}"  # Get first character
+    path_str="${path_str#?}"              # Remove first character
+    
+    case "$char" in
+      '[')
+        # Start of index
+        if [ -n "$current_segment" ]; then
+          # Add current segment as key
+          yq -o j -i ". += [{\"type\":\"key\",\"key\":\"$(json_escape "$current_segment")\"}]" "$segments_file"
+          current_segment=""
+        fi
+        in_index=1
+        index_str=""
+        ;;
+      ']')
+        # End of index
+        if [ "$in_index" -eq 1 ]; then
+          # Parse index (can be negative)
+          if [ -n "$index_str" ]; then
+            yq -o j -i ". += [{\"type\":\"index\",\"index\":$index_str}]" "$segments_file"
+          fi
+          in_index=0
+          index_str=""
+        else
+          # ] without [ - treat as part of segment
+          current_segment="${current_segment}]"
+        fi
+        ;;
+      '.')
+        if [ "$in_index" -eq 1 ]; then
+          # Dot inside index - invalid, but treat as part of index string
+          index_str="${index_str}."
+        elif [ -n "$current_segment" ]; then
+          # Dot separator - add current segment as key
+          yq -o j -i ". += [{\"type\":\"key\",\"key\":\"$(json_escape "$current_segment")\"}]" "$segments_file"
+          current_segment=""
+        else
+          # Dot with empty current_segment
+          # Check if we've already added segments - if so, this is a separator, skip it
+          # If no segments yet, it might be root path or quoted ".key"
+          local segment_count
+          segment_count=$(yq '. | length' "$segments_file" 2>/dev/null || echo "0")
+          if [ "$segment_count" -gt 0 ]; then
+            # We have segments already, this dot is a separator - skip it
+            :
+          else
+            # No segments yet - treat as part of key name (from quoted string like ".key")
+            current_segment="."
+          fi
+        fi
+        ;;
+      *)
+        if [ "$in_index" -eq 1 ]; then
+          index_str="${index_str}${char}"
+        else
+          current_segment="${current_segment}${char}"
+        fi
+        ;;
+    esac
+  done
+  
+  # Add remaining segment if any
+  if [ -n "$current_segment" ]; then
+    yq -o j -i ". += [{\"type\":\"key\",\"key\":\"$(json_escape "$current_segment")\"}]" "$segments_file"
+  fi
+  
+  local result
+  result=$(cat "$segments_file")
+  rm -f "$segments_file"
+  printf '%s' "$result"
+}
+
 finish_interpolation_tag() {
   log trace 'finish interpolation tag'
   TAG_type='interpolation'
   TAG_next_argument_redgect=1
   buf=$(cat "$STAGE_BUFFER_1")
+  was_quoted="${TAG_path_was_quoted:-0}"
+  path_segments=$(parse_path "$buf" "$was_quoted")
   yq -o j -i "$AST_key += [{
     \"type\": \"interpolation\",
-    \"path\": \"$(json_escape "$buf")\"
+    \"path\": $path_segments
   }]" "$AST"
+  unset TAG_path_was_quoted
 }
 
 # finds open pattern and stores the char to the STAGE_BUFFER_1
@@ -536,7 +697,7 @@ parse() {
         log_buffers
 
         # zero-initialization
-        unset TAG_seen_first_ws TAG_in_ws_run TAG_pending_close TAG_type TAG_next_argument_redgect TAG_grammar_mode TAG_in_quoted_string TAG_dote
+        unset TAG_seen_first_ws TAG_in_ws_run TAG_pending_close TAG_type TAG_next_argument_redgect TAG_grammar_mode TAG_in_quoted_string TAG_dote TAG_path_was_quoted
 
         buf_reset
         STAGE=0
