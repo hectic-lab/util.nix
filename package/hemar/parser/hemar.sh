@@ -503,6 +503,7 @@ if [ -z "${AS_LIBRARY+x}" ]; then
   log notice "running"
 
   AST=$(mktemp)
+  yq -o j -i "[]" "$AST"
   AST_key='.'
   trap 'rm -f "$AST"' EXIT INT HUP
 
@@ -578,10 +579,13 @@ if [ -z "${AS_LIBRARY+x}" ]; then
     fi
     
     buf=$(cat "$STAGE_BUFFER_1")
-    yq -o j -i "$AST_key += [{
-      \"type\": \"text\",
-      \"value\": \"$(json_escape "$buf")\"
-    }]" "$AST"
+    # Only add text element if buffer is not empty
+    if [ -n "$buf" ]; then
+      yq -o j -i "$AST_key += [{
+        \"type\": \"text\",
+        \"value\": \"$(json_escape "$buf")\"
+      }]" "$AST"
+    fi
   fi
 
   # return the output
