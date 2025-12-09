@@ -17,8 +17,6 @@ json_diff() {
 
 # run test
 mkdir './test'
-# shellcheck disable=SC2154
 cp -r "$test"/* './test/'
-# shellcheck disable=SC2164
 cd './test'
 . './run.sh'

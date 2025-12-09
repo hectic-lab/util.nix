@@ -1,7 +1,5 @@
 #!/bin/dash
 
-log notice "running"
-
 # segmented-path
 #   segment
 # Syntax scheme:
@@ -97,57 +95,45 @@ log notice "running"
 #   '{' '0020' . '10FFFF' - '['
 
 
-# AST Plex:
+# AST Structure:
 #
-# Type = 0..=5
+# The parser outputs a JSON array of elements directly (not wrapped in an object).
 #
-# Text = string            # just a text body
+# Element types (currently implemented):
 #
-# Interpolation = string   # path to variable 
+# Text = {
+#   "type": "text",
+#   "value": string    # text content
+# }
+#
+# Interpolation = {
+#   "type": "interpolation",
+#   "path": string     # path to variable in data model
+# }
+#
+# Element types (planned for MVP):
 #
 # Section = {
-#   v = string      # item variable name for loop
-#   p = string      # path to array for iteration
-#   b = [Element]   # section body
-#    
+#   "type": "section",
+#   "variable": string    # item variable name for loop
+#   "path": string        # path to array for iteration
+#   "body": [Element]    # section body (nested elements)
 # }
 #
-# End = null
+# Element types (planned for future, not MVP):
+#
+# Include = {
+#   "type": "include",
+#   "path": string     # path to template file to include
+# }
 #
 # Compute = {
-#   l     = string  # programing language
-#   b     = string  # function body
+#   "type": "compute",
+#   "language": string  # programming language (dash, plpgsql, etc.)
+#   "body": string      # function body
 # }
 #
-# Element = {
-#   t = Type        # element type
-#   b = Text        # element body
-#       | Interpolation 
-#       | Section 
-#       | End 
-#       | Include 
-#       | Compute 
-# }
-#
-# AbstarctSyntaxTree (ATS) = {
-#    e = [Element]  # elements array
-# }
-
-AST=$(mktemp)
-AST_key='.'
-trap 'rm -f "$AST"' EXIT INT HUP
-
-yq -o j -i '.' "$AST"
-
-log debug "AST path: ${WHITE}${AST}"
-
-# 0 - text
-# 1 - deside tag type
-# 2 - interpolation
-# 3 - section
-# 4 - include
-# 5 - compute
-STAGE=0
+# AbstractSyntaxTree = [Element, ...]  # array of elements
 
 # is_ws(char) -> bool
 is_ws() {
@@ -187,15 +173,38 @@ buf_reset() {
   CURRENT_STAGE_BUFFER="$STAGE_BUFFER_1"
 }
 
-STAGE_BUFFER_1="$(mktemp)"
-CURRENT_STAGE_BUFFER=$STAGE_BUFFER_1
-trap 'rm -f "$STAGE_BUFFER_1"' EXIT INT HUP
-log debug "stage buffer 1: ${WHITE}$STAGE_BUFFER_1"
-
 # json_escape(value) -> str
 json_escape() {
-  # TODO: escape functionality
-  printf '%s' "${1}" | sed 's/"/\\"/g' 
+  local input="${1}"
+  local output=""
+  local char hex
+  
+  while [ -n "$input" ]; do
+    char="${input%"${input#?}"}"  # Get first character
+    input="${input#?}"            # Remove first character
+    
+    hex=$(printf '%d' "'$char")
+    
+    case "$hex" in
+      34)  output="${output}\\\"" ;;  # "
+      92)  output="${output}\\\\" ;;  # \
+      10)  output="${output}\\n" ;;   # \n (newline)
+      13)  output="${output}\\r" ;;   # \r (carriage return)
+      9)   output="${output}\\t" ;;   # \t (tab)
+      8)   output="${output}\\b" ;;   # \b (backspace)
+      12)  output="${output}\\f" ;;   # \f (form feed)
+      *)
+        # NOTE(yukkop): escape control characters if they are not in the range 0x20-0x7E
+        if [ "$hex" -lt 32 ]; then
+          output="${output}\\u$(printf '%04x' "$hex")"
+        else
+          output="${output}${char}"
+        fi
+        ;;
+    esac
+  done
+  
+  printf '%s' "$output"
 }
 
 # finds close pattern and store the char to the stage buffers separating by spaces
@@ -489,67 +498,93 @@ parse() {
   esac
 }
 
-while [ $# -gt 0 ]; do
-  case $1 in
-    -c|--compact-output)
-      OUTPUT_ARGS="${OUTPUT_ARGS+$OUTPUT_ARGS }-I=0"
-      shift
-    ;;
-    --*|-*)
-      log error "argument $1 does not exists"
-      exit 9
-    ;;
-    *)
-      log error "subcommand $1 does not exists"
-      exit 9
-    ;;
-  esac
-done
 
-CHAR_N=1
-LINE_N=1
+if [ -z "${AS_LIBRARY+x}" ]; then
+  log notice "running"
 
-while :; do
-    hex="$(dd bs=1 count=1 2>/dev/null | od -An -t u1)"
+  AST=$(mktemp)
+  AST_key='.'
+  trap 'rm -f "$AST"' EXIT INT HUP
 
-    [ -z "$hex" ] && {
-      break
-    }
+  yq -o j -i '.' "$AST"
 
-    # shellcheck disable=SC2059
-    char="$(printf "\\$(printf '%03o' "$hex")")"
+  log debug "AST path: ${WHITE}${AST}"
 
-    # NOTE: if $char is empty, it because `dd` returned '\n' but `$(...)` 
-    # removed it as trailing '\n', so I set $char as '\n' here
-    [ -z "$char" ] && {
-        LINE_N=$((LINE_N+1))
-        char='
+  # 0 - text
+  # 1 - deside tag type
+  # 2 - interpolation
+  # 3 - section
+  # 4 - include
+  # 5 - compute
+  STAGE=0
+
+  STAGE_BUFFER_1="$(mktemp)"
+  CURRENT_STAGE_BUFFER=$STAGE_BUFFER_1
+  trap 'rm -f "$STAGE_BUFFER_1"' EXIT INT HUP
+  log debug "stage buffer 1: ${WHITE}$STAGE_BUFFER_1"
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -c|--compact-output)
+        OUTPUT_ARGS="${OUTPUT_ARGS+$OUTPUT_ARGS }-I=0"
+        shift
+      ;;
+      --*|-*)
+        log error "argument $1 does not exists"
+        exit 9
+      ;;
+      *)
+        log error "subcommand $1 does not exists"
+        exit 9
+      ;;
+    esac
+  done
+
+  CHAR_N=1
+  LINE_N=1
+
+  while :; do
+      hex="$(dd bs=1 count=1 2>/dev/null | od -An -t u1)"
+
+      [ -z "$hex" ] && {
+        break
+      }
+
+      # shellcheck disable=SC2059
+      char="$(printf "\\$(printf '%03o' "$hex")")"
+
+      # NOTE: if $char is empty, it because `dd` returned '\n' but `$(...)` 
+      # removed it as trailing '\n', so I set $char as '\n' here
+      [ -z "$char" ] && {
+          LINE_N=$((LINE_N+1))
+          char='
 '
-    }
+      }
 
-    log trace "char: $WHITE$char"
+      log trace "char: $WHITE$char"
 
-    parse "${char:?}"
+      parse "${char:?}"
 
-    CHAR_N=$((CHAR_N+1))
-done
+      CHAR_N=$((CHAR_N+1))
+  done
 
-log debug 'finishing'
+  log debug 'finishing'
 
-# finish TEXT tag if file ends on it
-if [ "$STAGE" -eq 0 ]; then
-  if [ "${open_tag_flag+x}" ]; then
-    unset open_tag_flag
-    printf '{' >> "$STAGE_BUFFER_1"
-  fi
+  # finish TEXT tag if file ends on it
+  if [ "$STAGE" -eq 0 ]; then
+    if [ "${open_tag_flag+x}" ]; then
+      unset open_tag_flag
+      printf '{' >> "$STAGE_BUFFER_1"
+    fi
     
-  buf=$(cat "$STAGE_BUFFER_1")
-  yq -o j -i "$AST_key += [{
-    \"type\": \"text\",
-    \"value\": \"$(json_escape "$buf")\"
-  }]" "$AST"
-fi
+    buf=$(cat "$STAGE_BUFFER_1")
+    yq -o j -i "$AST_key += [{
+      \"type\": \"text\",
+      \"value\": \"$(json_escape "$buf")\"
+    }]" "$AST"
+  fi
 
-# return the output
-# shellcheck disable=SC2086
-yq ${OUTPUT_ARGS:-} -o j "$AST"
+  # return the output
+  # shellcheck disable=SC2086
+  yq ${OUTPUT_ARGS:-} -o j "$AST"
+fi
