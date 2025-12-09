@@ -35,7 +35,7 @@
   mkPgTest = testName: testDrv: pkgs.runCommand "hemar-test-${testName}"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
-    buildInputs = [ hemar pkgs.yq-go ];
+    buildInputs = [ hemar pkgs.yq-go pkgs.which ];
   } ''
     ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
     test=${testDrv}

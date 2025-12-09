@@ -6,19 +6,6 @@ let
     "nounset"
   ];
 
-  test = hectic.writeShellApplication {
-    inherit shell bashOptions;
-    name = "hemar-test";
-    runtimeInputs = [ ];
-
-    text = ''
-      # shellcheck disable=SC2034
-      WORKSPACE=${./.}
-      ${builtins.readFile hectic.helpers.posix-shell.log}
-      ${builtins.readFile ./test.sh}
-    '';
-  };
-
   hemar = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "hemar";
@@ -34,5 +21,5 @@ let
 in
 symlinkJoin {
   name = "hemar";
-  paths = [ hemar test ];
+  paths = [ hemar ];
 }
