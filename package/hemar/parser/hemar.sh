@@ -108,7 +108,17 @@
 #
 # Interpolation = {
 #   "type": "interpolation",
-#   "path": string     # path to variable in data model
+#   "path": [PathSegment, ...]  # structured path to variable in data model
+# }
+#
+# PathSegment = {
+#   "type": "root"              # root path: "."
+# } | {
+#   "type": "key",
+#   "key": string              # key name (can contain spaces if quoted)
+# } | {
+#   "type": "index",
+#   "index": number            # array index (can be negative)
 # }
 #
 # Element types (planned for MVP):
