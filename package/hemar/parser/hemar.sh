@@ -418,9 +418,23 @@ parse_tag() {
         # Quote in middle of unquoted string - let string_grammar reject it
       fi
 
-      string_grammar || return 1
+      if ! string_grammar; then
+        # string_grammar returned 1 (skip char)
+        # Check if it was because of a dot - if so, write it and switch to path mode
+        if [ ${TAG_dote+x} ]; then
+          # Dot was seen - write it to buffer and switch to path mode
+          printf '.' >> "$CURRENT_STAGE_BUFFER"
+          TAG_grammar_mode=path
+          unset TAG_dote
+        fi
+        return 1
+      fi
+      # string_grammar returned 0 (write char) - check if dot was seen
       if [ ${TAG_dote+x} ]; then
+        # Dot was seen - write it to buffer and switch to path mode
+        printf '.' >> "$CURRENT_STAGE_BUFFER"
         TAG_grammar_mode=path
+        unset TAG_dote
       fi
     ;;
     path) 
@@ -603,9 +617,8 @@ parse_path() {
           yq -o j -i ". += [{\"type\":\"key\",\"key\":\"$(json_escape "$current_segment")\"}]" "$segments_file"
           current_segment=""
         else
-          # Dot with empty current_segment
-          # Check if we've already added segments - if so, this is a separator, skip it
-          # If no segments yet, it might be root path or quoted ".key"
+          # Dot at start of segment
+          # Check if we already have segments - if so, this is a separator, skip it
           local segment_count
           segment_count=$(yq '. | length' "$segments_file" 2>/dev/null || echo "0")
           if [ "$segment_count" -gt 0 ]; then
