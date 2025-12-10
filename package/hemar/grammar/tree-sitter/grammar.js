@@ -35,14 +35,13 @@ module.exports = grammar({
     ),
 
     index: $ => seq(
-      '[',
-      choice(
-        /\d/,        
-        /[1-9]\d*/,  
-        /-[1-9]/,    
-        /-[1-9]\d*/  
-      ),
-      ']',
+      "[",
+      field("value", $.integer_index),
+      "]",
+    ),
+
+    integer_index: $ => token(
+      choice( /\d/, /[1-9]\d*/, /-[1-9]/, /-[1-9]\d*/ )
     ),
 
     // anything but space
@@ -58,3 +57,4 @@ module.exports = grammar({
     text: $ => token(prec(-1, /(?:\{[^\[]|[^{])+/)),
   }
 });
+
