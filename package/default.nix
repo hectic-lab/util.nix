@@ -144,6 +144,7 @@ in {
   migrator                     = pkgs.callPackage ./migrator                          {};
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
   hemar-parser                 = hemar-parser;
+  tree-sitter-hemar            = pkgs.callPackage ./hemar/parser/tree-sitter          {};
   hemar-renderer               = pkgs.callPackage ./hemar/renderer                    {};
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
