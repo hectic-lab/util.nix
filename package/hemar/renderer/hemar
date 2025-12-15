@@ -1,0 +1,49 @@
+#!/bin/dash
+
+# Hemar - Main entry point
+# Parses a template file using tree-sitter and renders it with a data model
+
+set -eu
+
+TEMPLATE="${1:-"$TEMPLATE_PATH"}"
+MODEL="${2:-"$MODEL"}"
+
+if [ -z "$TEMPLATE" ] || [ -z "$MODEL" ]; then
+    printf "Usage: %s <template> <model.json>\n" "$0" >&2
+    exit 1
+fi
+
+if [ ! -f "$TEMPLATE" ]; then
+    printf "Template file not found: %s\n" "$TEMPLATE" >&2
+    exit 1
+fi
+
+if [ ! -f "$MODEL" ]; then
+    printf "Model file not found: %s\n" "$MODEL" >&2
+    exit 1
+fi
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Set up tree-sitter to find the hemar grammar
+# If TREE_SITTER_LIBDIR is set (by Nix wrapper), use it
+# Otherwise, assume grammar is in development location
+if [ -n "${TREE_SITTER_LIBDIR:-}" ]; then
+    # Nix-installed grammar
+    export TREE_SITTER_DIR="$TREE_SITTER_LIBDIR/../share/tree-sitter"
+else
+    # Development mode - look for grammar in ../grammar/tree-sitter
+    GRAMMAR_DIR="$(cd "$SCRIPT_DIR/../grammar/tree-sitter" 2>/dev/null && pwd || echo "")"
+    if [ -n "$GRAMMAR_DIR" ]; then
+        export TREE_SITTER_DIR="$GRAMMAR_DIR"
+    fi
+fi
+
+# Parse template with tree-sitter and convert to JSON
+# Requires: tree-sitter, yq
+AST_JSON=$(tree-sitter parse --xml "$TEMPLATE" 2>/dev/null | yq -p=xml -o=json)
+
+# Render
+printf '%s' "$AST_JSON" | "$SCRIPT_DIR/render.sh" - "$MODEL"
+

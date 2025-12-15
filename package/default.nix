@@ -107,6 +107,7 @@
     };
     nativeBuildInputs = with pkgs; [pkg-config curl];
   };
+  hemar-parser = pkgs.callPackage ./hemar/parser                                      {};
 in {
   py3-datetime                 = pkgs.callPackage ./py3-datetime.nix                  {};
   py3-marzban                  = pkgs.callPackage ./py3-marzban.nix                   { inherit self; };
@@ -142,7 +143,8 @@ in {
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   migrator                     = pkgs.callPackage ./migrator                          {};
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
-  hemar-parser                 = pkgs.callPackage ./hemar/parser                      {};
+  hemar-parser                 = hemar-parser;
+  hemar-renderer               = pkgs.callPackage ./hemar/renderer                    {};
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
   pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";

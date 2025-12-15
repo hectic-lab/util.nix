@@ -58,7 +58,18 @@
   {
     "type": "index",
     "named": true,
-    "fields": {}
+    "fields": {
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "integer_index",
+            "named": true
+          }
+        ]
+      }
+    }
   },
   {
     "type": "interpolation",
@@ -165,6 +176,10 @@
   {
     "type": "in",
     "named": false
+  },
+  {
+    "type": "integer_index",
+    "named": true
   },
   {
     "type": "text",

@@ -190,31 +190,42 @@
           "value": "["
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "PATTERN",
-              "value": "\\d"
-            },
-            {
-              "type": "PATTERN",
-              "value": "[1-9]\\d*"
-            },
-            {
-              "type": "PATTERN",
-              "value": "-[1-9]"
-            },
-            {
-              "type": "PATTERN",
-              "value": "-[1-9]\\d*"
-            }
-          ]
+          "type": "FIELD",
+          "name": "value",
+          "content": {
+            "type": "SYMBOL",
+            "name": "integer_index"
+          }
         },
         {
           "type": "STRING",
           "value": "]"
         }
       ]
+    },
+    "integer_index": {
+      "type": "TOKEN",
+      "content": {
+        "type": "CHOICE",
+        "members": [
+          {
+            "type": "PATTERN",
+            "value": "\\d"
+          },
+          {
+            "type": "PATTERN",
+            "value": "[1-9]\\d*"
+          },
+          {
+            "type": "PATTERN",
+            "value": "-[1-9]"
+          },
+          {
+            "type": "PATTERN",
+            "value": "-[1-9]\\d*"
+          }
+        ]
+      }
     },
     "string": {
       "type": "CHOICE",
