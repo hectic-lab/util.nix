@@ -123,7 +123,7 @@ BEGIN
       RAISE EXCEPTION 'Incampetible migrator versions: % and $VERSION', version; -- TODO(yukkop): show versions
     END IF;
   ELSE
-    CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{15}-.*');
+    CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{14}-.*');
     CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');
 
     CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn$
@@ -180,13 +180,34 @@ migrate_down() {
         exit 1;
       ;;
       *)
-        DOWN_NUMBER=$2
-        shift 2;
+        DOWN_NUMBER=$1
+        shift;
       ;;
     esac
   done
 
-  : "$DOWN_NUMBER"
+  # Calculate target migration: current - DOWN_NUMBER
+  if [ -z "$db_migrations" ]; then
+    log error "cannot migrate down: no migrations applied"
+    exit 1
+  fi
+  
+  current_migration=$(printf '%s\n' "$db_migrations" | tail -n1)
+  current_idx=$(index_of "$fs_migrations" "$current_migration")
+  target_line=$((current_idx - DOWN_NUMBER))
+  
+  if [ "$target_line" -lt 0 ]; then
+    log error "cannot migrate down $DOWN_NUMBER step(s): would go before first migration"
+    exit 1
+  fi
+  
+  # target_line of 0 means migrate down to nothing (revert all)
+  if [ "$target_line" -eq 0 ]; then
+    printf ''
+  else
+    target_migration=$(printf '%s' "$fs_migrations" | sed -n "${target_line}p")
+    printf '%s' "$target_migration"
+  fi
 }
 
 migrate_up() {
@@ -202,14 +223,29 @@ migrate_up() {
         exit 1;
       ;;
       *)
-        UP_NUMBER=$2
-        shift 2;
+        UP_NUMBER=$1
+        shift;
       ;;
     esac
   done
 
-  : "$UP_NUMBER"
-  #ls "$MIGRATION_DIR" -1 | sort
+  # Calculate target migration: current + UP_NUMBER
+  if [ -z "$db_migrations" ]; then
+    target_line=$UP_NUMBER
+  else
+    current_migration=$(printf '%s\n' "$db_migrations" | tail -n1)
+    current_idx=$(index_of "$fs_migrations" "$current_migration")
+    target_line=$((current_idx + UP_NUMBER))
+  fi
+  
+  target_migration=$(printf '%s' "$fs_migrations" | sed -n "${target_line}p")
+  
+  if [ -z "$target_migration" ]; then
+    log error "cannot migrate up $UP_NUMBER step(s): not enough migrations"
+    exit 1
+  fi
+  
+  printf '%s' "$target_migration"
 }
 
 migrate_to() {
@@ -339,24 +375,107 @@ migrate() {
   log debug "[$WHITE$fs_migrations$NC]"
   log debug "$target_migration"
 
-  target_idx=$(index_of "$fs_migrations" "$target_migration")
+  if [ -z "$target_migration" ]; then
+    target_idx=0
+  else
+    target_idx=$(index_of "$fs_migrations" "$target_migration")
+  fi
 
   log debug "indexes $WHITE$current_idx$NC $WHITE${target_idx}"
 
   if [ "$target_idx" -eq "$current_idx" ]; then
-    log notice "database already at ${WHITE}$target_migration${NC}"
+    if [ "$target_idx" -eq 0 ]; then
+      log notice "database already at clean state (no migrations)"
+    else
+      log notice "database already at ${WHITE}$target_migration${NC}"
+    fi
     exit 0
+  fi
+
+  # Apply migrations
+  psql_args="$(form_psql_args)"
+  
+  if [ "$target_idx" -gt "$current_idx" ]; then
+    # Migrate UP
+    log info "migrating up from index $current_idx to $target_idx"
+    
+    i=$((current_idx + 1))
+    while [ "$i" -le "$target_idx" ]; do
+      fs_migration=$(printf '%s' "$fs_migrations" | sed -n "${i}p")
+      
+      escaped_name=$(printf '%s' "$fs_migration" | sed "s/'/''/g")
+      mig_path="$MIGRATION_DIR/$fs_migration/up.sql"
+      escaped_path=$(printf '%s' "$mig_path" | sed "s/'/''/g")
+      
+      if [ ! -f "$mig_path" ]; then
+        log error "migration file not found: ${WHITE}$mig_path${NC}"
+        exit 1
+      fi
+      
+      mig_hash=$(sha256sum "$mig_path")
+      log info "applying migration ${WHITE}$fs_migration${NC} (up)"
+      
+      # shellcheck disable=SC2086
+      if ! psql $psql_args "$DB_URL" <<SQL
+BEGIN;
+\i '$escaped_path'
+INSERT INTO hectic.migration (name, hash) VALUES ('$escaped_name', '$mig_hash');
+COMMIT;
+SQL
+      then
+        log error "migration failed: ${WHITE}$fs_migration${NC}"
+        exit 4
+      fi
+      
+      i=$((i + 1))
+    done
+    
+    log notice "successfully migrated to ${WHITE}$target_migration${NC}"
+    
+  elif [ "$target_idx" -lt "$current_idx" ]; then
+    # Migrate DOWN
+    log info "migrating down from index $current_idx to $target_idx"
+    
+    i=$current_idx
+    while [ "$i" -gt "$target_idx" ]; do
+      fs_migration=$(printf '%s' "$fs_migrations" | sed -n "${i}p")
+      
+      escaped_name=$(printf '%s' "$fs_migration" | sed "s/'/''/g")
+      mig_path="$MIGRATION_DIR/$fs_migration/down.sql"
+      escaped_path=$(printf '%s' "$mig_path" | sed "s/'/''/g")
+      
+      if [ ! -f "$mig_path" ]; then
+        log error "migration file not found: ${WHITE}$mig_path${NC}"
+        exit 1
+      fi
+      
+      log info "reverting migration ${WHITE}$fs_migration${NC} (down)"
+      
+      # shellcheck disable=SC2086
+      if ! psql $psql_args "$DB_URL" <<SQL
+BEGIN;
+\i '$escaped_path'
+DELETE FROM hectic.migration WHERE name = '$escaped_name';
+COMMIT;
+SQL
+      then
+        log error "migration rollback failed: ${WHITE}$fs_migration${NC}"
+        exit 4
+      fi
+      
+      i=$((i - 1))
+    done
+    
+    if [ "$target_idx" -eq 0 ]; then
+      log notice "successfully migrated down to clean state"
+    else
+      log notice "successfully migrated down to ${WHITE}$target_migration${NC}"
+    fi
   fi
 }
 
-form_psql_args() {
-  psql_args="-d $DB_URL -v ON_ERROR_STOP=1"
-  for var in ${VARIABLE_LIST:-}; do
-    psql_args="$psql_args -v $var"
-  done
-}
-
 migrate_inner() {
+  # depricated, rewrite
   printf '%s\n' "$fs_migrations" | while IFS= read -r fs_migration; do
     # skip already applied migrations
     printf '%s' "$db_migrations" | grep -qxF "$fs_migration" && continue
@@ -383,6 +502,13 @@ SQL
       log error "migration failed: ${WHITE}$fs_migration${NC}"
       exit 4
     fi
+  done
+}
+
+form_psql_args() {
+  psql_args="-d $DB_URL -v ON_ERROR_STOP=1"
+  for var in ${VARIABLE_LIST:-}; do
+    psql_args="$psql_args -v $var"
   done
 }
 

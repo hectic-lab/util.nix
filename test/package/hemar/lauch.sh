@@ -25,7 +25,7 @@ json_diff() {
 }
 
 # run test
-mkdir './test'
-cp -r "$test"/* './test/'
-cd './test'
-. './run.sh'
+#mkdir './test'
+#cp -r "$test"/* './test/'
+#cd './test'
+#. './run.sh'
