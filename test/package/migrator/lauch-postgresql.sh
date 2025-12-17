@@ -6,12 +6,11 @@
 HECTIC_NAMESPACE=test-laucher
 export HECTIC_LOG=trace
 
+# shellcheck disable=SC2154
 test_derivation="$(basename "$test")"
 test_name="${test_derivation#*-*-}"
 
 set -eu
-
-root_dir="$(dirname $0)"
 
 HECTIC_LOG=
 
@@ -65,8 +64,10 @@ log info "run test ${WHITE}${test_name}${NC}"
 mkdir './test'
 cp -r "$test"/* './test/'
 cd './test'
+# shellcheck disable=SC1091
 . './run.sh'
 
+# shellcheck disable=SC2034
 HECTIC_NAMESPACE=test-laucher
 
 log info "finish test pipeline"

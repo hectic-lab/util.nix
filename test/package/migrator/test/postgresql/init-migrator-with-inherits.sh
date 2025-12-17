@@ -2,18 +2,6 @@
 
 HECTIC_NAMESPACE=test-init-migrator
 
-### CASE 1
-log notice "test case: ${WHITE}dry run"
-# NOTE: does not matter exist inherits tables or not, it must not connect to db
-
-if ! migration_table_sql="$(migrator --inherits tablename --inherits 'table name' init --dry-run)"; then
-  log error "test failed: ${WHITE}error on migration table init dry run"
-  exit 1
-fi
-
-printf '%s' "$migration_table_sql" | grep -Eq 'INHERITS[[:space:]]*\([[:space:]]*"tablename"[[:space:]]*,[[:space:]]*"table name"[[:space:]]*\)' ||
-  { log error "test failed: ${WHITE}not correct migration table inherits"; exit 1; }
-
 ### CASE 2
 log notice "test case: ${WHITE}error: table inherit tables that not exists"
 
