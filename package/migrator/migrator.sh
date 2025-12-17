@@ -28,6 +28,105 @@ sha256sum() {
   cksum --algorithm=sha256 --untagged "$file" | awk '{printf $1}'
 }
 
+# detect_db_type()
+# Returns: "postgresql" or "sqlite"
+detect_db_type() {
+  case "$DB_URL" in
+    postgresql://*|postgres://*)
+      printf 'postgresql'
+      ;;
+    sqlite://*|*.db|*.sqlite|*.sqlite3)
+      printf 'sqlite'
+      ;;
+    *)
+      log error "unsupported database URL format: ${WHITE}$DB_URL${NC}"
+      log error "supported formats: postgresql://... or sqlite://... or *.db"
+      exit 1
+      ;;
+  esac
+}
+
+# get_sqlite_path()
+get_sqlite_path() {
+  case "$DB_URL" in
+    sqlite://*)
+      printf '%s' "$DB_URL" | sed 's|^sqlite://||'
+      ;;
+    *)
+      printf '%s' "$DB_URL"
+      ;;
+  esac
+}
+
+# db_exec(sql)
+db_exec() {
+  local sql="$1"
+  local db_type
+  db_type=$(detect_db_type)
+  
+  case "$db_type" in
+    postgresql)
+      local psql_args
+      psql_args="$(form_psql_args)"
+      # shellcheck disable=SC2086
+      printf '%s' "$sql" | psql $psql_args "$DB_URL"
+      ;;
+    sqlite)
+      local db_path
+      db_path=$(get_sqlite_path)
+      printf '%s' "$sql" | sqlite3 "$db_path"
+      ;;
+  esac
+}
+
+# db_query(sql)
+db_query() {
+  local sql="$1"
+  local db_type
+  db_type=$(detect_db_type)
+  
+  case "$db_type" in
+    postgresql)
+      psql "$DB_URL" --no-align --tuples-only --quiet --command "$sql" | awk NF
+      ;;
+    sqlite)
+      local db_path
+      db_path=$(get_sqlite_path)
+      sqlite3 "$db_path" "$sql"
+      ;;
+  esac
+}
+
+# db_exec_file(file_path)
+db_exec_file() {
+  local file_path="$1"
+  local db_type
+  db_type=$(detect_db_type)
+  
+  case "$db_type" in
+    postgresql)
+      local psql_args escaped_path
+      psql_args="$(form_psql_args)"
+      escaped_path=$(printf '%s' "$file_path" | sed "s/'/''/g")
+      # shellcheck disable=SC2086
+      psql $psql_args "$DB_URL" <<SQL
+BEGIN;
+\i '$escaped_path'
+COMMIT;
+SQL
+      ;;
+    sqlite)
+      local db_path
+      db_path=$(get_sqlite_path)
+      sqlite3 "$db_path" <<SQL
+BEGIN;
+.read $file_path
+COMMIT;
+SQL
+      ;;
+  esac
+}
+
 # shellcheck disable=SC2120
 init() {
   while [ $# -gt 0 ]; do
@@ -59,9 +158,15 @@ init() {
 
   error_handler_no_db_url
 
-  psql_args="$(form_psql_args)"
+  db_type=$(detect_db_type)
 
+  # INHERITS is PostgreSQL-only feature
   [ ${INHERITS_LIST+x} ] && {
+    if [ "$db_type" != "postgresql" ]; then
+      log error "INHERITS is only supported for PostgreSQL"
+      exit 1
+    fi
+
     oldIFS="$IFS"
     IFS=','
     check_inherits=
@@ -75,15 +180,13 @@ init() {
       "$check_inherits" \
       'COMMIT;')
 
-    # shellcheck disable=SC2086
-    if ! psql $psql_args -c "$check_inherits"; then
+    if ! db_exec "$check_inherits"; then
       log error "init failed: ${WHITE}one of inherits table does not exists: ${CYAN}$INHERITS_LIST"
       exit 5
     fi
   }
 
-  # shellcheck disable=SC2086
-  if ! psql $psql_args -c "$(init_sql)"; then
+  if ! db_exec "$(init_sql)"; then
     log error "init failed"
     exit 13
   fi
@@ -92,10 +195,11 @@ init() {
 # error_handler_no_db_url()
 error_handler_no_db_url() {
   [ "${DB_URL+x}" ] || { log error "no ${WHITE}DB_URL${NC} or ${WHITE}--db-url${NC} specified"; exit 3; }
+  check_db_dependencies
 }
 
-init_sql() {
-  local sql
+init_sql_postgresql() {
+  local sql inherits
 
   inherits=
   [ ${INHERITS_LIST+x} ] && inherits="$(printf 'INHERITS(%s)' "$INHERITS_LIST")"
@@ -103,7 +207,7 @@ init_sql() {
   sql="$(cat <<EOF
 BEGIN;
 
-DO \$$
+DO \$\$
 DECLARE
   version TEXT;
 BEGIN
@@ -120,18 +224,18 @@ BEGIN
   ) THEN
     SELECT hectic.version.version FROM hectic.version  WHERE name = 'migrator' INTO version;
     IF version != '$VERSION' THEN
-      RAISE EXCEPTION 'Incampetible migrator versions: % and $VERSION', version; -- TODO(yukkop): show versions
+      RAISE EXCEPTION 'Incompatible migrator versions: % and $VERSION', version;
     END IF;
   ELSE
     CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{14}-.*');
-    CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}$');
+    CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}\$');
 
-    CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn$
+    CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn\$
     BEGIN
       NEW.hash = lower(NEW.hash);
       RETURN NEW;
     END;
-    \$fn$ LANGUAGE plpgsql;
+    \$fn\$ LANGUAGE plpgsql;
 
     CREATE TABLE hectic.version (
         name          TEXT                 PRIMARY KEY,
@@ -153,13 +257,66 @@ BEGIN
     FOR EACH ROW EXECUTE FUNCTION hectic.sha256_lower();
   END IF;
 END;
-\$$;
+\$\$;
 
 COMMIT;
 EOF
   )"
 
   printf '%s' "$sql"
+}
+
+init_sql_sqlite() {
+  local sql
+
+  sql="$(cat <<'EOF'
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS hectic_version (
+    name          TEXT PRIMARY KEY,
+    version       TEXT NOT NULL,
+    installed_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS hectic_migration (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT UNIQUE NOT NULL CHECK (name GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*'),
+    hash        TEXT UNIQUE NOT NULL CHECK (length(hash) = 64 AND lower(hash) = hash),
+    applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Check version compatibility
+INSERT OR IGNORE INTO hectic_version (name, version) VALUES ('migrator', 'VERSION_PLACEHOLDER');
+
+-- Verify version if it already exists
+SELECT CASE 
+    WHEN version != 'VERSION_PLACEHOLDER' AND name = 'migrator'
+    THEN RAISE(ABORT, 'Incompatible migrator versions')
+    ELSE 1
+END FROM hectic_version WHERE name = 'migrator';
+
+COMMIT;
+EOF
+  )"
+
+  # Replace version placeholder
+  sql=$(printf '%s' "$sql" | sed "s/VERSION_PLACEHOLDER/$VERSION/g")
+
+  printf '%s' "$sql"
+}
+
+init_sql() {
+  local db_type
+  db_type=$(detect_db_type)
+  
+  case "$db_type" in
+    postgresql)
+      init_sql_postgresql
+      ;;
+    sqlite)
+      init_sql_sqlite
+      ;;
+  esac
 }
 
 help() {
@@ -334,11 +491,16 @@ migrate() {
 
   fs_migrations=$(migration_list)
 
-  db_migrations=$(
-    psql "$DB_URL" --no-align --tuples-only --quiet \
-      --command "SELECT name FROM hectic.migration ORDER BY name ASC" \
-      | awk NF
-  )
+  db_type=$(detect_db_type)
+  
+  case "$db_type" in
+    postgresql)
+      db_migrations=$(db_query "SELECT name FROM hectic.migration ORDER BY name ASC")
+      ;;
+    sqlite)
+      db_migrations=$(db_query "SELECT name FROM hectic_migration ORDER BY name ASC")
+      ;;
+  esac
 
   log debug "db mig: $db_migrations"
   db_mig_count=$(printf '%s' "$db_migrations" | wc -l)
@@ -415,17 +577,37 @@ migrate() {
       mig_hash=$(sha256sum "$mig_path")
       log info "applying migration ${WHITE}$fs_migration${NC} (up)"
       
-      # shellcheck disable=SC2086
-      if ! psql $psql_args "$DB_URL" <<SQL
+      case "$db_type" in
+        postgresql)
+          local psql_args
+          psql_args="$(form_psql_args)"
+          # shellcheck disable=SC2086
+          if ! psql $psql_args "$DB_URL" <<SQL
 BEGIN;
 \i '$escaped_path'
 INSERT INTO hectic.migration (name, hash) VALUES ('$escaped_name', '$mig_hash');
 COMMIT;
 SQL
-      then
-        log error "migration failed: ${WHITE}$fs_migration${NC}"
-        exit 4
-      fi
+          then
+            log error "migration failed: ${WHITE}$fs_migration${NC}"
+            exit 4
+          fi
+          ;;
+        sqlite)
+          local db_path
+          db_path=$(get_sqlite_path)
+          if ! sqlite3 "$db_path" <<SQL
+BEGIN;
+.read $mig_path
+INSERT INTO hectic_migration (name, hash) VALUES ('$escaped_name', '$mig_hash');
+COMMIT;
+SQL
+          then
+            log error "migration failed: ${WHITE}$fs_migration${NC}"
+            exit 4
+          fi
+          ;;
+      esac
       
       i=$((i + 1))
     done
@@ -451,17 +633,37 @@ SQL
       
       log info "reverting migration ${WHITE}$fs_migration${NC} (down)"
       
-      # shellcheck disable=SC2086
-      if ! psql $psql_args "$DB_URL" <<SQL
+      case "$db_type" in
+        postgresql)
+          local psql_args
+          psql_args="$(form_psql_args)"
+          # shellcheck disable=SC2086
+          if ! psql $psql_args "$DB_URL" <<SQL
 BEGIN;
 \i '$escaped_path'
 DELETE FROM hectic.migration WHERE name = '$escaped_name';
 COMMIT;
 SQL
-      then
-        log error "migration rollback failed: ${WHITE}$fs_migration${NC}"
-        exit 4
-      fi
+          then
+            log error "migration rollback failed: ${WHITE}$fs_migration${NC}"
+            exit 4
+          fi
+          ;;
+        sqlite)
+          local db_path
+          db_path=$(get_sqlite_path)
+          if ! sqlite3 "$db_path" <<SQL
+BEGIN;
+.read $mig_path
+DELETE FROM hectic_migration WHERE name = '$escaped_name';
+COMMIT;
+SQL
+          then
+            log error "migration rollback failed: ${WHITE}$fs_migration${NC}"
+            exit 4
+          fi
+          ;;
+      esac
       
       i=$((i - 1))
     done
@@ -506,10 +708,11 @@ SQL
 }
 
 form_psql_args() {
-  psql_args="-d $DB_URL -v ON_ERROR_STOP=1"
+  local psql_args="-v ON_ERROR_STOP=1"
   for var in ${VARIABLE_LIST:-}; do
     psql_args="$psql_args -v $var"
   done
+  printf '%s' "$psql_args"
 }
 
 create() {
@@ -609,10 +812,28 @@ generate_word() {
   printf '%s' "$w"
 }
 
-if ! command -v psql >/dev/null; then
-    log error "Required tool (psql) are not installed."
-    exit 127
-fi
+check_db_dependencies() {
+  [ "${DB_URL+x}" ] || return 0  # Skip if no DB_URL yet
+  
+  db_type=$(detect_db_type)
+  
+  case "$db_type" in
+    postgresql)
+      if ! command -v psql >/dev/null; then
+        log error "Required tool (psql) is not installed."
+        log error "PostgreSQL client tools are required for postgresql:// URLs"
+        exit 127
+      fi
+      ;;
+    sqlite)
+      if ! command -v sqlite3 >/dev/null; then
+        log error "Required tool (sqlite3) is not installed."
+        log error "SQLite3 client is required for sqlite:// URLs"
+        exit 127
+      fi
+      ;;
+  esac
+}
 
 if ! [ "${AS_LIBRARY+x}" ]; then
   while [ $# -gt 0 ]; do
