@@ -285,15 +285,18 @@ CREATE TABLE IF NOT EXISTS hectic_migration (
     applied_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Check version compatibility
-INSERT OR IGNORE INTO hectic_version (name, version) VALUES ('migrator', 'VERSION_PLACEHOLDER');
+-- Create trigger to enforce version compatibility
+CREATE TRIGGER IF NOT EXISTS hectic_version_check
+BEFORE INSERT ON hectic_version
+FOR EACH ROW
+WHEN NEW.name = 'migrator' 
+     AND EXISTS (SELECT 1 FROM hectic_version WHERE name = 'migrator' AND version != NEW.version)
+BEGIN
+    SELECT RAISE(ABORT, 'Incompatible migrator versions');
+END;
 
--- Verify version if it already exists
-SELECT CASE 
-    WHEN version != 'VERSION_PLACEHOLDER' AND name = 'migrator'
-    THEN RAISE(ABORT, 'Incompatible migrator versions')
-    ELSE 1
-END FROM hectic_version WHERE name = 'migrator';
+-- Insert version if not exists
+INSERT OR IGNORE INTO hectic_version (name, version) VALUES ('migrator', 'VERSION_PLACEHOLDER');
 
 COMMIT;
 EOF
