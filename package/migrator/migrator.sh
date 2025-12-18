@@ -241,7 +241,7 @@ BEGIN
         name          TEXT                 PRIMARY KEY,
         version       TEXT                 NOT NULL,
         installed_at  TIMESTAMPTZ          NOT NULL DEFAULT NOW()
-    );
+    )$inherits;
 
     INSERT INTO hectic.version (name, version) VALUES ('migrator', '$VERSION');
 
@@ -323,8 +323,139 @@ init_sql() {
 }
 
 help() {
-  # inherits: List one or more tables the migration table must inherit from
-  echo help
+  cat <<'EOF'
+migrator - Database Migration Tool
+
+USAGE:
+    migrator [OPTIONS] COMMAND [ARGS...]
+
+DESCRIPTION:
+    A lightweight database migration tool supporting PostgreSQL and SQLite.
+    Tracks migrations in a dedicated table and supports bidirectional migrations.
+
+COMMANDS:
+    init                Initialize migration tables in database
+    migrate             Apply or revert migrations
+    create              Create a new migration file
+    list                List available migrations
+    fetch               Fetch migration status from database
+
+GLOBAL OPTIONS:
+    --db-url URL, -u URL
+                        Database connection URL (required for most commands)
+                        PostgreSQL: postgresql://user@host/database
+                        SQLite:     sqlite:///path/to/file.db or /path/to/file.db
+    
+    --migration-dir DIR, -d DIR
+                        Directory containing migrations (default: ./migration)
+    
+    --inherits TABLE    (PostgreSQL only) Parent table for hectic.migration
+                        Can be specified multiple times
+
+MIGRATE SUBCOMMANDS:
+    up [N]              Apply next N migrations (default: 1)
+    up all              Apply all pending migrations (same as: up latest)
+    down [N]            Revert last N migrations (default: 1)
+    to MIGRATION        Migrate to specific migration (forward or backward)
+    to latest           Migrate to the latest migration (aliases: head, last)
+
+MIGRATE OPTIONS:
+    --force, -f         Force migration despite tree mismatch (not implemented)
+    --set VAR, -v VAR   Set psql variable (PostgreSQL only)
+
+INIT OPTIONS:
+    --dry-run           Print initialization SQL without executing
+
+CREATE OPTIONS:
+    --name NAME, -n NAME
+                        Name for the migration (default: random word)
+
+LIST OPTIONS:
+    --raw, -r           Output raw migration names without validation
+
+EXAMPLES:
+    # Initialize migration tracking
+    migrator --db-url postgresql://user@localhost/mydb init
+
+    # Create a new migration
+    migrator create --name add-users-table
+
+    # Apply next migration
+    migrator -u postgresql://user@localhost/mydb migrate up
+
+    # Apply next 3 migrations
+    migrator -u postgresql://user@localhost/mydb migrate up 3
+
+    # Apply all pending migrations
+    migrator -u postgresql://user@localhost/mydb migrate up all
+    # or:
+    migrator -u postgresql://user@localhost/mydb migrate to latest
+
+    # Revert last migration
+    migrator -u postgresql://user@localhost/mydb migrate down
+
+    # Migrate to specific version
+    migrator -u postgresql://user@localhost/mydb migrate to 20231201120000-add-users
+
+    # List migrations
+    migrator list
+
+    # Use SQLite
+    migrator --db-url sqlite:///path/to/db.sqlite migrate up
+
+    # PostgreSQL with table inheritance
+    migrator --inherits audit_log --db-url $DB_URL init
+
+MIGRATION FILE STRUCTURE:
+    migration/
+    └── 20231201120000-migration-name/
+        ├── up.sql      - Forward migration
+        └── down.sql    - Rollback migration
+
+MIGRATION NAMING:
+    Migrations must follow the format: YYYYMMDDHHMMSS-description
+    Example: 20231201120000-add-users-table
+
+DATABASE SUPPORT:
+    PostgreSQL:
+        - Full schema support (hectic.migration)
+        - Domains with regex validation
+        - Triggers and functions
+        - Table inheritance (--inherits)
+        - Custom psql variables (--set)
+    
+    SQLite:
+        - Simple table names (hectic_migration, hectic_version)
+        - CHECK constraints for validation
+        - Trigger-based version control
+        - File-based databases
+
+ENVIRONMENT VARIABLES:
+    MIGRATION_DIR       Default migration directory
+    DB_URL              Default database URL (can be overridden with --db-url)
+
+EXIT CODES:
+    0    Success
+    1    Generic error
+    2    Ambiguous arguments or unrelated migration tree
+    3    Missing required argument
+    4    Migration execution failed
+    5    Table does not exist (for --inherits)
+    9    Invalid argument or command
+    13   System/database incompatibility
+    127  Required tool not installed (psql or sqlite3)
+
+VERSION:
+    0.0.1
+
+AUTHOR:
+    Created with Nix and POSIX shell
+
+MORE INFO:
+    Migration files are executed within transactions.
+    Failed migrations are automatically rolled back.
+    Migration hashes are tracked to detect tampering.
+EOF
 }
 
 migrate_down() {
@@ -372,14 +503,20 @@ migrate_down() {
 
 migrate_up() {
   UP_NUMBER=1
+  local apply_all=0
+  
   while [ $# -gt 0 ]; do
     case $1 in
       --*|-*)
         log error "\`migrate up\` argument $WHITE$1$NC does not exists"
         exit 1
       ;;
+      all|latest|head)
+        apply_all=1
+        shift
+      ;;
       ''|*[!0-9]*)
-        log error "up argument not a number";
+        log error "up argument not a number or 'all'";
         exit 1;
       ;;
       *)
@@ -388,6 +525,17 @@ migrate_up() {
       ;;
     esac
   done
+
+  # If "all" specified, migrate to the last migration
+  if [ "$apply_all" -eq 1 ]; then
+    target_migration=$(printf '%s' "$fs_migrations" | tail -n1)
+    if [ -z "$target_migration" ]; then
+      log error "no migrations found"
+      exit 1
+    fi
+    printf '%s' "$target_migration"
+    return 0
+  fi
 
   # Calculate target migration: current + UP_NUMBER
   if [ -z "$db_migrations" ]; then
@@ -426,7 +574,17 @@ migrate_to() {
   done
 
   [ "${migration_name+x}" ] || { log error "no migration name specified"; exit 1; }
-  printf '%s' "$migration_name"
+  
+  # Handle special keywords for latest migration
+  case "$migration_name" in
+    latest|head|last)
+      # Return the last migration from filesystem
+      printf '%s' "$fs_migrations" | tail -n1
+      ;;
+    *)
+      printf '%s' "$migration_name"
+      ;;
+  esac
 }
 
 migration_list() {
@@ -839,9 +997,20 @@ check_db_dependencies() {
 }
 
 if ! [ "${AS_LIBRARY+x}" ]; then
+  # Show help if no arguments
+  [ $# -eq 0 ] && { help; exit 0; }
+  
   while [ $# -gt 0 ]; do
     log debug "arg: $1"
     case $1 in
+      --version|-V)
+        printf 'migrator version %s\n' "$VERSION"
+        exit 0
+      ;;
+      help|--help|-h)
+        help
+        exit 0
+      ;;
       migrate|create|fetch|list|init)
         [ "${SUBCOMMAND+x}" ] && { 
           log error "ambiguous subcommand, decide ${WHITE}$SUBCOMMAND ${NC}or ${WHITE}$1";
@@ -864,7 +1033,7 @@ if ! [ "${AS_LIBRARY+x}" ]; then
   done
   
   [ "${INHERITS_LIST+x}" ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
-  [ "${SUBCOMMAND+x}"    ] || { log error "no subcomand specified"; exit 1; }
+  [ "${SUBCOMMAND+x}"    ] || { log error "no subcommand specified. Use 'migrator help' for usage information."; exit 1; }
   
   
   log debug "subcommand: $WHITE$SUBCOMMAND"
