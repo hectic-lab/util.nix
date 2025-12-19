@@ -1,4 +1,4 @@
-{ dash, hectic }:
+{ dash, hectic, sqlite, postgresql_17 }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -9,7 +9,7 @@ let
   migrator = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "migrator";
-    runtimeInputs = [ ];
+    runtimeInputs = [ sqlite postgresql_17 ];
 
     text = ''
       ${builtins.readFile hectic.helpers.posix-shell.log}

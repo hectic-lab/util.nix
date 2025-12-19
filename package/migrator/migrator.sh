@@ -16,6 +16,7 @@ set -eu
 
 VERSION='0.0.1'
 MIGRATION_DIR="${MIGRATION_DIR:-migration}"
+DB_URL="${DB_URL:-DB_URL}"
 REMAINING_ARS=
 
 quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
@@ -526,7 +527,6 @@ migrate_up() {
     esac
   done
 
-  # If "all" specified, migrate to the last migration
   if [ "$apply_all" -eq 1 ]; then
     target_migration=$(printf '%s' "$fs_migrations" | tail -n1)
     if [ -z "$target_migration" ]; then
@@ -575,7 +575,6 @@ migrate_to() {
 
   [ "${migration_name+x}" ] || { log error "no migration name specified"; exit 1; }
   
-  # Handle special keywords for latest migration
   case "$migration_name" in
     latest|head|last)
       # Return the last migration from filesystem
@@ -914,7 +913,9 @@ fetch() {
     case $1 in
       --db-url|-u)
         # shellcheck disable=SC2034
-        DB_URL=$2
+        if ! [ "${DB_URL+x}" ]; then
+          DB_URL=$2
+        fi
         shift 2
       ;;
     esac
