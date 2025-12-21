@@ -32,6 +32,11 @@ sha256sum() {
 # detect_db_type()
 # Returns: "postgresql" or "sqlite"
 detect_db_type() {
+  if ! [ "${DB_URL+x}" ]; then
+    log error "no ${WHITE}DB_URL${NC} or ${WHITE}--db-url${NC} specified"
+    exit 3
+  fi
+
   case "$DB_URL" in
     postgresql://*|postgres://*)
       printf 'postgresql'
@@ -42,7 +47,7 @@ detect_db_type() {
     *)
       log error "unsupported database URL format: ${WHITE}$DB_URL${NC}"
       log error "supported formats: postgresql://... or sqlite://... or *.db"
-      exit 1
+      exit 3
       ;;
   esac
 }
@@ -666,22 +671,67 @@ migrate() {
   db_mig_count=$(printf '%s' "$db_migrations" | wc -l)
   log debug "mig count: $db_mig_count"
 
+  # Log migration lists for debugging
+  fs_mig_count=$(printf '%s' "$fs_migrations" | wc -l)
+  log info "Filesystem migrations found: ${WHITE}$fs_mig_count"
+  log info "Database migrations applied: ${WHITE}$db_mig_count"
+  
   # Check if the DB migrations form a proper prefix of disk migrations
   # (meaning all DB-applied migration filenames should appear in the same order at the start).
   i=0
   for db_migration in $db_migrations; do
     fs_migration=$(printf '%s' "$fs_migrations" | sed -n "$((i+1))p")
+    log debug "Checking migration $((i+1)): DB=${WHITE}$db_migration${NC} vs FS=${WHITE}$fs_migration"
+    
     if [ -z "$fs_migration" ] || [ "$fs_migration" != "$db_migration" ]; then
-      if [ -z "$FORCE" ]; then
-        log error "unrelated migration tree detected. Use --force to proceed."
+      if ! [ "${FORCE+x}" ]; then
+        log error "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log error "${RED}Migration history mismatch detected!${NC}"
+        log error "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log error ""
+        log error "Position: Migration #$((i+1))"
+        log error "Database has: ${WHITE}$db_migration"
+        log error "Filesystem has: ${WHITE}$fs_migration"
+        log error ""
+        log error "Full filesystem migrations (in order):"
+        j=1
+        printf '%s\n' "$fs_migrations" | while IFS= read -r m; do
+          log error "  $j. ${CYAN}$m"
+          j=$((j+1))
+        done
+        log error ""
+        log error "Full database migrations (in order):"
+        j=1
+        printf '%s\n' "$db_migrations" | while IFS= read -r m; do
+          log error "  $j. ${CYAN}$m"
+          j=$((j+1))
+        done
+        log error ""
+        log error "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log error "This usually means:"
+        log error "  • Migration files were removed or renamed"
+        log error "  • Migrations were applied out of order"
+        log error "  • Database and codebase are from different versions"
+        log error ""
+        log error "${YELLOW}To proceed anyway, use: ${WHITE}--force${NC}${YELLOW}!${NC}"
+        log error "${YELLOW}Warning: This may cause data inconsistencies!${NC}"
+        log error "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         exit 2
       else
-        log error "unrelated migration tree forced. Proceeding..."
+        log notice "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log notice "${YELLOW}Migration history mismatch detected but ${WHITE}--force${NC}${YELLOW} specified${NC}"
+        log notice "Position: Migration #$((i+1))"
+        log notice "Database has: ${WHITE}$db_migration"
+        log notice "Filesystem has: ${WHITE}$fs_migration"
+        log notice "${YELLOW}Proceeding with migration despite mismatch...${NC}"
+        log notice "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         break
       fi
     fi
     i=$((i+1))
   done
+  
+  log info "Migration history validation: ${GREEN}OK${NC} (${WHITE}$i${NC} migrations match)"
 
   eval "set -- $MIGRATOR_REMAINING_ARS"
   target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
