@@ -100,7 +100,7 @@ db_query() {
       local db_path
       db_path=$(get_sqlite_path)
       # Use -noheader -list for clean output (one value per line, no formatting)
-      sqlite3 -noheader -list "$db_path" "$sql" | awk NF
+      sqlite3 -bail -noheader -list "$db_path" "$sql" | awk NF
       ;;
   esac
 }
@@ -126,7 +126,7 @@ SQL
     sqlite)
       local db_path
       db_path=$(get_sqlite_path)
-      sqlite3 -batch "$db_path" <<SQL
+      sqlite3 -bail -batch "$db_path" <<SQL
 BEGIN;
 .read $file_path
 COMMIT;
@@ -808,8 +808,8 @@ SQL
         sqlite)
           local db_path
           db_path=$(get_sqlite_path)
-          if ! sqlite3 -batch "$db_path" <<SQL
-BEGIN;
+          if ! sqlite3 -bail -batch "$db_path" <<SQL
+BEGIN TRANSACTION;
 .read $mig_path
 INSERT INTO hectic_migration (name, hash) VALUES ('$escaped_name', '$mig_hash');
 COMMIT;
@@ -864,8 +864,8 @@ SQL
         sqlite)
           local db_path
           db_path=$(get_sqlite_path)
-          if ! sqlite3 -batch "$db_path" <<SQL
-BEGIN;
+          if ! sqlite3 -bail -batch "$db_path" <<SQL
+BEGIN TRANSACTION;
 .read $mig_path
 DELETE FROM hectic_migration WHERE name = '$escaped_name';
 COMMIT;
@@ -886,37 +886,6 @@ SQL
       log notice "successfully migrated down to ${WHITE}$target_migration${NC}"
     fi
   fi
-}
-
-migrate_inner() {
-  # depricated, rewrite
-  printf '%s\n' "$fs_migrations" | while IFS= read -r fs_migration; do
-    # skip already applied migrations
-    printf '%s' "$db_migrations" | grep -qxF "$fs_migration" && continue
-
-    psql_args="$(form_psql_args)"
-
-    direction=1
-    mig_direction=$([ "$direction" -gt 0 ] && printf 'up.sql' || printf 'down.sql')
-
-    escaped_name=$(printf '%s' "$fs_migration" | sed "s/'/''/g")
-    mig_path=$(printf '%s/%s/%s' "$MIGRATION_DIR" "$fs_migration" "$mig_direction")
-    escaped_path=$(printf '%s' "$mig_path" | sed "s/'/''/g")
-
-    log trace "mig name: $escaped_name; mig path: $escaped_path"
-
-    # shellcheck disable=SC2086
-    if ! psql $psql_args <<SQL
-BEGIN;
-\i '$escaped_path';
-INSERT INTO hectic.migration (name, hash) VALUES ('$escaped_name', '$(sha256sum "$mig_path")');
-COMMIT;
-SQL
-    then
-      log error "migration failed: ${WHITE}$fs_migration${NC}"
-      exit 4
-    fi
-  done
 }
 
 form_psql_args() {
