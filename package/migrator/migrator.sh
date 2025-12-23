@@ -80,7 +80,8 @@ db_exec() {
     sqlite)
       local db_path
       db_path=$(get_sqlite_path)
-      printf '%s' "$sql" | sqlite3 "$db_path"
+      # Use -batch for non-interactive execution
+      printf '%s' "$sql" | sqlite3 -batch "$db_path"
       ;;
   esac
 }
@@ -98,7 +99,8 @@ db_query() {
     sqlite)
       local db_path
       db_path=$(get_sqlite_path)
-      sqlite3 "$db_path" "$sql"
+      # Use -noheader -list for clean output (one value per line, no formatting)
+      sqlite3 -noheader -list "$db_path" "$sql" | awk NF
       ;;
   esac
 }
@@ -124,7 +126,7 @@ SQL
     sqlite)
       local db_path
       db_path=$(get_sqlite_path)
-      sqlite3 "$db_path" <<SQL
+      sqlite3 -batch "$db_path" <<SQL
 BEGIN;
 .read $file_path
 COMMIT;
@@ -806,7 +808,7 @@ SQL
         sqlite)
           local db_path
           db_path=$(get_sqlite_path)
-          if ! sqlite3 "$db_path" <<SQL
+          if ! sqlite3 -batch "$db_path" <<SQL
 BEGIN;
 .read $mig_path
 INSERT INTO hectic_migration (name, hash) VALUES ('$escaped_name', '$mig_hash');
@@ -862,7 +864,7 @@ SQL
         sqlite)
           local db_path
           db_path=$(get_sqlite_path)
-          if ! sqlite3 "$db_path" <<SQL
+          if ! sqlite3 -batch "$db_path" <<SQL
 BEGIN;
 .read $mig_path
 DELETE FROM hectic_migration WHERE name = '$escaped_name';
