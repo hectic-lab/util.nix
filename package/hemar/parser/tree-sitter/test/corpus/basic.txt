@@ -129,8 +129,13 @@ indexes
   (element
     (interpolation
       (path
-        (index)
-        (index)
-        (index)
-        (index)
-        (index))))))
+        (index
+          (integer_index))
+        (index
+          (integer_index))
+        (index
+          (integer_index))
+        (index
+          (integer_index))
+        (index
+          (integer_index))))))
