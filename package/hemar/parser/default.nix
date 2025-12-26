@@ -1,26 +1,7 @@
 { lib, hectic, dash, symlinkJoin, callPackage }: let
-  shell = "${dash}/bin/dash";
-  bashOptions = [
-    "errexit"
-    "nounset"
-  ];
-
-  hemar-parser = hectic.writeShellApplication {
-    inherit shell bashOptions;
-    name = "hemar";
-    runtimeInputs = [ ];
-
-    text = ''
-      # shellcheck disable=SC2034
-      WORKSPACE=${./.}
-      ${builtins.readFile hectic.helpers.posix-shell.log}
-      ${builtins.readFile ./hemar-parser.sh}
-    '';
-  };
-
   tree-sitter-hemar = callPackage ./tree-sitter {};
 in
 symlinkJoin {
   name = "hemar-parser";
-  paths = [ hemar-parser tree-sitter-hemar ];
+  paths = [ tree-sitter-hemar ];
 }

@@ -4,7 +4,7 @@
 , dash
 , yq-go
 , tree-sitter
-, hemar-grammar
+, hemar-parser
 }:
 
 stdenv.mkDerivation {
@@ -41,11 +41,11 @@ stdenv.mkDerivation {
     # Also set TREE_SITTER_LIBDIR to find the hemar grammar
     wrapProgram $out/bin/hemar-render \
       --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter ]} \
-      --set TREE_SITTER_LIBDIR ${hemar-grammar}/lib
+      --set TREE_SITTER_LIBDIR ${hemar-parser}/lib
     
     wrapProgram $out/bin/hemar \
       --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter ]} \
-      --set TREE_SITTER_LIBDIR ${hemar-grammar}/lib
+      --set TREE_SITTER_LIBDIR ${hemar-parser}/lib
   '';
 
   meta = with lib; {
