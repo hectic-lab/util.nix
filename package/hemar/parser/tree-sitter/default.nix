@@ -1,4 +1,4 @@
-{ lib, stdenv, tree-sitter, nodejs }:
+{ lib, stdenv, tree-sitter, nodejs, clang, makeWrapper }:
 
 stdenv.mkDerivation {
   pname = "tree-sitter-hemar";
@@ -6,7 +6,10 @@ stdenv.mkDerivation {
 
   src = ./.;
 
-  nativeBuildInputs = [ tree-sitter nodejs ];
+  # Multiple outputs
+  outputs = [ "out" "bin" ];
+
+  nativeBuildInputs = [ tree-sitter nodejs clang makeWrapper ];
 
   buildPhase = ''
     export HOME="$TMPDIR"
@@ -21,6 +24,7 @@ stdenv.mkDerivation {
   '';
 
   installPhase = ''
+    # Install to $out - tree-sitter files for neovim and other uses
     mkdir -p $out/lib
     mkdir -p $out/parser
     mkdir -p $out/share/tree-sitter/grammars
@@ -35,6 +39,18 @@ stdenv.mkDerivation {
 
     # Install grammar files for reference
     cp -r . $out/parser/
+
+    # Install to $bin - wrapper script for tree-sitter CLI
+    mkdir -p $bin/bin
+    
+    # Create a wrapper script that includes all necessary dependencies
+    makeWrapper ${tree-sitter}/bin/tree-sitter $bin/bin/tree-sitter-hemar \
+      --prefix PATH : ${lib.makeBinPath [ nodejs clang ]}
+    
+    # Wrap the parse script with necessary PATH
+    mv $bin/bin/tree-sitter-hemar-parse $bin/bin/.tree-sitter-hemar-parse-unwrapped
+    makeWrapper $bin/bin/.tree-sitter-hemar-parse-unwrapped $bin/bin/tree-sitter-hemar-parse \
+      --prefix PATH : ${lib.makeBinPath [ nodejs clang ]}
   '';
 
   meta = with lib; {
