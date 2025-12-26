@@ -70,19 +70,20 @@
     system,
     pkgs,
   }: {
-    packages.${system}         = import ./package           { inherit flake self inputs pkgs system; };
-    devShells.${system}        = import ./devshell          { inherit flake self inputs pkgs system; };
-    legacyPackages.${system}   = import ./legacy            { inherit flake self inputs pkgs system; };
-    nixosConfigurations        = {};  
-    checks.${system}           = import ./test              { inherit flake self inputs pkgs system; };
+    packages.${system}         = import ./package            { inherit flake self inputs pkgs system; };
+    devShells.${system}        = import ./devshell           { inherit flake self inputs pkgs system; };
+    legacyPackages.${system}   = import ./legacy             { inherit flake self inputs pkgs system; };
+    checks.${system}           = import ./test               { inherit flake self inputs pkgs system; };
   }) // {
     lib = self-lib;
-    overlays.default           = import ./overlay           { inherit flake self inputs; };
-    nixosModules               = import ./nixos/module      { inherit flake self inputs; };
-    templates                  = import ./template          { inherit flake self inputs; };
-    nixosConfigurations
+    overlays.default           = import ./overlay            { inherit flake self inputs; };
+    nixosModules               = import ./nixos/module       { inherit flake self inputs; };
+    templates                  = import ./template           { inherit flake self inputs; };
+    nixosConfigurations = {
       # NOTE(yukkop): in bfs one of dependencies is shadow-4.17.4 that
       # unsupported on aarch64-darwin
-      ."bfs|x86_64-linux"      = import ./nixos/system/bfs  { inherit flake self inputs; system = "x86_64-linux"; };
+      "bfs|x86_64-linux"       = import ./nixos/system/bfs   { inherit flake self inputs; system = "x86_64-linux"; };
+      "neuro|x86_64-linux"     = import ./nixos/system/neuro { inherit flake self inputs; system = "x86_64-linux"; };
+    };
   };
 }
