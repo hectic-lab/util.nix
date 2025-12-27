@@ -18,34 +18,28 @@ stdenv.mkDerivation {
 
   dontBuild = true;
 
+  doCheck = true;
+
+  checkPhase = ''
+    export HOME="$TMPDIR"
+    export PATH="${lib.makeBinPath [ dash yq-go tree-sitter hectic.hemar-parser ]}:$PATH"
+    
+    patchShebangs ./hemar-renderer.sh ./test/lauch.sh
+    
+    ${dash}/bin/dash ./test/lauch.sh
+  '';
+
   installPhase = ''
     mkdir -p $out/bin
     mkdir -p $out/share/hemar/examples
     
-    # Install renderer
-    cp render.sh $out/bin/hemar-render
-    chmod +x $out/bin/hemar-render
+    cp ./hemar-renderer.sh $out/bin/hemar-renderer
+    chmod +x $out/bin/hemar-renderer
     
-    # Install main entry point
-    cp hemar $out/bin/hemar
-    chmod +x $out/bin/hemar
+    patchShebangs $out/bin/hemar-renderer
     
-    # Install examples
-    cp -r examples/* $out/share/hemar/examples/
-    
-    # Patch shebangs
-    patchShebangs $out/bin/hemar-render
-    patchShebangs $out/bin/hemar
-    
-    # Wrap scripts to ensure dependencies are available
-    # Also set TREE_SITTER_LIBDIR to find the hemar grammar
-    wrapProgram $out/bin/hemar-render \
-      --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter ]} \
-      --set TREE_SITTER_LIBDIR ${hectic.hemar-parser}/lib
-    
-    wrapProgram $out/bin/hemar \
-      --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter ]} \
-      --set TREE_SITTER_LIBDIR ${hectic.hemar-parser}/lib
+    wrapProgram $out/bin/hemar-renderer \
+      --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter hectic.hemar-parser ]}
   '';
 
   meta = with lib; {

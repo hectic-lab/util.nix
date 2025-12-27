@@ -1,12 +1,9 @@
 #!/bin/dash
 
-# Hemar Renderer
-# Takes tree-sitter AST (as JSON via yq) and a data model, produces rendered output
+# Hemar - Template renderer
+# Parses a template file using tree-sitter and renders it with a data model
 
 set -eu
-
-# Usage: render.sh <ast.json> <model.json>
-# Or pipe AST: cat ast.json | render.sh - <model.json>
 
 # Colors for logging
 RED='\033[0;31m'
@@ -21,30 +18,45 @@ log_warn() {
     printf "${YELLOW}[WARN]${NC} %s\n" "$1" >&2
 }
 
-# Parse arguments
-AST_FILE="${1:--}"
-MODEL_FILE="${2:-}"
+# Parse command line arguments
+TEMPLATE="${1:-"${TEMPLATE_PATH:-}"}"
+MODEL="${2:-"${MODEL:-}"}"
 
-if [ -z "$MODEL_FILE" ]; then
-    log_error "Usage: $0 <ast.json> <model.json>"
+if [ -z "$TEMPLATE" ] || [ -z "$MODEL" ]; then
+    printf "Usage: %s <template> <model.json>\n" "$0" >&2
     exit 1
 fi
 
-if [ ! -f "$MODEL_FILE" ]; then
-    log_error "Model file not found: $MODEL_FILE"
+if [ ! -f "$TEMPLATE" ]; then
+    log_error "Template file not found: $TEMPLATE"
     exit 1
 fi
 
-# Read AST
-if [ "$AST_FILE" = "-" ]; then
-    AST_JSON=$(cat)
+if [ ! -f "$MODEL" ]; then
+    log_error "Model file not found: $MODEL"
+    exit 1
+fi
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Set up tree-sitter to find the hemar grammar
+# If TREE_SITTER_LIBDIR is set (by Nix wrapper), use it
+# Otherwise, assume grammar is in development location
+if [ -n "${TREE_SITTER_LIBDIR:-}" ]; then
+    # Nix-installed grammar
+    export TREE_SITTER_DIR="$TREE_SITTER_LIBDIR/../share/tree-sitter"
 else
-    if [ ! -f "$AST_FILE" ]; then
-        log_error "AST file not found: $AST_FILE"
-        exit 1
+    # Development mode - look for grammar in ../grammar/tree-sitter
+    GRAMMAR_DIR="$(cd "$SCRIPT_DIR/../grammar/tree-sitter" 2>/dev/null && pwd || echo "")"
+    if [ -n "$GRAMMAR_DIR" ]; then
+        export TREE_SITTER_DIR="$GRAMMAR_DIR"
     fi
-    AST_JSON=$(cat "$AST_FILE")
 fi
+
+# Parse template with tree-sitter and convert to JSON
+# Requires: tree-sitter, yq
+AST_JSON=$(hemar-parser --xml "$TEMPLATE" 2>/dev/null | yq -p=xml -o=json)
 
 # Save to temp files for yq processing
 AST_TEMP=$(mktemp)
@@ -52,7 +64,23 @@ MODEL_TEMP=$(mktemp)
 trap 'rm -f "$AST_TEMP" "$MODEL_TEMP"' EXIT INT HUP
 
 printf '%s' "$AST_JSON" > "$AST_TEMP"
-cat "$MODEL_FILE" > "$MODEL_TEMP"
+cat "$MODEL" > "$MODEL_TEMP"
+
+# extract_string_value(string_node_content)
+# Extracts the actual string value from a tree-sitter string node
+extract_string_value() {
+    local str="$1"
+    
+    # Remove surrounding quotes if present
+    if [ "${str#\"}" != "$str" ] && [ "${str%\"}" != "$str" ]; then
+        str="${str#\"}"
+        str="${str%\"}"
+        # Unescape doubled quotes: "" -> "
+        str=$(printf '%s' "$str" | sed 's/""/"/g')
+    fi
+    
+    printf '%s' "$str"
+}
 
 # resolve_path(path_array, model, scope_stack)
 # Resolves a path in the data model
@@ -126,22 +154,6 @@ resolve_path() {
     else
         printf '%s' "$result"
     fi
-}
-
-# extract_string_value(string_node_content)
-# Extracts the actual string value from a tree-sitter string node
-extract_string_value() {
-    local str="$1"
-    
-    # Remove surrounding quotes if present
-    if [ "${str#\"}" != "$str" ] && [ "${str%\"}" != "$str" ]; then
-        str="${str#\"}"
-        str="${str%\"}"
-        # Unescape doubled quotes: "" -> "
-        str=$(printf '%s' "$str" | sed 's/""/"/g')
-    fi
-    
-    printf '%s' "$str"
 }
 
 # render_element(element_json, model_file, scope_stack, depth)

@@ -5,8 +5,8 @@
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-EXAMPLES="$SCRIPT_DIR/examples"
-HEMAR="$SCRIPT_DIR/hemar"
+EXAMPLES="$SCRIPT_DIR/script"
+HEMAR="$SCRIPT_DIR/../hemar-renderer.sh"
 
 # Colors
 GREEN='\033[0;32m'
@@ -27,7 +27,7 @@ test_render() {
     printf "Testing %s... " "$name"
     
     local output
-    if output=$("$HEMAR" "$template" "$model" 2>&1); then
+    if output=$(dash "$HEMAR" "$template" "$model" 2>&1); then
         if [ "$output" = "$expected" ]; then
             printf "${GREEN}PASSED${NC}\n"
             passed=$((passed + 1))
