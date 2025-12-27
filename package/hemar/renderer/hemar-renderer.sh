@@ -169,8 +169,14 @@ render_element() {
     printf '%s' "$element" > "$elem_temp"
     
     # Get element name (tag name from tree-sitter XML)
+    # Filter out XML attributes (keys starting with +@)
     local elem_name
-    elem_name=$(yq -r 'keys | .[0]' "$elem_temp" 2>/dev/null || echo "")
+    elem_name=$(yq -r 'keys | .[]' "$elem_temp" 2>/dev/null | grep -v '^+@' | head -n 1 || echo "")
+    
+    if [ -z "$elem_name" ]; then
+        rm -f "$elem_temp"
+        return 0
+    fi
     
     case "$elem_name" in
         interpolation)
@@ -179,10 +185,28 @@ render_element() {
             path_json=$(yq -o j '.interpolation.path' "$elem_temp")
             
             if [ "$path_json" != "null" ]; then
-                # Resolve and output the value
-                local value
-                value=$(resolve_path "$path_json" "$model_file" "$scope_stack")
-                printf '%s' "$value"
+                # Check if it's a simple string path (single identifier)
+                local path_temp=$(mktemp)
+                trap 'rm -f "$path_temp"' EXIT INT HUP
+                printf '%s' "$path_json" > "$path_temp"
+                
+                local has_string
+                has_string=$(yq -r '.string."+content" // empty' "$path_temp" 2>/dev/null || echo "")
+                
+                if [ -n "$has_string" ]; then
+                    # Simple string path - extract and resolve directly
+                    local key
+                    key=$(extract_string_value "$has_string")
+                    local value
+                    value=$(yq -r ".\"$key\" // empty" "$model_file" 2>/dev/null || echo "")
+                    printf '%s' "$value"
+                else
+                    # Complex path - use resolve_path (expects array format)
+                    local value
+                    value=$(resolve_path "$path_json" "$model_file" "$scope_stack")
+                    printf '%s' "$value"
+                fi
+                rm -f "$path_temp"
             fi
             ;;
         segment)
@@ -281,11 +305,11 @@ render_element() {
 }
 
 # Main rendering loop
-# The AST is in yq format: sources.source.source_file
+# The AST is in yq format: source_file
 main() {
     # Extract source_file element array
     local elements_json
-    elements_json=$(yq -o j '.sources.source.source_file.element' "$AST_TEMP")
+    elements_json=$(yq -o j '.source_file.element' "$AST_TEMP")
     
     if [ "$elements_json" = "null" ]; then
         log_error "No elements found in AST"

@@ -3,5 +3,5 @@
 in
 symlinkJoin {
   name = "hemar-parser";
-  paths = [ tree-sitter-hemar ];
+  paths = [ tree-sitter-hemar tree-sitter-hemar.bin ];
 }
