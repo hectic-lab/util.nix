@@ -68,7 +68,12 @@ stdenv.mkDerivation {
     
     makeWrapper ${tree-sitter}/bin/tree-sitter $bin/bin/tree-sitter-hemar \
       --prefix PATH : ${lib.makeBinPath [ nodejs clang ]} \
-      --set TREE_SITTER_GRAMMAR_PATH "${grammarDrv}/share/tree-sitter/grammars"
+      --set TREE_SITTER_GRAMMAR_PATH "${grammarDrv}/share/tree-sitter/grammars" \
+      --chdir "${grammarDrv}/parser"
+
+    # Create hemar-parser wrapper that runs tree-sitter-hemar parse
+    makeWrapper $bin/bin/tree-sitter-hemar $bin/bin/hemar-parser \
+      --add-flags "parse"
   '';
 
   meta = with lib; {
