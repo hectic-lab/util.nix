@@ -14,7 +14,7 @@ fix_name_section() {
   $0 ~ /^\.(SS|SH) NAME$/ { $0 = ".SH NAME"; inside=1 }
   inside && /\\\[em]/ { gsub(/\\\[em]/,"\\-") }
   inside && /^\.RE$/ { inside=0 }
-  { print }' $1
+  { print }' "$1"
 }
 
 # find all *.html|*.htm under current dir (recursive)

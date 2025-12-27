@@ -31,7 +31,7 @@
     ) (lib.filterAttrs (_: v: v != null)
       (lib.mapAttrs (n: t: mkTestDrv n t) testDir));
 
-  hemar = self.packages.${system}.hemar-parser;
+  hemar = self.packages.${system}.hemar-renderer;
   mkPgTest = testName: testDrv: pkgs.runCommand "hemar-test-${testName}"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused ];

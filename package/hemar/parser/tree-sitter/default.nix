@@ -19,6 +19,16 @@ let
       tree-sitter build --output parser
     '';
 
+    doCheck = true;
+
+    checkPhase = ''
+      export HOME="$TMPDIR"
+      export XDG_CACHE_HOME="$TMPDIR/.cache"
+      
+      # Run tree-sitter tests
+      tree-sitter test
+    '';
+
     installPhase = ''
       mkdir -p $out/lib
       mkdir -p $out/parser

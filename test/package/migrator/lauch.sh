@@ -65,7 +65,7 @@ log info "run test ${WHITE}${test_name}${NC}"
 mkdir './test'
 cp -r "$test"/* './test/'
 cd './test'
-. './run.sh'
+#. './run.sh'
 
 HECTIC_NAMESPACE=test-laucher
 

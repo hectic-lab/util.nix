@@ -146,14 +146,14 @@ in {
   hemar-renderer               = pkgs.callPackage ./hemar/renderer                    {};
   pg-17-ext-http               = buildHttpExt      pkgs "17";
   pg-17-ext-smtp-client        = buildSmtpExt      pkgs "17";
-  pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";
+  #pg-17-ext-plhaskell          = buildPlHaskellExt pkgs "17";
   pg-17-ext-plsh               = buildPlShExt      pkgs "17";
   pg-16-ext-http               = buildHttpExt      pkgs "16";
   pg-16-ext-smtp-client        = buildSmtpExt      pkgs "16";
-  pg-16-ext-plhaskell          = buildPlHaskellExt pkgs "16";
+  #pg-16-ext-plhaskell          = buildPlHaskellExt pkgs "16";
   pg-16-ext-plsh               = buildPlShExt      pkgs "16";
   pg-15-ext-http               = buildHttpExt      pkgs "15";
   pg-15-ext-smtp-client        = buildSmtpExt      pkgs "15";
-  pg-15-ext-plhaskell          = buildPlHaskellExt pkgs "15";
+  #pg-15-ext-plhaskell          = buildPlHaskellExt pkgs "15";
   pg-15-ext-plsh               = buildPlShExt      pkgs "15";
 }
