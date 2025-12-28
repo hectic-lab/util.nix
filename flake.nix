@@ -83,7 +83,9 @@
       # NOTE(yukkop): in bfs one of dependencies is shadow-4.17.4 that
       # unsupported on aarch64-darwin
       "bfs|x86_64-linux"       = import ./nixos/system/bfs   { inherit flake self inputs; system = "x86_64-linux"; };
+      # FIXME(yukkop): some why I cannot merge nixosConfigurations from `forAllSystemsWithPkgs` with this 
       "neuro|x86_64-linux"     = import ./nixos/system/neuro { inherit flake self inputs; system = "x86_64-linux"; };
+      "games|x86_64-linux"     = import ./nixos/system/games { inherit flake self inputs; system = "x86_64-linux"; };
     };
   };
 }
