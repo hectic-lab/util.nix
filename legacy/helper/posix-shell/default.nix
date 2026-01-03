@@ -1,10 +1,4 @@
-{ dash, hectic }: let
-  shell = "${dash}/bin/dash";
-  bashOptions = [
-    "errexit"
-    "nounset"
-  ];
-in {
+{ dash, hectic, shellcheck, coreutils }: {
   log = hectic.writeDash "log.sh" ''
     ${builtins.readFile ./colors.sh}
     ${builtins.readFile ./log.sh}

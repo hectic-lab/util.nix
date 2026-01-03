@@ -1,5 +1,4 @@
 { lib
-, stdenv
 , makeWrapper
 , dash
 , yq-go
@@ -7,7 +6,7 @@
 , hectic
 }:
 
-stdenv.mkDerivation {
+hectic.hectic-env.mkDerivation {
   pname = "hemar-renderer";
   version = "0.1.0";
 
@@ -16,15 +15,20 @@ stdenv.mkDerivation {
   nativeBuildInputs = [ makeWrapper ];
   buildInputs = [ dash yq-go tree-sitter ];
 
-  dontBuild = true;
-
   doCheck = true;
+
+  buildPhase = ''
+    hecticInclude ${hectic.helpers.posix-shell.log} ./hemar-renderer.sh
+
+    cat ${hectic.helpers.posix-shell.log} \
+      ./test.sh > ./test/launch.sh
+    
+    patchShebangs ./hemar-renderer.sh ./test/lauch.sh
+  '';
 
   checkPhase = ''
     export HOME="$TMPDIR"
     export PATH="${lib.makeBinPath [ dash yq-go tree-sitter hectic.hemar-parser ]}:$PATH"
-    
-    patchShebangs ./hemar-renderer.sh ./test/lauch.sh
     
     ${dash}/bin/dash ./test/lauch.sh
   '';
@@ -35,8 +39,6 @@ stdenv.mkDerivation {
     
     cp ./hemar-renderer.sh $out/bin/hemar-renderer
     chmod +x $out/bin/hemar-renderer
-    
-    patchShebangs $out/bin/hemar-renderer
     
     wrapProgram $out/bin/hemar-renderer \
       --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter hectic.hemar-parser ]}

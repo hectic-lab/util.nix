@@ -1,5 +1,11 @@
-  { dash, lib, writers }: name: argsOrScript:
-  if lib.isAttrs argsOrScript && !lib.isDerivation argsOrScript then
-    writers.makeScriptWriter (argsOrScript // { interpreter = "${lib.getExe dash}"; }) name
-  else
-    writers.makeScriptWriter { interpreter = "${lib.getExe dash}"; } name argsOrScript
+{ dash, lib, writers }: name: script:
+(
+  writers.makeScriptWriter {
+    interpreter = "${lib.getExe dash}"; 
+  } name script
+).overrideAttrs (_: {
+  # NOTE: some versions of nix do not allow `builtins.readFile` 
+  #       for a derivation coz bla bla bla absolute path bla bla bla bla, hooy sasi 
+  #       so better to use this variable
+  scriptText = script;
+})

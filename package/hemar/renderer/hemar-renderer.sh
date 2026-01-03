@@ -37,22 +37,6 @@ if [ ! -f "$MODEL" ]; then
     exit 1
 fi
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Set up tree-sitter to find the hemar grammar
-# If TREE_SITTER_LIBDIR is set (by Nix wrapper), use it
-# Otherwise, assume grammar is in development location
-if [ -n "${TREE_SITTER_LIBDIR:-}" ]; then
-    # Nix-installed grammar
-    export TREE_SITTER_DIR="$TREE_SITTER_LIBDIR/../share/tree-sitter"
-else
-    # Development mode - look for grammar in ../grammar/tree-sitter
-    GRAMMAR_DIR="$(cd "$SCRIPT_DIR/../grammar/tree-sitter" 2>/dev/null && pwd || echo "")"
-    if [ -n "$GRAMMAR_DIR" ]; then
-        export TREE_SITTER_DIR="$GRAMMAR_DIR"
-    fi
-fi
 
 # Parse template with tree-sitter and convert to JSON
 # Requires: tree-sitter, yq
@@ -156,7 +140,7 @@ resolve_path() {
     fi
 }
 
-# render_element(element_json, model_file, scope_stack, depth)
+# render_element(element_json, model_file, scope_stack, depth?)
 # Recursively renders an element
 render_element() {
     local element="$1"
@@ -304,10 +288,9 @@ render_element() {
     rm -f "$elem_temp"
 }
 
+# main()
 # Main rendering loop
-# The AST is in yq format: source_file
 main() {
-    # Extract source_file element array
     local elements_json
     elements_json=$(yq -o j '.source_file.element' "$AST_TEMP")
     
@@ -316,12 +299,10 @@ main() {
         exit 1
     fi
     
-    # Check if single element or array
     local is_array
     is_array=$(printf '%s' "$elements_json" | yq -r 'type')
     
     if [ "$is_array" = "!!seq" ]; then
-        # Multiple elements
         local num_elements
         num_elements=$(printf '%s' "$elements_json" | yq 'length')
         
@@ -333,10 +314,10 @@ main() {
             i=$((i + 1))
         done
     else
-        # Single element
         render_element "$elements_json" "$MODEL_TEMP" "[]" 0
     fi
 }
 
-main
-
+if ! [ "${AS_LIBRARY+x}" ]; then
+  main
+fi
