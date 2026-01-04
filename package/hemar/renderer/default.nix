@@ -18,11 +18,9 @@ hectic.hectic-env.mkDerivation {
   doCheck = true;
 
   buildPhase = ''
-    hecticInclude ${hectic.helpers.posix-shell.log} ./hemar-renderer.sh
+    hecticPatchInclude ${hectic.helpers.posix-shell.log} ./hemar-renderer.sh
+    hecticPatchInclude ${hectic.helpers.posix-shell.log} ./test/lauch.sh
 
-    cat ${hectic.helpers.posix-shell.log} \
-      ./test.sh > ./test/launch.sh
-    
     patchShebangs ./hemar-renderer.sh ./test/lauch.sh
   '';
 
