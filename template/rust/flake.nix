@@ -27,7 +27,7 @@
     {
       ### DEV SHELL ###
       devShells.${system} = {
-	default = import ./devshell/default.nix { inherit pkgs; };
+	      default = import ./devshell/default.nix { inherit pkgs; };
       };
     }
   );

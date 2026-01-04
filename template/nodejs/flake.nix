@@ -2,7 +2,7 @@
   description = "";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    hutil = {
+    util = {
       url = "github:hectic-lab/util.nix";
       inputs = {
         nixpkgs.follows = "nixpkgs";
@@ -10,18 +10,18 @@
     };
   };
 
-  outputs = { self, nixpkgs, hutil }:
+  outputs = { self, nixpkgs, util }:
   let
-    overlays = [ hutil.overlays.default ];
+    overlays = [ util.overlays.default ];
   in
-  hutil.lib.forAllSystemsWithPkgs overlays ({ system, pkgs }:
+  util.lib.forAllSystemsWithPkgs overlays ({ system, pkgs }:
     let
       lib = pkgs.lib;
     in
     {
       ### DEV SHELL ###
       devShells.${system} = {
-        default = import ./devshell/default.nix { inherit pkgs; };
+	      default = import ./devshell/default.nix { inherit pkgs; };
       };
     }
   );
