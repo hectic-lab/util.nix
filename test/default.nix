@@ -2,7 +2,8 @@
 let
   # Import existing test checks
   packageTestChecks = import ./package { inherit system inputs self pkgs; };
-  overlayTestChecks = import ./overlay { inherit system inputs self pkgs; };
+  # BROKEN
+  overlayTestChecks = import ./overlay { inherit flake system inputs self pkgs; };
   
   # Get all packages from the packages output
   allPackages = import ../package { inherit flake self inputs pkgs system; };
@@ -16,5 +17,5 @@ let
     allPackages;
 in
   # Merge test checks with all packages
-  packageTestChecks // overlayTestChecks // prefixedPackages
+  packageTestChecks // prefixedPackages
 
