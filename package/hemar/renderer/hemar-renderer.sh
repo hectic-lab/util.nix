@@ -294,6 +294,8 @@ main() {
     local elements_json
     elements_json=$(yq -o j '.source_file.element' "$AST_TEMP")
     
+    log trace "Elements JSON: $WHITE$elements_json"
+
     if [ "$elements_json" = "null" ]; then
         log_error "No elements found in AST"
         exit 1
@@ -305,15 +307,18 @@ main() {
     if [ "$is_array" = "!!seq" ]; then
         local num_elements
         num_elements=$(printf '%s' "$elements_json" | yq 'length')
+        log debug "Rendering array with ${WHITE}$num_elements${NC} elements"
         
         local i=0
         while [ "$i" -lt "$num_elements" ]; do
+            log debug "Rendering element ${WHITE}$i${NC} of ${WHITE}$num_elements${NC}"
             local elem
             elem=$(printf '%s' "$elements_json" | yq -o j ".[$i]")
             render_element "$elem" "$MODEL_TEMP" "[]" 0
             i=$((i + 1))
         done
     else
+        log debug "Rendering single element"
         render_element "$elements_json" "$MODEL_TEMP" "[]" 0
     fi
 }

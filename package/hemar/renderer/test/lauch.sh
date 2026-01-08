@@ -24,41 +24,41 @@ test_render() {
     local model="$3"
     local expected="$4"
     
-    printf "Testing %s... " "$name"
+    log notice "Testing $name..."
     
     local output
     if output=$(dash "$HEMAR" "$template" "$model" 2>&1); then
         if [ "$output" = "$expected" ]; then
-            printf "${GREEN}PASSED${NC}\n"
+            log notice "PASSED"
             passed=$((passed + 1))
         else
-            printf "${RED}FAILED${NC}\n"
-            printf "  Expected: %s\n" "$expected"
-            printf "  Got:      %s\n" "$output"
+            log error "FAILED"
+            log error "  Expected: $WHITE$expected"
+            log error "  Got:      $WHITE$output"
             failed=$((failed + 1))
         fi
     else
-        printf "${RED}ERROR${NC}\n"
-        printf "  %s\n" "$output"
+        log error "ERROR"
+        log error "  $WHITE$output"
         failed=$((failed + 1))
     fi
 }
 
 # Check requirements
 if ! command -v tree-sitter >/dev/null 2>&1; then
-    printf "${RED}ERROR: tree-sitter not found${NC}\n"
-    printf "Install with: nix shell ~/pj/tree-sitter#cli nixpkgs#nodejs_22 nixpkgs#clang\n"
+    log error "ERROR: ${WHITE}tree-sitter not found"
+    log error "${WHITE}Install with: nix shell ~/pj/tree-sitter#cli nixpkgs#nodejs_22 nixpkgs#clang"
     exit 1
 fi
 
 if ! command -v yq >/dev/null 2>&1; then
-    printf "${RED}ERROR: yq not found${NC}\n"
-    printf "Install with: nix shell nixpkgs#yq-go\n"
+    log error "ERROR: ${WHITE}yq not found"
+    log error "${WHITE}Install with: nix shell nixpkgs#yq-go"
     exit 1
 fi
 
 # Run tests
-printf "Running hemar renderer tests...\n\n"
+log notice "Running hemar renderer tests...\n\n"
 
 # Test 1: Simple interpolation
 test_render "simple interpolation" \
@@ -85,12 +85,8 @@ test_render "for loop" \
 # Test 3: Complex path (this will fail if model doesn't have the exact structure)
 # For now, just test that it doesn't crash
 
-printf "\n"
-printf "Tests: ${GREEN}%d passed${NC}, ${RED}%d failed${NC}\n" "$passed" "$failed"
+log notice "Tests: $GREEN$passed passed$NC, $RED$failed failed"
 
 if [ "$failed" -gt 0 ]; then
     exit 1
 fi
-
-
-
