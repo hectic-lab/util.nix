@@ -248,8 +248,12 @@ render_element() {
     
     if [ "$has_text" != "0" ]; then
         # Plain text - output as-is (whitespace preserved!)
+        # Use sentinel character 'x' to preserve trailing newlines (command substitution strips them)
         local text_content
-        text_content=$(xmlstarlet sel -t -v '/element/text' "$elem_temp")
+        text_content=$(xmlstarlet sel -t -v '/element/text' "$elem_temp"; echo x)
+        # NOTE: This is a kludge to preserve trailing newlines in command substitution
+        text_content=${text_content%x}
+
         log debug "  Text content: ${WHITE}[$text_content]${NC}"
         printf '%s' "$text_content"
     elif [ "$has_interpolation" != "0" ]; then

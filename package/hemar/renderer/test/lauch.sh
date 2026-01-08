@@ -27,7 +27,10 @@ test_render() {
     log notice "Testing $name..."
     
     local output
-    if output=$(dash "$HEMAR" "$template" "$model"); then
+    # Use sentinel to preserve trailing newlines in command substitution
+    if output=$(dash "$HEMAR" "$template" "$model"; echo x); then
+        # NOTE: This is a kludge to preserve trailing newlines in command substitution
+        output=${output%x}
         if [ "$output" = "$expected" ]; then
             log notice "PASSED"
             passed=$((passed + 1))
@@ -65,16 +68,28 @@ test_render "simple interpolation" \
     "$EXAMPLES/simple.hemar" \
     "$EXAMPLES/simple.json" \
     "Hello, Alice!
-You are 30 years old."
+You are 30 years old.
+
+
+
+"
 
 # Test 2: For loop
 test_render "for loop" \
     "$EXAMPLES/loop.hemar" \
     "$EXAMPLES/loop.json" \
     "Users:
+
   - Alice (30 years old)
+
   - Bob (25 years old)
-  - Charlie (35 years old)"
+
+  - Charlie (35 years old)
+
+
+
+
+"
 
 # Test 3: Complex path (this will fail if model doesn't have the exact structure)
 # For now, just test that it doesn't crash
