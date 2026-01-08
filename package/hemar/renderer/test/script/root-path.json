@@ -1,0 +1,8 @@
+{
+  "name": "root",
+  "value": 42,
+  "nested": {
+    "deep": "value"
+  }
+}
+

@@ -101,6 +101,57 @@ test_render "complex path" \
 
 "
 
+# Test 4: Empty/null values
+test_render "empty/null values" \
+    "$EXAMPLES/empty.hemar" \
+    "$EXAMPLES/empty.json" \
+    "Missing: 
+Null: 
+Empty: 
+"
+
+# Test 5: Negative array indices
+test_render "negative indices" \
+    "$EXAMPLES/negative-index.hemar" \
+    "$EXAMPLES/negative-index.json" \
+    "Last: last
+Second to last: third
+First: first
+"
+
+# Test 6: Escaped brackets
+test_render "escaped brackets" \
+    "$EXAMPLES/escaped.hemar" \
+    "$EXAMPLES/escaped.json" \
+    "Normal: test
+Escaped: {[
+Done
+"
+
+# Test 7: Empty array loop
+test_render "empty array loop" \
+    "$EXAMPLES/empty-loop.hemar" \
+    "$EXAMPLES/empty-loop.json" \
+    "Items:
+
+Done
+"
+
+# Test 8: Root path
+test_render "root path" \
+    "$EXAMPLES/root-path.hemar" \
+    "$EXAMPLES/root-path.json" \
+    "Name: root
+Value: 42
+Root: {
+  \"name\": \"root\",
+  \"value\": 42,
+  \"nested\": {
+    \"deep\": \"value\"
+  }
+}
+"
+
 log notice "Tests: $GREEN$passed passed$NC, $RED$failed failed"
 
 if [ "$failed" -gt 0 ]; then

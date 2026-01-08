@@ -92,9 +92,28 @@ render_interpolation() {
     log debug "Interpolation: num_path_segments=${WHITE}$num_children${NC}"
     
     if [ "$num_children" -eq "0" ]; then
-        # Empty path - shouldn't happen
-        printf ""
-        return
+        # Check if this is root path (just ".")
+        local path_text
+        path_text=$(xmlstarlet sel -t -v '/element/interpolation/path' "$elem_file"; echo x)
+        path_text=${path_text%x}
+        path_text=$(printf '%s' "$path_text" | tr -d '[:space:]')
+        if [ "$path_text" = "." ]; then
+            # Root path - return entire model as JSON
+            log debug "  Root path detected"
+            local value
+            value=$(yq -o j '.' "$model_file" 2>&1 || echo "ERROR")
+            log debug "  Value from model: ${WHITE}[$value]${NC}"
+            if [ "$value" = "ERROR" ]; then
+                printf ""
+            else
+                printf '%s' "$value"
+            fi
+            return
+        else
+            # Empty path - shouldn't happen
+            printf ""
+            return
+        fi
     fi
     
     local yq_path=""
