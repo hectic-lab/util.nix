@@ -31,6 +31,7 @@ test_render() {
     if output=$(dash "$HEMAR" "$template" "$model"; echo x); then
         # NOTE: This is a kludge to preserve trailing newlines in command substitution
         output=${output%x}
+
         if [ "$output" = "$expected" ]; then
             log notice "PASSED"
             passed=$((passed + 1))
@@ -91,8 +92,14 @@ test_render "for loop" \
 
 "
 
-# Test 3: Complex path (this will fail if model doesn't have the exact structure)
-# For now, just test that it doesn't crash
+# Test 3: Complex path with quoted strings and indexes
+test_render "complex path" \
+    "$EXAMPLES/complex.hemar" \
+    "$EXAMPLES/complex.json" \
+    "TARGET
+
+
+"
 
 log notice "Tests: $GREEN$passed passed$NC, $RED$failed failed"
 

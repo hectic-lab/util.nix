@@ -85,55 +85,57 @@ render_interpolation() {
     local model_file="$2"
     local scope_stack="$3"
     
-    # NOTE: Check if path has a string child (simple path) or multiple (dotted path)
-    local num_strings
-    num_strings=$(xmlstarlet sel -t -v 'count(/element/interpolation/path/string)' "$elem_file")
+    # Build yq path from path segments (strings and indexes)
+    local num_children
+    num_children=$(xmlstarlet sel -t -v 'count(/element/interpolation/path/*)' "$elem_file")
     
-    log debug "Interpolation: num_strings=${WHITE}$num_strings${NC}"
+    log debug "Interpolation: num_path_segments=${WHITE}$num_children${NC}"
     
-    if [ "$num_strings" = "1" ]; then
-        # NOTE: Simple path: {[name]}
-        local key
-        key=$(xmlstarlet sel -t -v '/element/interpolation/path/string' "$elem_file")
-        log debug "  Raw key: ${WHITE}$key${NC}"
-        key=$(extract_string_value "$key")
-        log debug "  Extracted key: ${WHITE}$key${NC}"
-        log debug "  Query: ${WHITE}yq -r '.\"$key\"' $model_file${NC}"
-        log debug "  Model file: ${WHITE}$model_file${NC}"
-        local value
-        value=$(yq -r ".\"$key\"" "$model_file" 2>&1 || echo "ERROR")
-        log debug "  Value from model: ${WHITE}[$value]${NC}"
-        if [ "$value" = "null" ] || [ "$value" = "ERROR" ]; then
-            printf ""
-        else
-            printf '%s' "$value"
-        fi
-    elif [ "$num_strings" -gt "1" ]; then
-        # NOTE: Dotted path: {[user.name]}
-        local yq_path=""
-        local i=1
-        while [ "$i" -le "$num_strings" ]; do
-            local key
-            key=$(xmlstarlet sel -t -v "/element/interpolation/path/string[$i]" "$elem_file")
-            key=$(extract_string_value "$key")
-            if [ -z "$yq_path" ]; then
-                yq_path=".\"$key\""
-            else
-                yq_path="${yq_path}.\"$key\""
-            fi
-            i=$((i + 1))
-        done
-        log debug "  yq_path: ${WHITE}$yq_path${NC}"
-        log debug "  Model file: ${WHITE}$model_file${NC}"
-        log debug "  Scoped model content: ${WHITE}$(cat "$model_file")${NC}"
-        local value
-        value=$(yq -r "$yq_path" "$model_file" 2>&1 || echo "ERROR")
-        log debug "  Value from model: ${WHITE}[$value]${NC}"
-        if [ "$value" = "null" ] || [ "$value" = "ERROR" ]; then
-            printf ""
-        else
-            printf '%s' "$value"
-        fi
+    if [ "$num_children" -eq "0" ]; then
+        # Empty path - shouldn't happen
+        printf ""
+        return
+    fi
+    
+    local yq_path=""
+    local i=1
+    while [ "$i" -le "$num_children" ]; do
+        # Get element name (string or index) - use *[$i] to get i-th child regardless of type
+        local elem_name
+        elem_name=$(xmlstarlet sel -t -v "name(/element/interpolation/path/*[$i])" "$elem_file")
+        
+        case "$elem_name" in
+            string)
+                local key
+                key=$(xmlstarlet sel -t -v "/element/interpolation/path/*[$i]" "$elem_file"; echo x)
+                # NOTE: This is a kludge to preserve trailing newlines in command substitution
+                key=${key%x}
+                key=$(extract_string_value "$key")
+                if [ -z "$yq_path" ]; then
+                    yq_path=".\"$key\""
+                else
+                    yq_path="${yq_path}.\"$key\""
+                fi
+                ;;
+            index)
+                local idx
+                idx=$(xmlstarlet sel -t -v "/element/interpolation/path/*[$i]/integer_index" "$elem_file")
+                yq_path="${yq_path}[$idx]"
+                ;;
+        esac
+        i=$((i + 1))
+    done
+    
+    log debug "  yq_path: ${WHITE}$yq_path${NC}"
+    log debug "  Model file: ${WHITE}$model_file${NC}"
+    
+    local value
+    value=$(yq -r "$yq_path" "$model_file" 2>&1 || echo "ERROR")
+    log debug "  Value from model: ${WHITE}[$value]${NC}"
+    if [ "$value" = "null" ] || [ "$value" = "ERROR" ]; then
+        printf ""
+    else
+        printf '%s' "$value"
     fi
 }
 
