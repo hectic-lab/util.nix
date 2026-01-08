@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 # Global list of temp files to clean up
 TEMP_FILES=""
 
+# add_temp(path)
 # Add temp file to cleanup list
 add_temp() {
     local temp="$1"
@@ -23,17 +24,15 @@ add_temp() {
     fi
 }
 
-# Cleanup function
+# cleanup_temps()
 cleanup_temps() {
     for f in $TEMP_FILES; do
         rm -f "$f" 2>/dev/null || true
     done
 }
 
-# Set up trap for cleanup
 trap cleanup_temps EXIT INT HUP TERM
 
-# Parse command line arguments
 TEMPLATE="${1:-"${TEMPLATE_PATH:-}"}"
 MODEL="${2:-"${MODEL:-}"}"
 
@@ -53,17 +52,14 @@ if [ ! -f "$MODEL" ]; then
 fi
 
 
-# Parse template with tree-sitter and convert to JSON
-# Requires: tree-sitter, yq
-AST_JSON=$(hemar-parser --xml "$TEMPLATE" 2>/dev/null | yq -p=xml -o=json)
+AST_XML=$(hemar-parser --xml "$TEMPLATE" 2>/dev/null)
 
-# Save to temp files for yq processing
 AST_TEMP=$(mktemp)
 MODEL_TEMP=$(mktemp)
 add_temp "$AST_TEMP"
 add_temp "$MODEL_TEMP"
 
-printf '%s' "$AST_JSON" > "$AST_TEMP"
+printf '%s' "$AST_XML" > "$AST_TEMP"
 cat "$MODEL" > "$MODEL_TEMP"
 
 # extract_string_value(string_node_content)
@@ -82,241 +78,217 @@ extract_string_value() {
     printf '%s' "$str"
 }
 
-# resolve_path(path_json, model, scope_stack)
-# Resolves a path in the data model
-# path_json: JSON object representing path node from AST (with .string field)
-# model: the data model
-# scope_stack: JSON array of loop scopes (for nested loops)
-resolve_path() {
-    local path_json="$1"
+# render_interpolation(elem_file, model_file, scope_stack)
+# Renders an interpolation element {[path]}
+render_interpolation() {
+    local elem_file="$1"
     local model_file="$2"
     local scope_stack="$3"
     
-    local path_temp=$(mktemp)
-    add_temp "$path_temp"
-    printf '%s' "$path_json" > "$path_temp"
+    # NOTE: Check if path has a string child (simple path) or multiple (dotted path)
+    local num_strings
+    num_strings=$(xmlstarlet sel -t -v 'count(/element/interpolation/path/string)' "$elem_file")
     
-    # Check if path.string is an array or a single object
-    local string_type
-    string_type=$(yq -r '.string | type' "$path_temp" 2>/dev/null || echo "null")
+    log debug "Interpolation: num_strings=${WHITE}$num_strings${NC}"
     
-    local yq_path=""
-    
-    if [ "$string_type" = "!!seq" ]; then
-        # Dotted path: user.name -> path.string[0], path.string[1]
-        local num_segments
-        num_segments=$(yq '.string | length' "$path_temp")
-        
-        local i=0
-        while [ "$i" -lt "$num_segments" ]; do
+    if [ "$num_strings" = "1" ]; then
+        # NOTE: Simple path: {[name]}
+        local key
+        key=$(xmlstarlet sel -t -v '/element/interpolation/path/string' "$elem_file")
+        log debug "  Raw key: ${WHITE}$key${NC}"
+        key=$(extract_string_value "$key")
+        log debug "  Extracted key: ${WHITE}$key${NC}"
+        log debug "  Query: ${WHITE}yq -r '.\"$key\"' $model_file${NC}"
+        log debug "  Model file: ${WHITE}$model_file${NC}"
+        local value
+        value=$(yq -r ".\"$key\"" "$model_file" 2>&1 || echo "ERROR")
+        log debug "  Value from model: ${WHITE}[$value]${NC}"
+        if [ "$value" = "null" ] || [ "$value" = "ERROR" ]; then
+            printf ""
+        else
+            printf '%s' "$value"
+        fi
+    elif [ "$num_strings" -gt "1" ]; then
+        # NOTE: Dotted path: {[user.name]}
+        local yq_path=""
+        local i=1
+        while [ "$i" -le "$num_strings" ]; do
             local key
-            key=$(yq -r ".string[$i].\"+content\"" "$path_temp" 2>/dev/null || echo "")
-            if [ -n "$key" ]; then
-                key=$(extract_string_value "$key")
-                if [ -z "$yq_path" ]; then
-                    yq_path=".\"$key\""
-                else
-                    yq_path="${yq_path}.\"$key\""
-                fi
+            key=$(xmlstarlet sel -t -v "/element/interpolation/path/string[$i]" "$elem_file")
+            key=$(extract_string_value "$key")
+            if [ -z "$yq_path" ]; then
+                yq_path=".\"$key\""
+            else
+                yq_path="${yq_path}.\"$key\""
             fi
             i=$((i + 1))
         done
-    else
-        # Simple path: name -> path.string."+content"
-        local key
-        key=$(yq -r '.string."+content"' "$path_temp" 2>/dev/null || echo "")
-        if [ -n "$key" ]; then
-            key=$(extract_string_value "$key")
-            yq_path=".\"$key\""
+        log debug "  yq_path: ${WHITE}$yq_path${NC}"
+        log debug "  Model file: ${WHITE}$model_file${NC}"
+        log debug "  Scoped model content: ${WHITE}$(cat "$model_file")${NC}"
+        local value
+        value=$(yq -r "$yq_path" "$model_file" 2>&1 || echo "ERROR")
+        log debug "  Value from model: ${WHITE}[$value]${NC}"
+        if [ "$value" = "null" ] || [ "$value" = "ERROR" ]; then
+            printf ""
+        else
+            printf '%s' "$value"
         fi
-    fi
-    
-    # Resolve in model
-    local result
-    result=$(yq -r "$yq_path" "$model_file" 2>/dev/null || echo "null")
-    
-    if [ "$result" = "null" ]; then
-        log warning "Path not found in model: ${WHITE}$yq_path${NC}"
-        printf ""
-    else
-        printf '%s' "$result"
     fi
 }
 
-# render_element(element_json, model_file, scope_stack, depth?)
+# render_segment(elem_file, model_file, scope_stack, depth)
+# Renders a for loop segment
+render_segment() {
+    local elem_file="$1"
+    local model_file="$2"
+    local scope_stack="$3"
+    local depth="$4"
+    
+    # Extract variable name from for loop
+    local var_name
+    var_name=$(xmlstarlet sel -t -v '/element/segment/for/string' "$elem_file")
+    var_name=$(extract_string_value "$var_name")
+    log debug "For loop: var=${WHITE}$var_name${NC}"
+    
+    # Extract path to iterate over
+    local num_strings
+    num_strings=$(xmlstarlet sel -t -v 'count(/element/segment/for/path/string)' "$elem_file")
+    
+    # Build yq path for array
+    local yq_path=""
+    if [ "$num_strings" = "1" ]; then
+        local key
+        key=$(xmlstarlet sel -t -v '/element/segment/for/path/string' "$elem_file")
+        key=$(extract_string_value "$key")
+        yq_path=".\"$key\""
+    elif [ "$num_strings" -gt "1" ]; then
+        local i=1
+        while [ "$i" -le "$num_strings" ]; do
+            local key
+            key=$(xmlstarlet sel -t -v "/element/segment/for/path/string[$i]" "$elem_file")
+            key=$(extract_string_value "$key")
+            if [ -z "$yq_path" ]; then
+                yq_path=".\"$key\""
+            else
+                yq_path="${yq_path}.\"$key\""
+            fi
+            i=$((i + 1))
+        done
+    fi
+    
+    log debug "  Array path: ${WHITE}$yq_path${NC}"
+    
+    # Resolve array from model
+    local array_json
+    array_json=$(yq -r "$yq_path" "$model_file" 2>&1 || echo "ERROR")
+    log debug "  Array JSON: ${WHITE}$array_json${NC}"
+    
+    if [ -n "$array_json" ] && [ "$array_json" != "null" ] && [ "$array_json" != "ERROR" ]; then
+        local array_temp=$(mktemp)
+        add_temp "$array_temp"
+        printf '%s' "$array_json" > "$array_temp"
+        
+        local array_len
+        array_len=$(yq 'length' "$array_temp" 2>/dev/null || echo "0")
+        log debug "  Array length: ${WHITE}$array_len${NC}"
+        
+        local num_body_elements
+        num_body_elements=$(xmlstarlet sel -t -v 'count(/element/segment/element)' "$elem_file")
+        log debug "  Body elements: ${WHITE}$num_body_elements${NC}"
+        
+        local i=0
+        while [ "$i" -lt "$array_len" ]; do
+            log debug "  Iteration ${WHITE}$i${NC}"
+            local item
+            item=$(yq -o j ".[$i]" "$array_temp")
+            
+            # Create scoped model with variable binding
+            local scoped_model=$(mktemp)
+            add_temp "$scoped_model"
+            yq -o j ". * {\"$var_name\": $item}" "$model_file" > "$scoped_model"
+            
+            # Render each body element
+            local j=1
+            while [ "$j" -le "$num_body_elements" ]; do
+                local body_elem_xml
+                body_elem_xml=$(xmlstarlet sel -t -c "/element/segment/element[$j]" "$elem_file")
+                render_element "$body_elem_xml" "$scoped_model" "$scope_stack" "$((depth + 1))"
+                j=$((j + 1))
+            done
+            
+            i=$((i + 1))
+        done
+    else
+        log debug "  No array to iterate (empty/null/error)"
+    fi
+}
+
+# render_element(element_xml, model_file, scope_stack, depth?)
 # Recursively renders an element
 render_element() {
-    local element="$1"
+    local element_xml="$1"
     local model_file="$2"
     local scope_stack="$3"
     local depth="${4:-0}"
     
     local elem_temp=$(mktemp)
     add_temp "$elem_temp"
-    printf '%s' "$element" > "$elem_temp"
+    printf '%s' "$element_xml" > "$elem_temp"
     
-    # Get element name (tag name from tree-sitter XML)
-    # Filter out XML attributes (keys starting with +@)
-    local elem_name
-    elem_name=$(yq -r 'keys | .[]' "$elem_temp" 2>/dev/null | grep -v '^+@' | head -n 1 || echo "")
+    # Detect element type by checking which child elements exist
+    # The element structure is: <element><TYPE>...</TYPE></element>
+    local has_interpolation has_segment has_text has_actual_bracket
+    has_interpolation=$(xmlstarlet sel -t -v 'count(/element/interpolation)' "$elem_temp")
+    has_segment=$(xmlstarlet sel -t -v 'count(/element/segment)' "$elem_temp")
+    has_text=$(xmlstarlet sel -t -v 'count(/element/text)' "$elem_temp")
+    has_actual_bracket=$(xmlstarlet sel -t -v 'count(/element/actual_bracket)' "$elem_temp")
     
-    if [ -z "$elem_name" ]; then
-        return 0
+    log debug "  Element type: text=${WHITE}$has_text${NC} interp=${WHITE}$has_interpolation${NC} seg=${WHITE}$has_segment${NC}"
+    
+    if [ "$has_text" != "0" ]; then
+        # Plain text - output as-is (whitespace preserved!)
+        local text_content
+        text_content=$(xmlstarlet sel -t -v '/element/text' "$elem_temp")
+        log debug "  Text content: ${WHITE}[$text_content]${NC}"
+        printf '%s' "$text_content"
+    elif [ "$has_interpolation" != "0" ]; then
+        # Interpolation: {[path]}
+        render_interpolation "$elem_temp" "$model_file" "$scope_stack"
+    elif [ "$has_segment" != "0" ]; then
+        # For loop: {[ for var in path ]} ... {[ done ]}
+        render_segment "$elem_temp" "$model_file" "$scope_stack" "$depth"
+    elif [ "$has_actual_bracket" != "0" ]; then
+        # Escaped bracket: {[ {[ ]} -> output {[
+        printf '{['
     fi
-    
-    case "$elem_name" in
-        interpolation)
-            # Extract path from interpolation node
-            local path_json
-            path_json=$(yq -o j '.interpolation.path' "$elem_temp")
-            
-            if [ "$path_json" != "null" ]; then
-                # Check if it's a simple string path (single identifier)
-                local path_temp=$(mktemp)
-                add_temp "$path_temp"
-                printf '%s' "$path_json" > "$path_temp"
-                
-                local has_string
-                has_string=$(yq -r '.string."+content" // empty' "$path_temp" 2>/dev/null || echo "")
-                
-                if [ -n "$has_string" ]; then
-                    # Simple string path - extract and resolve directly
-                    local key
-                    key=$(extract_string_value "$has_string")
-                    local value
-                    value=$(yq -r ".\"$key\" // empty" "$model_file" 2>/dev/null || echo "")
-                    printf '%s' "$value"
-                else
-                    # Complex path - use resolve_path (expects array format)
-                    local value
-                    value=$(resolve_path "$path_json" "$model_file" "$scope_stack")
-                    printf '%s' "$value"
-                fi
-            fi
-            ;;
-        segment)
-            # For loop: {[ for var in path ]} ... {[ done ]}
-            local for_json
-            for_json=$(yq -o j '.segment.for' "$elem_temp")
-            
-            # Extract variable name
-            local var_name
-            var_name=$(printf '%s' "$for_json" | yq -r '.string."+content"' 2>/dev/null || echo "")
-            var_name=$(extract_string_value "$var_name")
-            
-            # Extract path
-            local path_json
-            path_json=$(printf '%s' "$for_json" | yq -o j '.path')
-            
-            # Resolve array from model
-            local array_json
-            array_json=$(resolve_path "$path_json" "$model_file" "$scope_stack")
-            
-            # Check if it's an array
-            if [ -n "$array_json" ] && [ "$array_json" != "null" ]; then
-                local array_temp=$(mktemp)
-                add_temp "$array_temp"
-                printf '%s' "$array_json" > "$array_temp"
-                
-                local array_len
-                array_len=$(yq 'length' "$array_temp" 2>/dev/null || echo "0")
-                
-                # Get body elements (everything between for and done)
-                local body_json
-                body_json=$(yq -o j '.segment.element' "$elem_temp")
-                
-                # Iterate over array
-                local i=0
-                while [ "$i" -lt "$array_len" ]; do
-                    local item
-                    item=$(yq -o j ".[$i]" "$array_temp")
-                    
-                    # Create new scope with variable binding
-                    # TODO: Implement scope stack for nested loops
-                    # For now, create a temporary model with the variable
-                    local scoped_model=$(mktemp)
-                    add_temp "$scoped_model"
-                    
-                    # Merge current item as variable into model
-                    # This is a simplified version - proper implementation would use scope stack
-                    yq -o j ". * {\"$var_name\": $item}" "$model_file" > "$scoped_model"
-                    
-                    # Render body with scoped model
-                    if [ "$body_json" != "null" ]; then
-                        # Check if body is array or single element
-                        local body_is_array
-                        body_is_array=$(printf '%s' "$body_json" | yq -r 'type')
-                        
-                        if [ "$body_is_array" = "!!seq" ]; then
-                            # Multiple elements
-                            local body_len
-                            body_len=$(printf '%s' "$body_json" | yq 'length')
-                            local j=0
-                            while [ "$j" -lt "$body_len" ]; do
-                                local body_elem
-                                body_elem=$(printf '%s' "$body_json" | yq -o j ".[$j]")
-                                render_element "$body_elem" "$scoped_model" "$scope_stack" "$((depth + 1))"
-                                j=$((j + 1))
-                            done
-                        else
-                            # Single element
-                            render_element "$body_json" "$scoped_model" "$scope_stack" "$((depth + 1))"
-                        fi
-                    fi
-                    
-                    i=$((i + 1))
-                done
-            fi
-            ;;
-        text)
-            # Plain text - output as-is
-            local text_content
-            text_content=$(yq -r '.text."+content"' "$elem_temp" 2>/dev/null || echo "")
-            printf '%s' "$text_content"
-            ;;
-        actual_bracket)
-            # Escaped bracket: {[ {[ ]} -> output {[
-            printf '{['
-            ;;
-        *)
-            log warning "Unknown element type: ${WHITE}$elem_name${NC}"
-            ;;
-    esac
 }
 
 # main()
 # Main rendering loop
 main() {
-    local elements_json
-    elements_json=$(yq -o j '.source_file.element' "$AST_TEMP")
+    local num_elements
+    num_elements=$(xmlstarlet sel -t -v 'count(/source_file/element)' "$AST_TEMP")
     
-    log trace "Elements JSON: $WHITE$elements_json"
+    log trace "Elements XML from: ${WHITE}$AST_TEMP"
+    log debug "Model: ${WHITE}$(cat "$MODEL_TEMP")${NC}"
 
-    if [ "$elements_json" = "null" ]; then
+    if [ "$num_elements" = "0" ]; then
         log error "No elements found in AST"
         exit 1
     fi
     
-    local is_array
-    is_array=$(printf '%s' "$elements_json" | yq -r 'type')
+    log debug "Rendering ${WHITE}$num_elements${NC} elements"
     
-    if [ "$is_array" = "!!seq" ]; then
-        local num_elements
-        num_elements=$(printf '%s' "$elements_json" | yq 'length')
-        log debug "Rendering array with ${WHITE}$num_elements${NC} elements"
-        
-        local i=0
-        while [ "$i" -lt "$num_elements" ]; do
-            log debug "Rendering element ${WHITE}$i${NC} of ${WHITE}$num_elements${NC}"
-            local elem
-            elem=$(printf '%s' "$elements_json" | yq -o j ".[$i]")
-            render_element "$elem" "$MODEL_TEMP" "[]" 0
-            i=$((i + 1))
-        done
-    else
-        log debug "Rendering single element"
-        render_element "$elements_json" "$MODEL_TEMP" "[]" 0
-    fi
+    local i=1
+    while [ "$i" -le "$num_elements" ]; do
+        log debug "Rendering element ${WHITE}$i${NC} of ${WHITE}$num_elements${NC}"
+        # Extract element as XML and render it
+        local elem_xml
+        elem_xml=$(xmlstarlet sel -t -c "/source_file/element[$i]" "$AST_TEMP")
+        render_element "$elem_xml" "$MODEL_TEMP" "[]" 0
+        i=$((i + 1))
+    done
 }
 
 if ! [ "${AS_LIBRARY+x}" ]; then

@@ -2,6 +2,7 @@
 , makeWrapper
 , dash
 , yq-go
+, xmlstarlet
 , tree-sitter
 , hectic
 }:
@@ -13,7 +14,7 @@ hectic.hectic-env.mkDerivation {
   src = ./.;
 
   nativeBuildInputs = [ makeWrapper ];
-  buildInputs = [ dash yq-go tree-sitter ];
+  buildInputs = [ dash yq-go xmlstarlet tree-sitter ];
 
   doCheck = true;
 
@@ -26,7 +27,7 @@ hectic.hectic-env.mkDerivation {
 
   checkPhase = ''
     export HOME="$TMPDIR"
-    export PATH="${lib.makeBinPath [ dash yq-go tree-sitter hectic.hemar-parser ]}:$PATH"
+    export PATH="${lib.makeBinPath [ dash yq-go xmlstarlet tree-sitter hectic.hemar-parser ]}:$PATH"
     
     ${dash}/bin/dash ./test/lauch.sh
   '';
@@ -39,7 +40,7 @@ hectic.hectic-env.mkDerivation {
     chmod +x $out/bin/hemar-renderer
     
     wrapProgram $out/bin/hemar-renderer \
-      --prefix PATH : ${lib.makeBinPath [ dash yq-go tree-sitter hectic.hemar-parser ]}
+      --prefix PATH : ${lib.makeBinPath [ dash yq-go xmlstarlet tree-sitter hectic.hemar-parser ]}
   '';
 
   meta = with lib; {

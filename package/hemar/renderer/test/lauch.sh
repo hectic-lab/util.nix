@@ -65,22 +65,16 @@ test_render "simple interpolation" \
     "$EXAMPLES/simple.hemar" \
     "$EXAMPLES/simple.json" \
     "Hello, Alice!
-You are 30 years old.
-"
+You are 30 years old."
 
 # Test 2: For loop
 test_render "for loop" \
     "$EXAMPLES/loop.hemar" \
     "$EXAMPLES/loop.json" \
     "Users:
-
   - Alice (30 years old)
-
   - Bob (25 years old)
-
-  - Charlie (35 years old)
-
-"
+  - Charlie (35 years old)"
 
 # Test 3: Complex path (this will fail if model doesn't have the exact structure)
 # For now, just test that it doesn't crash
