@@ -27,7 +27,7 @@ test_render() {
     log notice "Testing $name..."
     
     local output
-    if output=$(dash "$HEMAR" "$template" "$model" 2>&1); then
+    if output=$(dash "$HEMAR" "$template" "$model"); then
         if [ "$output" = "$expected" ]; then
             log notice "PASSED"
             passed=$((passed + 1))

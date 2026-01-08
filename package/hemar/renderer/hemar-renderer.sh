@@ -10,13 +10,28 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-log_error() {
-    printf "${RED}[ERROR]${NC} %s\n" "$1" >&2
+# Global list of temp files to clean up
+TEMP_FILES=""
+
+# Add temp file to cleanup list
+add_temp() {
+    local temp="$1"
+    if [ -z "$TEMP_FILES" ]; then
+        TEMP_FILES="$temp"
+    else
+        TEMP_FILES="$TEMP_FILES $temp"
+    fi
 }
 
-log_warn() {
-    printf "${YELLOW}[WARN]${NC} %s\n" "$1" >&2
+# Cleanup function
+cleanup_temps() {
+    for f in $TEMP_FILES; do
+        rm -f "$f" 2>/dev/null || true
+    done
 }
+
+# Set up trap for cleanup
+trap cleanup_temps EXIT INT HUP TERM
 
 # Parse command line arguments
 TEMPLATE="${1:-"${TEMPLATE_PATH:-}"}"
@@ -28,12 +43,12 @@ if [ -z "$TEMPLATE" ] || [ -z "$MODEL" ]; then
 fi
 
 if [ ! -f "$TEMPLATE" ]; then
-    log_error "Template file not found: $TEMPLATE"
+    log error "Template file not found: ${WHITE}$TEMPLATE${NC}"
     exit 1
 fi
 
 if [ ! -f "$MODEL" ]; then
-    log_error "Model file not found: $MODEL"
+    log error "Model file not found: ${WHITE}$MODEL${NC}"
     exit 1
 fi
 
@@ -45,7 +60,8 @@ AST_JSON=$(hemar-parser --xml "$TEMPLATE" 2>/dev/null | yq -p=xml -o=json)
 # Save to temp files for yq processing
 AST_TEMP=$(mktemp)
 MODEL_TEMP=$(mktemp)
-trap 'rm -f "$AST_TEMP" "$MODEL_TEMP"' EXIT INT HUP
+add_temp "$AST_TEMP"
+add_temp "$MODEL_TEMP"
 
 printf '%s' "$AST_JSON" > "$AST_TEMP"
 cat "$MODEL" > "$MODEL_TEMP"
@@ -66,9 +82,9 @@ extract_string_value() {
     printf '%s' "$str"
 }
 
-# resolve_path(path_array, model, scope_stack)
+# resolve_path(path_json, model, scope_stack)
 # Resolves a path in the data model
-# path_array: JSON array of path segments from AST
+# path_json: JSON object representing path node from AST (with .string field)
 # model: the data model
 # scope_stack: JSON array of loop scopes (for nested loops)
 resolve_path() {
@@ -76,64 +92,51 @@ resolve_path() {
     local model_file="$2"
     local scope_stack="$3"
     
-    # Build yq path expression
-    local num_segments
-    num_segments=$(printf '%s' "$path_json" | yq 'length')
+    local path_temp=$(mktemp)
+    add_temp "$path_temp"
+    printf '%s' "$path_json" > "$path_temp"
     
-    if [ "$num_segments" -eq 0 ]; then
-        log_error "Empty path"
-        return 1
-    fi
+    # Check if path.string is an array or a single object
+    local string_type
+    string_type=$(yq -r '.string | type' "$path_temp" 2>/dev/null || echo "null")
     
-    # Check if first segment is root (.)
-    local first_type
-    first_type=$(printf '%s' "$path_json" | yq '.[0].type' 2>/dev/null || echo "null")
+    local yq_path=""
     
-    local yq_path="."
-    local start_idx=0
-    
-    if [ "$first_type" = "root" ]; then
-        # Root path - start from model root
-        yq_path="."
-        start_idx=1
-    fi
-    
-    # Build path from segments
-    local i="$start_idx"
-    while [ "$i" -lt "$num_segments" ]; do
-        local seg_type
-        seg_type=$(printf '%s' "$path_json" | yq ".[$i].type")
+    if [ "$string_type" = "!!seq" ]; then
+        # Dotted path: user.name -> path.string[0], path.string[1]
+        local num_segments
+        num_segments=$(yq '.string | length' "$path_temp")
         
-        case "$seg_type" in
-            key)
-                local key
-                key=$(printf '%s' "$path_json" | yq ".[$i].key")
-                # Remove quotes from string if present
-                if [ "${key#\"}" != "$key" ]; then
-                    key="${key#\"}"
-                    key="${key%\"}"
+        local i=0
+        while [ "$i" -lt "$num_segments" ]; do
+            local key
+            key=$(yq -r ".string[$i].\"+content\"" "$path_temp" 2>/dev/null || echo "")
+            if [ -n "$key" ]; then
+                key=$(extract_string_value "$key")
+                if [ -z "$yq_path" ]; then
+                    yq_path=".\"$key\""
+                else
+                    yq_path="${yq_path}.\"$key\""
                 fi
-                yq_path="${yq_path}.\"$key\""
-                ;;
-            index)
-                local idx
-                idx=$(printf '%s' "$path_json" | yq ".[$i].index")
-                yq_path="${yq_path}[$idx]"
-                ;;
-            *)
-                log_error "Unknown path segment type: $seg_type"
-                return 1
-                ;;
-        esac
-        i=$((i + 1))
-    done
+            fi
+            i=$((i + 1))
+        done
+    else
+        # Simple path: name -> path.string."+content"
+        local key
+        key=$(yq -r '.string."+content"' "$path_temp" 2>/dev/null || echo "")
+        if [ -n "$key" ]; then
+            key=$(extract_string_value "$key")
+            yq_path=".\"$key\""
+        fi
+    fi
     
     # Resolve in model
     local result
     result=$(yq -r "$yq_path" "$model_file" 2>/dev/null || echo "null")
     
     if [ "$result" = "null" ]; then
-        log_warn "Path not found in model: $yq_path"
+        log warning "Path not found in model: ${WHITE}$yq_path${NC}"
         printf ""
     else
         printf '%s' "$result"
@@ -149,7 +152,7 @@ render_element() {
     local depth="${4:-0}"
     
     local elem_temp=$(mktemp)
-    trap 'rm -f "$elem_temp"' EXIT INT HUP
+    add_temp "$elem_temp"
     printf '%s' "$element" > "$elem_temp"
     
     # Get element name (tag name from tree-sitter XML)
@@ -158,7 +161,6 @@ render_element() {
     elem_name=$(yq -r 'keys | .[]' "$elem_temp" 2>/dev/null | grep -v '^+@' | head -n 1 || echo "")
     
     if [ -z "$elem_name" ]; then
-        rm -f "$elem_temp"
         return 0
     fi
     
@@ -171,7 +173,7 @@ render_element() {
             if [ "$path_json" != "null" ]; then
                 # Check if it's a simple string path (single identifier)
                 local path_temp=$(mktemp)
-                trap 'rm -f "$path_temp"' EXIT INT HUP
+                add_temp "$path_temp"
                 printf '%s' "$path_json" > "$path_temp"
                 
                 local has_string
@@ -190,7 +192,6 @@ render_element() {
                     value=$(resolve_path "$path_json" "$model_file" "$scope_stack")
                     printf '%s' "$value"
                 fi
-                rm -f "$path_temp"
             fi
             ;;
         segment)
@@ -214,7 +215,7 @@ render_element() {
             # Check if it's an array
             if [ -n "$array_json" ] && [ "$array_json" != "null" ]; then
                 local array_temp=$(mktemp)
-                trap 'rm -f "$array_temp"' EXIT INT HUP
+                add_temp "$array_temp"
                 printf '%s' "$array_json" > "$array_temp"
                 
                 local array_len
@@ -234,7 +235,7 @@ render_element() {
                     # TODO: Implement scope stack for nested loops
                     # For now, create a temporary model with the variable
                     local scoped_model=$(mktemp)
-                    trap 'rm -f "$scoped_model"' EXIT INT HUP
+                    add_temp "$scoped_model"
                     
                     # Merge current item as variable into model
                     # This is a simplified version - proper implementation would use scope stack
@@ -263,11 +264,8 @@ render_element() {
                         fi
                     fi
                     
-                    rm -f "$scoped_model"
                     i=$((i + 1))
                 done
-                
-                rm -f "$array_temp"
             fi
             ;;
         text)
@@ -281,11 +279,9 @@ render_element() {
             printf '{['
             ;;
         *)
-            log_warn "Unknown element type: $elem_name"
+            log warning "Unknown element type: ${WHITE}$elem_name${NC}"
             ;;
     esac
-    
-    rm -f "$elem_temp"
 }
 
 # main()
@@ -297,7 +293,7 @@ main() {
     log trace "Elements JSON: $WHITE$elements_json"
 
     if [ "$elements_json" = "null" ]; then
-        log_error "No elements found in AST"
+        log error "No elements found in AST"
         exit 1
     fi
     
