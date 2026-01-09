@@ -54,6 +54,9 @@ fi
 
 AST_XML=$(hemar-parser --xml "$TEMPLATE" 2>/dev/null)
 
+# Store template directory for resolving relative includes
+TEMPLATE_DIR=$(dirname "$TEMPLATE")
+
 AST_TEMP=$(mktemp)
 MODEL_TEMP=$(mktemp)
 add_temp "$AST_TEMP"
@@ -245,6 +248,114 @@ render_segment() {
     fi
 }
 
+# render_include(elem_file, model_file, scope_stack, depth)
+# Renders an include element {[ include path ]}
+render_include() {
+    local elem_file="$1"
+    local model_file="$2"
+    local scope_stack="$3"
+    local depth="$4"
+    
+    # Build path similar to render_interpolation
+    local num_children
+    num_children=$(xmlstarlet sel -t -v 'count(/element/include/path/*)' "$elem_file")
+    
+    log debug "Include: num_path_segments=${WHITE}$num_children${NC}"
+    
+    if [ "$num_children" -eq "0" ]; then
+        # Check if this is root path (just ".")
+        local path_text
+        path_text=$(xmlstarlet sel -t -v '/element/include/path' "$elem_file"; echo x)
+        path_text=${path_text%x}
+        path_text=$(printf '%s' "$path_text" | tr -d '[:space:]')
+        if [ "$path_text" = "." ]; then
+            log error "Include path cannot be root (.)"
+            return
+        else
+            log error "Empty include path"
+            return
+        fi
+    fi
+    
+    # Build yq path to resolve file path from model
+    local yq_path=""
+    local i=1
+    while [ "$i" -le "$num_children" ]; do
+        local elem_name
+        elem_name=$(xmlstarlet sel -t -v "name(/element/include/path/*[$i])" "$elem_file")
+        
+        case "$elem_name" in
+            string)
+                local key
+                key=$(xmlstarlet sel -t -v "/element/include/path/*[$i]" "$elem_file"; echo x)
+                key=${key%x}
+                key=$(extract_string_value "$key")
+                if [ -z "$yq_path" ]; then
+                    yq_path=".\"$key\""
+                else
+                    yq_path="${yq_path}.\"$key\""
+                fi
+                ;;
+            index)
+                local idx
+                idx=$(xmlstarlet sel -t -v "/element/include/path/*[$i]/integer_index" "$elem_file")
+                yq_path="${yq_path}[$idx]"
+                ;;
+        esac
+        i=$((i + 1))
+    done
+    
+    log debug "  Include yq_path: ${WHITE}$yq_path${NC}"
+    
+    # Resolve file path from model
+    local file_path
+    file_path=$(yq -r "$yq_path" "$model_file" 2>&1 || echo "ERROR")
+    
+    if [ "$file_path" = "null" ] || [ "$file_path" = "ERROR" ] || [ -z "$file_path" ]; then
+        log error "Include path not found in model: ${WHITE}$yq_path${NC}"
+        return
+    fi
+    
+    # Resolve relative paths
+    if [ "${file_path#/}" = "$file_path" ]; then
+        # Relative path - resolve relative to template directory
+        file_path="$TEMPLATE_DIR/$file_path"
+    fi
+    
+    log debug "  Including file: ${WHITE}$file_path${NC}"
+    
+    if [ ! -f "$file_path" ]; then
+        log error "Include file not found: ${WHITE}$file_path${NC}"
+        return
+    fi
+    
+    # Recursively render the included file
+    # Parse the included template
+    local included_ast_xml
+    included_ast_xml=$(hemar-parser --xml "$file_path" 2>/dev/null)
+    
+    if [ -z "$included_ast_xml" ]; then
+        log error "Failed to parse included file: ${WHITE}$file_path${NC}"
+        return
+    fi
+    
+    local included_ast_temp=$(mktemp)
+    add_temp "$included_ast_temp"
+    printf '%s' "$included_ast_xml" > "$included_ast_temp"
+    
+    # Count elements and render them
+    local num_elements
+    num_elements=$(xmlstarlet sel -t -v 'count(/source_file/element)' "$included_ast_temp")
+    
+    local j=1
+    while [ "$j" -le "$num_elements" ]; do
+        local elem_xml
+        elem_xml=$(xmlstarlet sel -t -c "/source_file/element[$j]" "$included_ast_temp")
+        render_element "$elem_xml" "$model_file" "$scope_stack" "$((depth + 1))"
+        j=$((j + 1))
+    done
+}
+
 # render_element(element_xml, model_file, scope_stack, depth?)
 # Recursively renders an element
 render_element() {
@@ -259,13 +370,14 @@ render_element() {
     
     # Detect element type by checking which child elements exist
     # The element structure is: <element><TYPE>...</TYPE></element>
-    local has_interpolation has_segment has_text has_actual_bracket
+    local has_interpolation has_segment has_text has_actual_bracket has_include
     has_interpolation=$(xmlstarlet sel -t -v 'count(/element/interpolation)' "$elem_temp")
     has_segment=$(xmlstarlet sel -t -v 'count(/element/segment)' "$elem_temp")
     has_text=$(xmlstarlet sel -t -v 'count(/element/text)' "$elem_temp")
     has_actual_bracket=$(xmlstarlet sel -t -v 'count(/element/actual_bracket)' "$elem_temp")
+    has_include=$(xmlstarlet sel -t -v 'count(/element/include)' "$elem_temp")
     
-    log debug "  Element type: text=${WHITE}$has_text${NC} interp=${WHITE}$has_interpolation${NC} seg=${WHITE}$has_segment${NC}"
+    log debug "  Element type: text=${WHITE}$has_text${NC} interp=${WHITE}$has_interpolation${NC} seg=${WHITE}$has_segment${NC} include=${WHITE}$has_include${NC}"
     
     if [ "$has_text" != "0" ]; then
         # Plain text - output as-is (whitespace preserved!)
@@ -283,6 +395,9 @@ render_element() {
     elif [ "$has_segment" != "0" ]; then
         # For loop: {[ for var in path ]} ... {[ done ]}
         render_segment "$elem_temp" "$model_file" "$scope_stack" "$depth"
+    elif [ "$has_include" != "0" ]; then
+        # Include: {[ include path ]}
+        render_include "$elem_temp" "$model_file" "$scope_stack" "$depth"
     elif [ "$has_actual_bracket" != "0" ]; then
         # Escaped bracket: {[ {[ ]} -> output {[
         printf '{['

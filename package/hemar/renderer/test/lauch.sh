@@ -152,6 +152,15 @@ Root: {
 }
 "
 
+# Test 9: Include
+test_render "include" \
+    "$EXAMPLES/include.hemar" \
+    "$EXAMPLES/include.json" \
+    "Header
+Included content: test
+Footer
+"
+
 log notice "Tests: $GREEN$passed passed$NC, $RED$failed failed"
 
 if [ "$failed" -gt 0 ]; then

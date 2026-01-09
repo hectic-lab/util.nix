@@ -1,11 +1,40 @@
 { lib, stdenv, tree-sitter, nodejs, clang, makeWrapper }:
 
 let
+  # Compute hash of grammar.js to ensure rebuilds when grammar changes
+  grammarHash = builtins.hashString "sha256" (builtins.readFile ./grammar.js);
+  
+  # Filter out generated files that should not be in the source
+  sourceFilter = path: type:
+    let
+      baseName = baseNameOf path;
+      # Filter out generated directories and files
+      generated = baseName == "src" || 
+                  baseName == "node_modules" ||
+                  baseName == "build" ||
+                  baseName == "target" ||
+                  baseName == ".build" ||
+                  baseName == "_obj" ||
+                  baseName == ".venv" ||
+                  baseName == "dist" ||
+                  baseName == ".zig-cache" ||
+                  baseName == "zig-cache" ||
+                  baseName == "zig-out" ||
+                  lib.hasSuffix ".so" baseName ||
+                  lib.hasSuffix ".a" baseName ||
+                  lib.hasSuffix ".wasm" baseName ||
+                  baseName == "parser" ||
+                  baseName == "parser.so";
+    in !generated;
+  
   grammarDrv = stdenv.mkDerivation {
     pname = "tree-sitter-hemar-grammar";
-    version = "0.1.0";
+    version = "0.1.0-${lib.substring 0 8 grammarHash}";
 
-    src = ./.;
+    src = lib.cleanSourceWith {
+      filter = sourceFilter;
+      src = ./.;
+    };
 
     nativeBuildInputs = [ tree-sitter nodejs ];
 
@@ -13,6 +42,18 @@ let
       export HOME="$TMPDIR"
       export XDG_CACHE_HOME="$TMPDIR/.cache"
       mkdir -p "$XDG_CACHE_HOME"
+
+      export XDG_CONFIG_HOME="$TMPDIR/.config"
+
+      mkdir -p "$XDG_CONFIG_HOME/tree-sitter"
+      
+      cat > "$XDG_CONFIG_HOME/tree-sitter/config.json" <<EOF
+      { "parser-directories": ["$PWD"] }
+      EOF
+
+      # Clean any existing parser artifacts to ensure fresh build
+      # Remove entire src directory if it exists (from local builds)
+      rm -rf src parser parser.so *.so *.a
 
       tree-sitter generate
 
@@ -37,7 +78,7 @@ let
       cp parser $out/lib/hemar.so
 
       mkdir -p $out/share/tree-sitter/grammars/hemar
-      cp -r src grammar.js package.json queries $out/share/tree-sitter/grammars/hemar/
+      cp -r src grammar.js package.json queries tree-sitter.json $out/share/tree-sitter/grammars/hemar/ 2>/dev/null || true
       cp parser $out/share/tree-sitter/grammars/hemar.so
 
       cp -r . $out/parser/

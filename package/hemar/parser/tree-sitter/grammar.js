@@ -2,9 +2,11 @@ module.exports = grammar({
   name: "hemar",
 
   rules: {
-    source_file: $ => repeat($.element),
+    source_file: $ => seq(
+      repeat($.element),
+    ),
 
-    element: $ => choice($.interpolation, $.segment, $.text, $.actual_bracket),
+    element: $ => choice($.interpolation, $.segment, $.text, $.actual_bracket, $.include),
 
     interpolation: $ => seq("{[", $.path,  "]}"),
 
@@ -14,7 +16,7 @@ module.exports = grammar({
     for:                $ => seq("{[", "for", $.string, "in", $.path, "]}"),
     done:               $ => seq("{[", "done", "]}"),
     actual_bracket:     $ => seq("{[", "{[", "]}"),
-    //include:         $ => seq("include", $.path),
+    include:            $ => seq("{[", "include", $.path, "]}"),
     //call:            $ => seq("call", $.string, "in", $.language),
     //call_end:        $ => seq("end", $.string),
     //standalone_call: $ => seq("call", $.string, "end"),
@@ -57,4 +59,3 @@ module.exports = grammar({
     text: $ => token(prec(-1, /(?:\{[^\[]|[^{])+/)),
   }
 });
-
