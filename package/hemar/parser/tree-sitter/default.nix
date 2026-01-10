@@ -1,38 +1,13 @@
 { lib, stdenv, tree-sitter, nodejs, clang, makeWrapper }:
 
 let
-  # Compute hash of grammar.js to ensure rebuilds when grammar changes
   grammarHash = builtins.hashString "sha256" (builtins.readFile ./grammar.js);
-  
-  # Filter out generated files that should not be in the source
-  sourceFilter = path: type:
-    let
-      baseName = baseNameOf path;
-      # Filter out generated directories and files
-      generated = baseName == "src" || 
-                  baseName == "node_modules" ||
-                  baseName == "build" ||
-                  baseName == "target" ||
-                  baseName == ".build" ||
-                  baseName == "_obj" ||
-                  baseName == ".venv" ||
-                  baseName == "dist" ||
-                  baseName == ".zig-cache" ||
-                  baseName == "zig-cache" ||
-                  baseName == "zig-out" ||
-                  lib.hasSuffix ".so" baseName ||
-                  lib.hasSuffix ".a" baseName ||
-                  lib.hasSuffix ".wasm" baseName ||
-                  baseName == "parser" ||
-                  baseName == "parser.so";
-    in !generated;
-  
+
   grammarDrv = stdenv.mkDerivation {
     pname = "tree-sitter-hemar-grammar";
     version = "0.1.0-${lib.substring 0 8 grammarHash}";
 
     src = lib.cleanSourceWith {
-      filter = sourceFilter;
       src = ./.;
     };
 
@@ -49,15 +24,28 @@ let
       
       cat > "$XDG_CONFIG_HOME/tree-sitter/config.json" <<EOF
       { "parser-directories": ["$PWD"] }
-      EOF
+EOF
 
       # Clean any existing parser artifacts to ensure fresh build
       # Remove entire src directory if it exists (from local builds)
-      rm -rf src parser parser.so *.so *.a
+      rm -rf src
+
+      echo ls:
+      ls
 
       tree-sitter generate
-
       tree-sitter build --output parser
+
+      ls -la parser
+
+      set +e
+      echo greps:
+      cat src/grammar.json | grep text
+      cat src/grammar.json | grep zalupa
+      echo greps 2:
+      cat grammar.js | grep text
+      cat grammar.js | grep zalupa
+      set -e
     '';
 
     doCheck = true;
@@ -77,8 +65,8 @@ let
 
       cp parser $out/lib/hemar.so
 
-      mkdir -p $out/share/tree-sitter/grammars/hemar
-      cp -r src grammar.js package.json queries tree-sitter.json $out/share/tree-sitter/grammars/hemar/ 2>/dev/null || true
+      mkdir -p $out/share/tree-sitter/grammars/tree-sitter-hemar
+      cp -r src grammar.js package.json queries tree-sitter.json $out/share/tree-sitter/grammars/tree-sitter-hemar/ 2>/dev/null || true
       cp parser $out/share/tree-sitter/grammars/hemar.so
 
       cp -r . $out/parser/
@@ -105,16 +93,21 @@ stdenv.mkDerivation {
     ln -s ${grammarDrv}/share $out/share
 
     # Install to $bin - wrapper script for tree-sitter CLI
-    mkdir -p $bin/bin
-    
-    makeWrapper ${tree-sitter}/bin/tree-sitter $bin/bin/tree-sitter-hemar \
-      --prefix PATH : ${lib.makeBinPath [ nodejs clang ]} \
-      --set TREE_SITTER_GRAMMAR_PATH "${grammarDrv}/share/tree-sitter/grammars" \
-      --chdir "${grammarDrv}/parser"
+    mkdir -p $bin/bin/bin
+    makeWrapper ${tree-sitter}/bin/tree-sitter $bin/bin/hemar-parser \
+  --run '
+    set -e
+    cfg="$(mktemp -d)"
+    cache="$(mktemp -d)"
+    mkdir -p "$cfg/tree-sitter"
+    cat >"$cfg/tree-sitter/config.json" <<EOF
+{ "parser-directories": ["'"${grammarDrv}"'/share/tree-sitter/grammars"] }
+EOF
+    export XDG_CONFIG_HOME="$cfg"
+    export XDG_CACHE_HOME="$cache"
+  ' \
+  --add-flags "parse --scope source.hemar"
 
-    # Create hemar-parser wrapper that runs tree-sitter-hemar parse
-    makeWrapper $bin/bin/tree-sitter-hemar $bin/bin/hemar-parser \
-      --add-flags "parse"
   '';
 
   meta = with lib; {
