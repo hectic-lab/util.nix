@@ -1,4 +1,4 @@
-{ lib, stdenv, tree-sitter, nodejs, clang, makeWrapper }:
+{ lib, stdenv, rustPlatform, tree-sitter, nodejs, clang, makeWrapper, fetchFromGitHub, llvmPackages, pkg-config, glibc }:
 
 let
   grammarHash = builtins.hashString "sha256" (builtins.readFile ./grammar.js);
@@ -11,7 +11,42 @@ let
       src = ./.;
     };
 
-    nativeBuildInputs = [ tree-sitter nodejs ];
+    nativeBuildInputs = [ (tree-sitter.overrideAttrs (old: rec {
+      version = "0.26.0";
+      src = fetchFromGitHub {
+        owner = "tree-sitter";
+        repo = "tree-sitter";
+        tag = "v${version}";
+        hash = "sha256-M7CcQiWNSL8HILk4R6ShEGNnr4u5+hAZ8r3/a8e9jvw=";
+        fetchSubmodules = true;
+      };
+    
+      # IMPORTANT: nixpkgs likely sets cargoDeps; override it or you'll keep 0.25.10-vendor
+      cargoDeps = rustPlatform.fetchCargoVendor {
+        inherit src;
+        hash = "sha256-Epj9Z69p5PjVjZhZZZ0XkcvXJ5f9ls5PDJKC7oufLF8=";
+      };
+
+      nativeBuildInputs = (old.nativeBuildInputs or []) ++ [
+        clang
+        llvmPackages.libclang
+        stdenv.cc.cc
+        glibc.dev
+      ];
+
+      LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
+
+      # make sure clang sees the nix cc include paths
+      BINDGEN_EXTRA_CLANG_ARGS = toString [
+        "-isystem" "${stdenv.cc.cc}/include"
+        "-isystem" "${glibc.dev}/include"
+        "-isystem" "${glibc.dev}/include/gnu"
+        "-I" "${stdenv.cc.cc}/lib/gcc/${stdenv.hostPlatform.config}/${stdenv.cc.cc.version}/include"
+        "-I" "${stdenv.cc.cc}/lib/gcc/${stdenv.hostPlatform.config}/${stdenv.cc.cc.version}/include-fixed"
+      ];
+
+      patches = [];
+    })) nodejs ];
 
     buildPhase = ''
       export HOME="$TMPDIR"
@@ -23,7 +58,7 @@ let
       mkdir -p "$XDG_CONFIG_HOME/tree-sitter"
       
       cat > "$XDG_CONFIG_HOME/tree-sitter/config.json" <<EOF
-      { "parser-directories": ["$PWD"] }
+        { "parser-directories": ["$PWD"] }
 EOF
 
       # Clean any existing parser artifacts to ensure fresh build
@@ -95,18 +130,7 @@ stdenv.mkDerivation {
     # Install to $bin - wrapper script for tree-sitter CLI
     mkdir -p $bin/bin/bin
     makeWrapper ${tree-sitter}/bin/tree-sitter $bin/bin/hemar-parser \
-  --run '
-    set -e
-    cfg="$(mktemp -d)"
-    cache="$(mktemp -d)"
-    mkdir -p "$cfg/tree-sitter"
-    cat >"$cfg/tree-sitter/config.json" <<EOF
-{ "parser-directories": ["'"${grammarDrv}"'/share/tree-sitter/grammars"] }
-EOF
-    export XDG_CONFIG_HOME="$cfg"
-    export XDG_CACHE_HOME="$cache"
-  ' \
-  --add-flags "parse --scope source.hemar"
+  --add-flags "parse -- source.hemar"
 
   '';
 

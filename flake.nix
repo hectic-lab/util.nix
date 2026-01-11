@@ -1,23 +1,21 @@
 {
   description = "yukkop's nix utilities";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url            = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs-25-05.url      = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-2024-01-24.url = "github:NixOS/nixpkgs/592e6881f67cb86c98e32196b0756c70476f1a96";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
         nixpkgs.follows = "nixpkgs";
       };
     };
-    deploy-rs = {
-      url = "github:serokell/deploy-rs";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     hyprland = {
       url = "github:hyprwm/Hyprland";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixvim = {
-      url = "github:nix-community/nixvim/nixos-25.05";
+      url = "github:nix-community/nixvim/nixos-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     disko = {
@@ -28,7 +26,7 @@
       url = "github:nix-community/impermanence";
     };
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.05";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixos-hardware = {

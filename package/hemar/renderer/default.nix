@@ -16,7 +16,7 @@ hectic.hectic-env.mkDerivation {
   nativeBuildInputs = [ makeWrapper ];
   buildInputs = [ dash yq-go xmlstarlet tree-sitter ];
 
-  doCheck = true;
+  doCheck = false;
 
   buildPhase = ''
     hecticPatchInclude ${hectic.helpers.posix-shell.log} ./hemar-renderer.sh

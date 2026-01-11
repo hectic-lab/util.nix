@@ -1,30 +1,16 @@
 {
+  lib,
   fetchFromGitHub,
-  pkgs,
-  ...
-}: let
-  aiogram-newsletter = pkgs.python3Packages.buildPythonPackage {
-    pname = "example-package";
-    version = "0.0.10";
-  
-    src = fetchFromGitHub {
-      owner = "nessshon";
-      repo = "aiogram-newsletter";
-      rev = "bb8a42e4bcff66a9a606fc92ccc27b1d094b20fc";
-      sha256 = "sha256-atKhccp8Pr8anJUo+M9hnYkYrcgnB9SxrpmsiVusJZs=";
-    };
-  
-    propagatedBuildInputs = [ ];
-  
-    meta = {
-      description = "";
-    };
-  };
-in pkgs.python3Packages.buildPythonPackage {
+  hectic,
+  python3Packages
+}: python3Packages.buildPythonPackage {
   pname = "support-bot";
   version = "1.0.0";
 
-  src = pkgs.fetchFromGitHub {
+  pyproject = true;
+  build-system = [ python3Packages.setuptools ];
+
+  src = fetchFromGitHub {
     owner = "nessshon";
     repo = "support-bot";
     rev = "9191d9a9ba6bfd81e267b6ca41836db037555976";
@@ -42,9 +28,9 @@ in pkgs.python3Packages.buildPythonPackage {
         "aiogram==3.7.0",
         "aiogram-newsletter>=0.0.10",
         "cachetools==5.3.2",
-        "environs==10.3.0",
-        "pydantic==2.5.3",
-        "redis==5.0.1",
+        "environs==11.0.0",
+        "pydantic==2.6.3",
+        "redis==5.0.3",
         "apscheduler",
       ],
       entry_points={
@@ -62,14 +48,22 @@ in pkgs.python3Packages.buildPythonPackage {
     EOF2
   '';
 
-  propagatedBuildInputs = (with pkgs.python3Packages; [
+  propagatedBuildInputs = (with python3Packages; [
     aiogram
-    apscheduler
+    (apscheduler.overrideAttrs (old: rec {
+      version = "3.10.0";
+      src = fetchFromGitHub {
+        owner = "agronholm";
+        repo = "apscheduler";
+        tag = version;
+        hash = "sha256-n6oZNS3TQAEa6OVM0/eAZ363nJUFsxCrYffTaJ4w5ZE=";
+      };
+    }))
     cachetools
     environs
     pydantic
     redis
-  ]) ++ [ aiogram-newsletter ];
+  ]) ++ [ hectic.py3-aiogram-newsletter ];
 
   meta = {
     description = "A support bot for GitHub";

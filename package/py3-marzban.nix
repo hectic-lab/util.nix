@@ -7,7 +7,8 @@
       sha256 = "sha256-z71Wl4AuET3oES7/48u+paL9F12SdrkohcEee/tkWVk=";
     };
 
-    format = "pyproject";
+    pyproject = true;
+    build-system = [ python3Packages.setuptools ];
     
     propagatedBuildInputs = with python3Packages; [
       httpx

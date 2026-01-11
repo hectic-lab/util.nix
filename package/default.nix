@@ -1,4 +1,6 @@
 { self, pkgs, inputs, ... }: let
+  pkgs-25-05      = import inputs.nixpkgs-25-05 { inherit (pkgs) system; };
+  pkgs-2024-01-24 = import inputs.nixpkgs-2024-01-24 { inherit (pkgs) system; };
   rust = {
     nativeBuildInputs = [
       pkgs.pkgsBuildHost.rust-bin.stable."1.81.0".default
@@ -116,7 +118,7 @@ in {
   py3-cryptomus                = pkgs.callPackage ./py3-cryptomus.nix                 {};
   py3-modulegraph              = pkgs.callPackage ./py3-modulegraph.nix               {};
   py3-swifter                  = pkgs.callPackage ./py3-swifter.nix                   {};
-  py3-aiogram-newsletter       = pkgs.callPackage ./py3-swifter.nix                   {};
+  py3-aiogram-newsletter       = pkgs.callPackage ./py3-aiogram-newsletter.nix        { inherit (pkgs-2024-01-24) python3Packages; };
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};
   nvim-pager                   = pkgs.callPackage ./nvim-pager.nix                    {};
@@ -133,7 +135,7 @@ in {
   slpt                         = pkgs.callPackage ./slpt.nix                          {};
   c-hectic                     = pkgs.callPackage ./c/hectic/default.nix              {};
   watch                        = pkgs.callPackage ./c/watch/default.nix               {};
-  support-bot                  = pkgs.callPackage ./support-bot                       {};
+  support-bot                  = pkgs.callPackage ./support-bot                       { inherit (pkgs-2024-01-24) python3Packages; };
   nix-derivation-hash          = pkgs.callPackage ./nix-derivation-hash               {};
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };
