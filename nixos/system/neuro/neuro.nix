@@ -13,6 +13,7 @@
   matrixDomain = "accord.tube";
 in {
   imports = [
+    (modulesPath + "/installer/cd-dvd/iso-image.nix")
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops
   ];
@@ -33,8 +34,8 @@ in {
   boot.initrd.kernelModules = ["nvme"];
 
   disko.devices = {
-    disk.nvme0n1 = {
-      device = lib.mkDefault "/dev/nvme0n1";
+    disk.master = {
+      device = lib.mkDefault "/dev/disk/by-id/nvme-eui.00000000000000000026b7686dfafe35";
       type = "disk";
       content = {
         type = "gpt";
