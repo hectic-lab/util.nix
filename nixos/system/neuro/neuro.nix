@@ -8,10 +8,7 @@
   modulesPath,
   config,
   ...
-}: let
-  xrayPort = 10086;
-  matrixDomain = "accord.tube";
-in {
+}: {
   imports = [
     (modulesPath + "/installer/cd-dvd/iso-image.nix")
     self.nixosModules.hectic
