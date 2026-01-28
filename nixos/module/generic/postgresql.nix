@@ -31,9 +31,40 @@ in {
         type    = lib.types.attrsOf lib.types.str;
         default = {};
       };
+      script = lib.mkOption {
+        type = with lib; types.nullOr types.path;
+        default = null;
+        example = lib.literalExpression ''
+          pkgs.writeText "init-sql-script" '''
+            alter user postgres with password 'myPassword';
+          ''';'';
+
+        description = ''
+          A file containing SQL statements to execute on stratup or any time you change it.
+        '';
+      };
     };
   };
   config = lib.mkIf cfg.enable {
+    systemd.services.postgresql-script= lib.mkIf (cfg.script != null) {
+      description = "Some postgresql settings";
+      after = [ "postgresql.service" ];
+      wants = [ "postgresql.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.dash}/bin/dash ${pkgs.writeText "sql-script" ''
+          #!/${pkgs.dash}/bin/dash 
+
+          set -e
+
+          alias psql='${cfg.package}/bin/psql -v ON_ERROR_STOP=1 -p "${builtins.toString cfg.port}" -U postgres -d postgres'
+
+          ${builtins.readFile cfg.script}
+        ''}";
+      };
+      path = [ ];
+      wantedBy = [ "multi-user.target" ];
+    };
     systemd.services.postgresql.environment = cfg.environment;
     services.postgresql = {
       settings.shared_preload_libraries =
