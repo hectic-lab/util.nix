@@ -58,7 +58,10 @@ validate_log_level_spec() {
     return 0
 }
 
-validate_log_level_spec || { printf "%b%b\n" "${BBLACK}${HECTIC_NAMESPACE}> " "${color}invalid HECTIC_LOG syntax${NC}" "$@" >&2; exit 1; }
+exec 3>&2
+trap 'exec 3>&-' EXIT INT HUP
+
+validate_log_level_spec || { printf "%b%b\n" "${BBLACK}${HECTIC_NAMESPACE}> " "${color}invalid HECTIC_LOG syntax${NC}" "$@" >&3; exit 1; }
 
 log_level_num() {
     case $1 in
@@ -124,12 +127,12 @@ log() {
         info)          color="$GREEN"    ;;
         notice)        color="$CYAN"     ;;
         warn)          color="$YELLOW"   ;;
-	error)         color="$RED"      ;;
-	panic)         color="$BRED"     ;;
+        error)         color="$RED"      ;;
+        panic)         color="$BRED"     ;;
         *)       
-	  color="$WHITE"
-	  NO_SHIFT=1
-	;;
+    color="$WHITE"
+    NO_SHIFT=1
+  ;;
     esac
 
     [ ${NO_SHIFT+x} ] || shift
@@ -148,5 +151,5 @@ log() {
     fmt="$(printf "%s$delimetr" "$@" | sed 's/\\033\[0m/''\'"$color"'/g')"
     shift
     # shellcheck disable=SC1003
-    printf "${BBLACK}${HECTIC_NAMESPACE}> %b\n" "$color$fmt$NC" >&2
+    printf "${BBLACK}${HECTIC_NAMESPACE}> %b\n" "$color$fmt$NC" >&3
 }
