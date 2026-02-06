@@ -331,100 +331,97 @@ init_sql() {
 }
 
 help() {
-  cat <<'EOF'
-migrator - Database Migration Tool
+  # shellcheck disable=SC2059
+  printf "$(cat <<EOF
+${BGREEN}Usage:$NC migrator [OPTIONS] COMMAND [ARGS...]
 
-USAGE:
-    migrator [OPTIONS] COMMAND [ARGS...]
+migrator - A lightweight database migration tool supporting PostgreSQL and SQLite.
+           Tracks migrations in a dedicated table and supports bidirectional migrations.
 
-DESCRIPTION:
-    A lightweight database migration tool supporting PostgreSQL and SQLite.
-    Tracks migrations in a dedicated table and supports bidirectional migrations.
+${BGREEN}Commands:
+    ${BCYAN}init$NC                Initialize migration tables in database
+    ${BCYAN}migrate$NC             Apply or revert migrations
+    ${BCYAN}create$NC              Create a new migration file
+    ${BCYAN}list$NC                List available migrations
+    ${BCYAN}fetch$NC               Fetch migration status from database
 
-COMMANDS:
-    init                Initialize migration tables in database
-    migrate             Apply or revert migrations
-    create              Create a new migration file
-    list                List available migrations
-    fetch               Fetch migration status from database
-
-GLOBAL OPTIONS:
-    --db-url URL, -u URL
+${BGREEN}Global Options:
+    ${BCYAN}--db-url ${CYAN}URL$NC, $BCYAN-u ${CYAN}URL$NC
                         Database connection URL (required for most commands)
                         PostgreSQL: postgresql://user@host/database
                         SQLite:     sqlite:///path/to/file.db or /path/to/file.db
     
-    --migration-dir DIR, -d DIR
+    ${BCYAN}--migration-dir ${CYAN}DIR$NC, ${BCYAN}-d ${CYAN}DIR$NC
                         Directory containing migrations (default: ./migration)
     
-    --inherits TABLE    (PostgreSQL only) Parent table for hectic.migration
+    ${BCYAN}--inherits ${CYAN}TABLE$NC    (PostgreSQL only) Parent table for hectic.migration
                         Can be specified multiple times
 
-MIGRATE SUBCOMMANDS:
-    up [N]              Apply next N migrations (default: 1)
-    up all              Apply all pending migrations (same as: up latest)
-    down [N]            Revert last N migrations (default: 1)
-    to MIGRATION        Migrate to specific migration (forward or backward)
-    to latest           Migrate to the latest migration (aliases: head, last)
+${BGREEN}Migrate Subcommands:
+    ${BCYAN}up ${CYAN}[N]$NC              Apply next N migrations (default: 1)
+    ${BCYAN}up all$NC              Apply all pending migrations (same as: up latest)
+    ${BCYAN}down ${CYAN}[N]$NC            Revert last N migrations (default: 1)
+    ${BCYAN}to ${CYAN}MIGRATION$NC        Migrate to specific migration (forward or backward)
+    ${BCYAN}to latest$NC           Migrate to the latest migration (aliases: head, last)
 
-MIGRATE OPTIONS:
-    --force, -f         Force migration despite tree mismatch (not implemented)
-    --set VAR, -v VAR   Set psql variable (PostgreSQL only)
+${BGREEN}Migrate Options:
+    $BCYAN--force$NC, $BCYAN-f$NC         Force migration despite tree mismatch (not implemented)
+    $BCYAN--set ${CYAN}VAR$NC, $BCYAN-v ${CYAN}VAR$NC   Set psql variable (PostgreSQL only)
 
-INIT OPTIONS:
-    --dry-run           Print initialization SQL without executing
+${BGREEN}Init Options:
+    $BCYAN--dry-run$NC           Print initialization SQL without executing
 
-CREATE OPTIONS:
-    --name NAME, -n NAME
+${BGREEN}Create Options:
+    $BCYAN--name ${CYAN}NAME$NC, $BCYAN-n ${CYAN}NAME$NC
                         Name for the migration (default: random word)
 
-LIST OPTIONS:
-    --raw, -r           Output raw migration names without validation
+${BGREEN}List Options:
+    $BCYAN--raw$NC, $BCYAN-r$NC           Output raw migration names without validation
 
-EXAMPLES:
-    # Initialize migration tracking
+${BGREEN}Examples:
+    ${BBLACK}# Initialize migration tracking$NC
     migrator --db-url postgresql://user@localhost/mydb init
 
-    # Create a new migration
+    ${BBLACK}# Create a new migration$NC
     migrator create --name add-users-table
 
-    # Apply next migration
+    ${BBLACK}# Apply next migration$NC
     migrator -u postgresql://user@localhost/mydb migrate up
 
-    # Apply next 3 migrations
+    ${BBLACK}# Apply next 3 migrations$NC
     migrator -u postgresql://user@localhost/mydb migrate up 3
 
-    # Apply all pending migrations
+    ${BBLACK}# Apply all pending migrations$NC
     migrator -u postgresql://user@localhost/mydb migrate up all
-    # or:
+    ${BBLACK}# or:$NC
     migrator -u postgresql://user@localhost/mydb migrate to latest
 
-    # Revert last migration
+    ${BBLACK}# Revert last migration$NC
     migrator -u postgresql://user@localhost/mydb migrate down
 
-    # Migrate to specific version
+    ${BBLACK}# Migrate to specific version$NC
     migrator -u postgresql://user@localhost/mydb migrate to 20231201120000-add-users
 
-    # List migrations
+    ${BBLACK}# List migrations$NC
     migrator list
 
-    # Use SQLite
+    ${BBLACK}# Use SQLite$NC
     migrator --db-url sqlite:///path/to/db.sqlite migrate up
 
-    # PostgreSQL with table inheritance
+    ${BBLACK}# PostgreSQL with table inheritance$NC
     migrator --inherits audit_log --db-url $DB_URL init
 
-MIGRATION FILE STRUCTURE:
+${BGREEN}Migration File Structure:$NC
     migration/
     └── 20231201120000-migration-name/
         ├── up.sql      - Forward migration
         └── down.sql    - Rollback migration
 
-MIGRATION NAMING:
+${BGREEN}Migration Naming:$NC
     Migrations must follow the format: YYYYMMDDHHMMSS-description
     Example: 20231201120000-add-users-table
 
-DATABASE SUPPORT:
+${BGREEN}Database Support:$NC
     PostgreSQL:
         - Full schema support (hectic.migration)
         - Domains with regex validation
@@ -438,11 +435,11 @@ DATABASE SUPPORT:
         - Trigger-based version control
         - File-based databases
 
-ENVIRONMENT VARIABLES:
-    MIGRATION_DIR       Default migration directory
-    DB_URL              Default database URL (can be overridden with --db-url)
+${BGREEN}Environment Bariables:$NC
+    ${BBLACK}MIGRATION_DIR$NC       Default migration directory
+    ${BBLACK}DB_URL$NC              Default database URL (can be overridden with --db-url)
 
-EXIT CODES:
+${BGREEN}Exit Codes:$NC
     0    Success
     1    Generic error
     2    Ambiguous arguments or unrelated migration tree
@@ -453,17 +450,15 @@ EXIT CODES:
     13   System/database incompatibility
     127  Required tool not installed (psql or sqlite3)
 
-VERSION:
+${BGREEN}Version:$NC
     0.0.1
 
-AUTHOR:
-    Created with Nix and POSIX shell
-
-MORE INFO:
+${BGREEN}More Info:$NC
     Migration files are executed within transactions.
     Failed migrations are automatically rolled back.
     Migration hashes are tracked to detect tampering.
 EOF
+)" | "$PAGER"
 }
 
 migrate_down() {
@@ -572,7 +567,7 @@ migrate_to() {
         exit 1
       ;;
       *)
-        # shellcheck disable=SC2016
+        #shellcheck disable=SC2016
         [ "${migration_name+x}" ] && { log error '`migrate to` too many arguments'; exit 1; }
         migration_name=$1
         shift
@@ -1057,9 +1052,6 @@ if ! [ "${AS_LIBRARY+x}" ]; then
   [ "${INHERITS_LIST+x}" ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
   [ "${SUBCOMMAND+x}"    ] || { log error "no subcommand specified. Use 'migrator help' for usage information."; exit 1; }
   
-  
-  log debug "subcommand: $WHITE$SUBCOMMAND"
-  log debug "subcommand args: $WHITE$REMAINING_ARS"
   
   eval "set -- $REMAINING_ARS"
   "$SUBCOMMAND" "$@"
