@@ -62,7 +62,7 @@ in {
           ${builtins.readFile cfg.script}
         ''}";
       };
-      path = [ ];
+      path = [ cfg.package ];
       wantedBy = [ "multi-user.target" ];
     };
     systemd.services.postgresql.environment = cfg.environment;
