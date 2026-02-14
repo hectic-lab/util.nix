@@ -66,32 +66,32 @@ in {
       wantedBy = [ "multi-user.target" ];
     };
     systemd.services.postgresql.environment = cfg.environment;
-    services.postgresql = {
-      settings.shared_preload_libraries =
-        lib.concatStringsSep ", "
-          (lib.attrNames (
-  	    lib.filterAttrs (n: v: v && 
-  	         n != "http" 
-  	      && n != "plsh" 
-  	      && n != "pgjwt" 
-  	      && n != "pg_smtp_client"
-  	  ) cfg.lazzyExtensions));
+    #services.postgresql = {
+    #  settings.shared_preload_libraries =
+    #    lib.concatStringsSep ", "
+    #      (lib.attrNames (
+  	#    lib.filterAttrs (n: v: v && 
+  	#         n != "http" 
+  	#      && n != "plsh" 
+  	#      && n != "pgjwt" 
+  	#      && n != "pg_smtp_client"
+  	#  ) cfg.lazzyExtensions));
 
-      extensions = let
-        packages = {
-          inherit (cfg.package.pkgs) pg_net pgjwt pg_cron http pg_smtp_client plsh;
-        };
-      in
-        lib.attrValues (
-          lib.filterAttrs (n: v: v != null)
-          (lib.mapAttrs' (
-              name: enabled:
-                if enabled
-                then lib.nameValuePair name (packages.${name} or (throw "Package ${name} not found in pkgs"))
-                else null
-            )
-            cfg.lazzyExtensions)
-        );
-    };
+    #  extensions = let
+    #    packages = {
+    #      inherit (cfg.package.pkgs) pg_net pgjwt pg_cron http pg_smtp_client plsh;
+    #    };
+    #  in
+    #    lib.attrValues (
+    #      lib.filterAttrs (n: v: v != null)
+    #      (lib.mapAttrs' (
+    #          name: enabled:
+    #            if enabled
+    #            then lib.nameValuePair name (packages.${name} or (throw "Package ${name} not found in pkgs"))
+    #            else null
+    #        )
+    #        cfg.lazzyExtensions)
+    #    );
+    #};
   };
 }
