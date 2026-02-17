@@ -217,7 +217,7 @@ BEGIN;
 
 DO \$\$
 DECLARE
-  version TEXT;
+  ver TEXT;
 BEGIN
   CREATE SCHEMA IF NOT EXISTS hectic;
     
@@ -230,28 +230,43 @@ BEGIN
       AND n.nspname = 'hectic'
       AND c.relkind = 'r'
   ) THEN
-    SELECT hectic.version.version FROM hectic.version  WHERE name = 'migrator' INTO version;
-    IF version != '$VERSION' THEN
-      RAISE EXCEPTION 'Incompatible migrator versions: % and $VERSION', version;
+    SELECT v.version INTO ver FROM hectic.version v WHERE v.name = 'migrator';
+    IF ver IS NOT NULL AND ver != '$VERSION' THEN
+      RAISE EXCEPTION 'Incompatible migrator versions: % and $VERSION', ver;
     END IF;
   ELSE
-    CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{14}-.*');
-    CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}\$');
-
-    CREATE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn\$
-    BEGIN
-      NEW.hash = lower(NEW.hash);
-      RETURN NEW;
-    END;
-    \$fn\$ LANGUAGE plpgsql;
-
     CREATE TABLE hectic.version (
         name          TEXT                 PRIMARY KEY,
         version       TEXT                 NOT NULL,
         installed_at  TIMESTAMPTZ          NOT NULL DEFAULT NOW()
     )$inherits;
+  END IF;
 
+  -- NOTE(yukkop): check migrator is registered in version table
+  IF NOT EXISTS (
+    SELECT 1 FROM hectic.version WHERE name = 'migrator'
+  ) THEN
     INSERT INTO hectic.version (name, version) VALUES ('migrator', '$VERSION');
+  END IF;
+
+  -- NOTE(yukkop): create migrator-specific objects if not yet present
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname = 'migration'
+      AND n.nspname = 'hectic'
+      AND c.relkind = 'r'
+  ) THEN
+    CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{14}-.*');
+    CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}\$');
+
+    CREATE OR REPLACE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn\$
+    BEGIN
+      NEW.hash = lower(NEW.hash);
+      RETURN NEW;
+    END;
+    \$fn\$ LANGUAGE plpgsql;
 
     CREATE TABLE hectic.migration (
         id          SERIAL                 PRIMARY KEY,
