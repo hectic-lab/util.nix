@@ -16,7 +16,7 @@ set -eu
 
 VERSION='0.0.1'
 MIGRATION_DIR="${MIGRATION_DIR:-migration}"
-DB_URL="${DB_URL:-DB_URL}"
+: "${DB_URL:=DB_URL}"
 REMAINING_ARS=
 
 quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
@@ -80,7 +80,7 @@ db_exec() {
     sqlite)
       local db_path
       db_path=$(get_sqlite_path)
-      # Use -batch for non-interactive execution
+      # NOTE: Use -batch for non-interactive execution
       printf '%s' "$sql" | sqlite3 -batch "$db_path"
       ;;
   esac
