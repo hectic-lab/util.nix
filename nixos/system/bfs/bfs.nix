@@ -21,23 +21,23 @@ in {
   imports = [
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops
-    ./voice-tune.nix
-    ./matrix.nix
-    ./element-rtc.nix
-    ./element.nix
+    #./voice-tune.nix
+    #./matrix.nix
+    #./element-rtc.nix
+    #./element.nix
   ];
 
-  currentServer = {
-    matrix = {
-      secretsFile  = config.sops.secrets."matrix/secrets".path;
-      turnSecretFile = config.sops.secrets."matrix/turn-secret".path; 
-      postgresql   = {
-        port = 5432;
-        initialEnvFile = config.sops.secrets."init-postgresql".path;
-      };
-      matrixDomain   = "accord.tube";
-    };
-  };
+  #currentServer = {
+  #  matrix = {
+  #    secretsFile  = config.sops.secrets."matrix/secrets".path;
+  #    turnSecretFile = config.sops.secrets."matrix/turn-secret".path; 
+  #    postgresql   = {
+  #      port = 5432;
+  #      initialEnvFile = config.sops.secrets."init-postgresql".path;
+  #    };
+  #    matrixDomain   = "accord.tube";
+  #  };
+  #};
 
   services.xray = {
     enable  = true;
@@ -92,12 +92,12 @@ in {
 
     secrets."config"              = {};
     secrets."init-postgresql"     = {};
-    secrets."matrix/secrets"      = {};
-    secrets."matrix/turn-secret"  = {
-      owner = "turnserver";
-      group = "turnserver";
-      mode = "0400";
-    };
+    #secrets."matrix/secrets"      = {};
+    #secrets."matrix/turn-secret"  = {
+    #  owner = "turnserver";
+    #  group = "turnserver";
+    #  mode = "0400";
+    #};
   };
 
   networking.firewall = {
