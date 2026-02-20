@@ -2,6 +2,7 @@
   description = "yukkop's nix utilities";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs-fixed.url = "github:NixOS/nixpkgs/nixos-25.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -18,7 +19,7 @@
     };
     nixvim = {
       url = "github:nix-community/nixvim/nixos-25.11";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs-fixed";
     };
     disko = {
       url = "github:nix-community/disko";
@@ -29,7 +30,7 @@
     };
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs-fixed";
     };
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
