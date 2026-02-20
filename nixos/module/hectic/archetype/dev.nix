@@ -56,9 +56,6 @@ in {
           yq-go
           jq
           htop-vim
-        ])
-        ++ (with self.packages.${pkgs.system}; [
-          prettify-log
         ]);
     };
   };
