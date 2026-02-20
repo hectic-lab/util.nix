@@ -1,6 +1,9 @@
 { python3Packages, fetchPypi }: python3Packages.buildPythonPackage rec {
   pname = "payok";
   version = "1.2";
+
+  pyproject = true;
+  build-system = [ python3Packages.setuptools ];
   
   src = fetchPypi {
     inherit pname version;
