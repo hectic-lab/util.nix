@@ -56,9 +56,9 @@
   environment.systemPackages =  with pkgs; [
     gdb
     hectic.nvim-pager
-    (writeScriptBin "check" ''
-      journalctl -u postgresql.service | grep postgresql-post-start | sed 's|psql:/nix/store/[^:]*:[0-9]*: ||' | sed 's|^[^:]*:[^:]*:[^:]*: ||' | grep -v '^\[.*\]' | ${hectic.prettify-log}/bin/prettify-log --color-output
-    '')
+    #(writeScriptBin "check" ''
+    #  journalctl -u postgresql.service | grep postgresql-post-start | sed 's|psql:/nix/store/[^:]*:[0-9]*: ||' | sed 's|^[^:]*:[^:]*:[^:]*: ||' | grep -v '^\[.*\]' | ${hectic.prettify-log}/bin/prettify-log --color-output
+    #'')
   ];
   programs.zsh.shellAliases = self.lib.sharedShellAliasesForDevVm // {
     conn = "sudo su postgres -c 'psql -p 64317'";

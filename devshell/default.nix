@@ -11,7 +11,6 @@
     buildInputs =
       (with self.packages.${system}; [
         nvim-alias
-        #prettify-log
         nvim-pager
       ])
       ++ (with pkgs; [
