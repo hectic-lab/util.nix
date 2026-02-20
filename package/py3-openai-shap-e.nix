@@ -6,6 +6,9 @@
   pname = "shap-e";
   version = "1.0";
 
+  pyproject = true;
+  build-system = [ python3Packages.setuptools ];
+
   src = fetchFromGitHub {
     inherit pname version;
     owner = "openai";

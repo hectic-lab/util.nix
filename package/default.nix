@@ -139,7 +139,6 @@ in {
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };
   shellplot                    = pkgs.callPackage ./shellplot                         {};
-  sops                         = pkgs.callPackage ./sops.nix                          {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   migrator                     = pkgs.callPackage ./migrator                          {};
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};

@@ -4,8 +4,11 @@
   ...
 }: let
   aiogram-newsletter = pkgs.python3Packages.buildPythonPackage {
-    pname = "example-package";
+    pname = "aiogram-newsletter";
     version = "0.0.10";
+
+    pyproject = true;
+    build-system = [ pkgs.python3Packages.setuptools ];
   
     src = fetchFromGitHub {
       owner = "nessshon";
@@ -23,6 +26,9 @@
 in pkgs.python3Packages.buildPythonPackage {
   pname = "support-bot";
   version = "1.0.0";
+
+  pyproject = true;
+  build-system = [ pkgs.python3Packages.setuptools ];
 
   src = pkgs.fetchFromGitHub {
     owner = "nessshon";

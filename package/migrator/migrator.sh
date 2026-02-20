@@ -19,6 +19,8 @@ MIGRATION_DIR="${MIGRATION_DIR:-migration}"
 : "${DB_URL:=DB_URL}"
 REMAINING_ARS=
 
+: "${PAGER:=cat}"
+
 quote() { printf "'%s'" "$(printf %s "$1" | sed "s/'/'\\\\''/g")"; }
 
 # cat filename | sha256sum()
