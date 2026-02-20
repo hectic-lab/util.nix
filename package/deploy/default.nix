@@ -9,12 +9,15 @@ let
   deploy = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "deploy";
-    runtimeInputs = [ 
+    runtimeInputs = [
       ssh-to-age
       inputs.nixos-anywhere.packages.${system}.nixos-anywhere
     ];
 
-    text = builtins.readFile ./deploy.sh;
+    text = ''
+      ${builtins.readFile hectic.helpers.posix-shell.log}
+      ${builtins.readFile ./deploy.sh}
+    '';
   };
 in
 symlinkJoin {

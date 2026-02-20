@@ -1,6 +1,6 @@
-#!/bin/dash
-
 # requirements: ssh-to-age nixos-anywhere
+
+HECTIC_NAMESPACE="deploy"
 
 # ssh proxydoe 'cat /etc/os-release 2>/dev/null || echo "no /etc/os-release"' | grep '^NAME=NixOS$'
 # NAME=NixOS
@@ -27,8 +27,8 @@ while [ $# -gt 0 ]; do
     push)
       if [ ${founded_command+x} ]; then
         # shellcheck disable=SC2016
-	printf 'ambiguous subcommand `%s` and `%s`\n' "$1" "$founded_command"
-	exit 1
+        log error 'ambiguous subcommand `%s` and `%s`' "$1" "$founded_command"
+        exit 2
       fi
 
       push_deploy=1
@@ -38,8 +38,8 @@ while [ $# -gt 0 ]; do
     rollback)
       if [ ${founded_command+x} ]; then
         # shellcheck disable=SC2016
-	printf 'ambiguous subcommand `%s` and `%s`\n' "$1" "$founded_command"
-	exit 1
+        log error 'ambiguous subcommand `%s` and `%s`' "$1" "$founded_command"
+        exit 2
       fi
 
       rollback_deploy=1
@@ -49,8 +49,8 @@ while [ $# -gt 0 ]; do
     history)
       if [ ${founded_command+x} ]; then
         # shellcheck disable=SC2016
-	printf 'ambiguous subcommand `%s` and `%s`\n' "$1" "$founded_command"
-	exit 1
+        log error 'ambiguous subcommand `%s` and `%s`' "$1" "$founded_command"
+        exit 2
       fi
 
       server_history=1
@@ -81,15 +81,15 @@ while [ $# -gt 0 ]; do
       if [ ${push_deploy+x} ]; then
         server_init=1
       else
-        printf 'illegal %s\n' "$1"
+        log warn 'illegal %s' "$1"
       fi 
       shift
       ;;
     --to)
       if [ ${rollback_deploy+x} ]; then
-	rollback_to="$2"
+        rollback_to="$2"
       else
-        printf 'illegal %s\n' "$1"
+        log warn 'illegal %s' "$1"
       fi
       shift 2
       ;;
@@ -113,8 +113,8 @@ while [ $# -gt 0 ]; do
   case $1 in
     --target-host)
       if [ "${target_host+x}" ] && [ "$target_host" != "$2" ]; then
-        printf 'you specified 2 ambiguous target hosts %s and %s\n' "$target_host" "$2"
-	exit 1
+        log error 'you specified 2 ambiguous target hosts %s and %s' "$target_host" "$2"
+        exit 2
       fi
 
       target_host="$2"
@@ -132,8 +132,8 @@ done
 set -- $saved_nix_args
 
 if ! [ ${target_host+x} ]; then
-  printf '%s not set, but required\n' '--target-host'
-  exit 1
+  log error '%s not set, but required' '--target-host'
+  exit 3
 fi
 
 if puressh "$target_host" 'cat /etc/os-release 2>/dev/null || echo "no /etc/os-release"' \
@@ -157,7 +157,7 @@ if [ "${rollback_deploy+x}" ]; then
 
     if [ -z "$rollback_to" ]; then
       # shellcheck disable=SC2016
-      printf 'no profile version older than the current `%s` exists\n' "$current_gen"
+      log error 'no profile version older than the current `%s` exists' "$current_gen"
       exit
     fi
 
@@ -166,7 +166,7 @@ if [ "${rollback_deploy+x}" ]; then
       | grep -oP '(?<=system-)'"$rollback_to"'(?=-link)' > /dev/null
     then
       # shellcheck disable=SC2016
-      printf 'no profile version `%s` exists\n' "$rollback_to"
+      log error 'no profile version `%s` exists' "$rollback_to"
       exit
     fi
   fi
@@ -186,7 +186,8 @@ fi
 if [ "${push_deploy+x}" ]; then
   if [ "${server_init+x}" ]; then
     if [ "$is_target_host_nixos" -eq 1 ]; then
-      printf 'target host already is nixos, are you realy want to reinstall nixos?\nThis may delete all data [y/N]\n' 
+      log warn 'target host already is nixos, are you really want to reinstall nixos?'
+      printf 'This may delete all data [y/N]\n'
       read -r CONTINUE
       if [ "$CONTINUE" != "y" ]; then
         exit 0
@@ -199,11 +200,11 @@ if [ "${push_deploy+x}" ]; then
     server_public_age_key=$(puressh "$target_host" cat /etc/ssh/ssh_host_ed25519_key.pub | ssh-to-age)
   
     # shellcheck disable=SC2016
-    printf 'server'"'"'s public age key is `%s` use it in sops file and run regular deploys\n' "$server_public_age_key"
+    log info 'server'"'"'s public age key is `%s` use it in sops file and run regular deploys' "$server_public_age_key"
   else
     if [ "$is_target_host_nixos" -ne 1 ]; then
-      printf 'remote system not nixos\n'
-      exit 1 
+      log error 'remote system not nixos'
+      exit 1
     fi
   
     # shellcheck disable=SC2068
