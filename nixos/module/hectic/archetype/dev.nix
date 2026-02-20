@@ -19,6 +19,8 @@ in {
 
   config = lib.mkIf cfg.enable {
     hectic.archetype.base.enable = true;
+    hectic.program.zsh.enable    = true;
+    hectic.program.nixvim.enable = true;
 
     services.getty.autologinUser = "root";
 

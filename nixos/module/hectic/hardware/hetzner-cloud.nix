@@ -73,7 +73,8 @@ in {
         "xen_blkfront"
       ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
 
-      networking.useDHCP = lib.mkDefault true;
+      networking.useDHCP    = false;
+      networking.useNetworkd = true;
       systemd.network.enable = true;
       systemd.network.networks."30-wan" = {
         matchConfig.Name = cfg.networkMatchConfigName;
