@@ -117,6 +117,7 @@ in {
   py3-modulegraph              = pkgs.callPackage ./py3-modulegraph.nix               {};
   py3-swifter                  = pkgs.callPackage ./py3-swifter.nix                   {};
   py3-aiogram-newsletter       = pkgs.callPackage ./py3-swifter.nix                   {};
+  py3-openai-shap-e            = pkgs.callPackage ./py3-openai-shap-e.nix             {};
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};
   nvim-pager                   = pkgs.callPackage ./nvim-pager.nix                    {};
