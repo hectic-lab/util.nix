@@ -28,11 +28,11 @@ in {
 
     environment = {
       defaultPackages = [];
-      systemPackages = (with self.packages.${pkgs.system}; [
+      systemPackages = (with self.packages.${pkgs.stdenv.hostPlatform.system}; [
         nvim-pager
       ]);
       variables = {
-        PAGER = with self.packages.${pkgs.system}; "${nvim-pager}/bin/pager";
+        PAGER = with self.packages.${pkgs.stdenv.hostPlatform.system}; "${nvim-pager}/bin/pager";
       };
     };
 
