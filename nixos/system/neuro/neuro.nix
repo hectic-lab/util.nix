@@ -113,12 +113,22 @@
   zramSwap.swapDevices   = 1;
   zramSwap.memoryPercent = lib.mkDefault 100;
 
-  environment.systemPackages = with pkgs; [
-    # (pkgs.python3.withPackages (ps: with ps; [
-    #   hectic.py3-openai-shap-e
-    #   torchWithCuda torchvision pytorch3d
-    #   fvcore iopath tqdm
-    # ]))
+  environment.systemPackages = with pkgs; let
+    python-ai = python3.withPackages (ps: let
+      torchCuda     = ps.torchWithCuda;
+      torchvision   = ps.torchvision.override { torch = torchCuda; };
+      pytorch3dCuda = ps.pytorch3d.override { torch = torchCuda; };
+    in [
+      torchCuda
+      torchvision
+      pytorch3dCuda
+      ps.fvcore
+      ps.iopath
+      ps.tqdm
+      hectic.py3-openai-shap-e  # Uncomment when needed; depends on torch
+    ]);
+  in [
+    python-ai
     git
     neovim
     wget
