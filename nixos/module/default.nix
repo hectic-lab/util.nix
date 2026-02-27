@@ -11,7 +11,7 @@ let
   hectic.imports = attrValues (
     readModulesRecursive' ./hectic { inherit flake self inputs; }
   );
-  # Read generic modules seperately
+  # Read generic modules separately
   generic = readModulesRecursive'
     ./generic
     { inherit flake self inputs; };
