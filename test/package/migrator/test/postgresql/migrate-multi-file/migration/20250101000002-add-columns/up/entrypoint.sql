@@ -1,0 +1,2 @@
+ALTER TABLE items ADD COLUMN description TEXT;
+ALTER TABLE items ADD COLUMN price NUMERIC;

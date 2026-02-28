@@ -13,7 +13,9 @@ printf '%s' "$result" > result
 printf '20251004192425-some-changes
 20251004292448-some-changes
 20251104172425-third-migration
+20251104192426-multi-file-both
 20251104192427-an-other-one
+20251104192428-multi-file-up-only
 20251104292469-almoust-last
 20251204152446-very-last' > expected
 
@@ -35,8 +37,10 @@ printf '%s' "$result" > result
 
 printf '20251004192425-some-changes: missing up.sql down.sql
 20251004292448-some-changes
-20251104172425-third-migration: missing  down.sql
-20251104192427-an-other-one: missing  down.sql
+20251104172425-third-migration: missing down.sql
+20251104192426-multi-file-both
+20251104192427-an-other-one: missing down.sql
+20251104192428-multi-file-up-only: missing down.sql
 20251104292469-almoust-last
 20251204152446-very-last' > expected
 
