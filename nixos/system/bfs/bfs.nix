@@ -49,7 +49,6 @@ in {
     ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBKPbIJATVyAw7F7vBZbHkCODXFo5gvDyqhuU0gnNUNH''
   ];
 
-  boot.loader.grub.device =  "/dev/vda";
   boot.initrd.availableKernelModules = [
     "ata_piix"
     "uhci_hcd"

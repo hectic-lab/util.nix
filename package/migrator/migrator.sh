@@ -431,8 +431,14 @@ ${BGREEN}Examples:
 ${BGREEN}Migration File Structure:$NC
     migration/
     └── 20231201120000-migration-name/
-        ├── up.sql      - Forward migration
-        └── down.sql    - Rollback migration
+        ├── up.sql      - Forward migration (single file)
+        └── down.sql    - Rollback migration (single file)
+    ${BBLACK}# or with multi-file layout:$NC
+    └── 20231201120000-migration-name/
+        ├── up/
+        │   └── entrypoint.sql  - Forward migration entrypoint
+        └── down/
+            └── entrypoint.sql  - Rollback migration entrypoint
 
 ${BGREEN}Migration Naming:$NC
     Migrations must follow the format: YYYYMMDDHHMMSS-description
@@ -607,6 +613,39 @@ migrate_to() {
 
 migration_list() {
   find "$MIGRATION_DIR" -maxdepth 1 -type d -regextype posix-extended -regex '^.*/[0-9]{14}-.*$' -printf '%f\n' | sort
+}
+
+# resolve_migration_path(migration_name, direction)
+# direction: "up" or "down"
+# Resolves the SQL file for a migration, supporting two layouts:
+#   1. MIGRATION_DIR/<name>/up.sql       (single-file)
+#   2. MIGRATION_DIR/<name>/up/entrypoint.sql  (multi-file)
+# Returns the resolved path on stdout, exits with error if neither found.
+resolve_migration_path() {
+  local name="$1" direction="$2"
+  local single_file="$MIGRATION_DIR/$name/${direction}.sql"
+  local multi_file="$MIGRATION_DIR/$name/${direction}/entrypoint.sql"
+
+  if [ -f "$single_file" ]; then
+    printf '%s' "$single_file"
+  elif [ -f "$multi_file" ]; then
+    printf '%s' "$multi_file"
+  else
+    log error "migration ${direction} not found for ${WHITE}$name${NC}"
+    log error "expected either ${WHITE}$single_file${NC} or ${WHITE}$multi_file${NC}"
+    exit 1
+  fi
+}
+
+# has_migration_direction(migration_name, direction)
+# direction: "up" or "down"
+# Returns 0 if the migration has the given direction, 1 otherwise.
+has_migration_direction() {
+  local name="$1" direction="$2"
+  local single_file="$MIGRATION_DIR/$name/${direction}.sql"
+  local multi_file="$MIGRATION_DIR/$name/${direction}/entrypoint.sql"
+
+  [ -f "$single_file" ] || [ -f "$multi_file" ]
 }
 
 # index_of(array, name)
@@ -790,13 +829,8 @@ migrate() {
       fs_migration=$(printf '%s' "$fs_migrations" | sed -n "${i}p")
       
       escaped_name=$(printf '%s' "$fs_migration" | sed "s/'/''/g")
-      mig_path="$MIGRATION_DIR/$fs_migration/up.sql"
+      mig_path=$(resolve_migration_path "$fs_migration" "up")
       escaped_path=$(printf '%s' "$mig_path" | sed "s/'/''/g")
-      
-      if [ ! -f "$mig_path" ]; then
-        log error "migration file not found: ${WHITE}$mig_path${NC}"
-        exit 1
-      fi
       
       mig_hash=$(sha256sum "$mig_path")
       log info "applying migration ${WHITE}$fs_migration${NC} (up)"
@@ -847,13 +881,8 @@ SQL
       fs_migration=$(printf '%s' "$fs_migrations" | sed -n "${i}p")
       
       escaped_name=$(printf '%s' "$fs_migration" | sed "s/'/''/g")
-      mig_path="$MIGRATION_DIR/$fs_migration/down.sql"
+      mig_path=$(resolve_migration_path "$fs_migration" "down")
       escaped_path=$(printf '%s' "$mig_path" | sed "s/'/''/g")
-      
-      if [ ! -f "$mig_path" ]; then
-        log error "migration file not found: ${WHITE}$mig_path${NC}"
-        exit 1
-      fi
       
       log info "reverting migration ${WHITE}$fs_migration${NC} (down)"
       
@@ -981,12 +1010,27 @@ list() {
   }
 
   migration_list | while read -r name; do
-    dir="./${MIGRATION_DIR}/${name}"
-    up="$dir/up.sql"
-    down="$dir/down.sql"
+    has_up=true
+    has_down=true
+
+    if ! has_migration_direction "$name" "up"; then
+      has_up=false
+    fi
+    if ! has_migration_direction "$name" "down"; then
+      has_down=false
+    fi
   
-    if [ ! -f "$up" ] || [ ! -f "$down" ]; then
-      echo "$name: missing $( [ ! -f "$up" ] && echo up.sql ) $( [ ! -f "$down" ] && echo down.sql )"
+    if [ "$has_up" = false ] || [ "$has_down" = false ]; then
+      missing=""
+      [ "$has_up" = false ] && missing="up.sql"
+      if [ "$has_down" = false ]; then
+        if [ -n "$missing" ]; then
+          missing="$missing down.sql"
+        else
+          missing="down.sql"
+        fi
+      fi
+      echo "$name: missing $missing"
     else
       echo "$name"
     fi
