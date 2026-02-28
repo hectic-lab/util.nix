@@ -54,28 +54,29 @@ in {
     "ata_piix"
     "uhci_hcd"
     "xen_blkfront"
-  ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
+  ] ++ (if pkgs.stdenv.hostPlatform.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
   boot.initrd.kernelModules = ["nvme"];
 
   disko.devices = {
     disk.vda = {
       device = lib.mkDefault "/dev/vda";
       content = {
-        type = "table";
-        format = "msdos";
-        partitions = [
-          {
-            name = "root";
-            part-type = "primary";
-            fs-type = "ext4";
-            bootable = true;
+        type = "gpt";
+        partitions = {
+          boot = {
+            size     = "1M";
+            type     = "EF02";
+            priority = 1;
+          };
+          root = {
+            size    = "100%";
             content = {
-              type = "filesystem";
-              format = "ext4";
+              type       = "filesystem";
+              format     = "ext4";
               mountpoint = "/";
             };
-          }
-        ];
+          };
+        };
       };
     };
   };

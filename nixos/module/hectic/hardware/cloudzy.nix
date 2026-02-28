@@ -112,6 +112,6 @@ in {
       "ata_piix"
       "uhci_hcd"
       "xen_blkfront"
-    ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
+    ] ++ (if pkgs.stdenv.hostPlatform.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
   };
 }

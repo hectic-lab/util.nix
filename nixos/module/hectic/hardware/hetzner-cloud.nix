@@ -71,7 +71,7 @@ in {
         "ata_piix"
         "uhci_hcd"
         "xen_blkfront"
-      ] ++ (if pkgs.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
+      ] ++ (if pkgs.stdenv.hostPlatform.system != "aarch64-linux" then [ "vmw_pvscsi" ] else []);
 
       networking.useDHCP    = false;
       networking.useNetworkd = true;
@@ -125,7 +125,7 @@ in {
         };
       };
     } 
-    (lib.mkIf (pkgs.system == "aarch64-linux") {
+    (lib.mkIf (pkgs.stdenv.hostPlatform.system == "aarch64-linux") {
       boot.initrd.kernelModules = [ "virtio_gpu" ];
       boot.kernelParams = [ "console=tty" ];
     })
