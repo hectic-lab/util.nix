@@ -32,6 +32,10 @@
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs-fixed";
     };
+    nixos-wsl = {
+      url = "github:nix-community/NixOS-WSL";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
     };
@@ -88,6 +92,7 @@
       # FIXME(yukkop): some why I cannot merge nixosConfigurations from `forAllSystemsWithPkgs` with this 
       "neuro|x86_64-linux"     = import ./nixos/system/neuro { inherit flake self inputs; system = "x86_64-linux"; };
       "games|x86_64-linux"     = import ./nixos/system/games { inherit flake self inputs; system = "x86_64-linux"; };
+      "wsl|x86_64-linux"       = import ./nixos/system/wsl   { inherit flake self inputs; system = "x86_64-linux"; };
     };
   };
 }

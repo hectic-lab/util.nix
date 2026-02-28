@@ -8,7 +8,7 @@
   modulesPath,
   config,
   ...
-}: let system = pkgs.system; in {
+}: let system = pkgs.stdenv.hostPlatform.system; in {
   imports = [
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops

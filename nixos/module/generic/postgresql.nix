@@ -9,7 +9,7 @@
   lib,
   ...
 }: let
-  system = pkgs.system;
+  system = pkgs.stdenv.hostPlatform.system;
   cfg = config.services.postgresql;
   extensionFlags = {
     pg_cron = false;

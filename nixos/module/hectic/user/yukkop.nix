@@ -1,4 +1,4 @@
-{
+{ 
   self,
   inputs,
   ...
@@ -8,90 +8,72 @@
   pkgs,
   lib,
   ...
-}: let 
-  name = builtins.baseNameOf ./.;
+}: let
+  name = "yukkop";
+  #name = builtins.baseNameOf ./.;
   home = "/home/${name}";
   cfg = config.hectic.user.yukkop;
 in {
+  imports = [
+    inputs.home-manager.nixosModules.home-manager
+  ];
+
   options.hectic.user.yukkop.enable = lib.mkEnableOption "Enable user.yukkop";
 
   config = lib.mkIf cfg.enable {
-    #home = {
-    #  username = name;
-    #  homeDirectory = home;
-    #  packages = [];
-    #  stateVersion = "25.05";
-    #};
+    users.users.${name} = {
+      isNormalUser    = true;
+      initialPassword = "kk";
+      extraGroups     = [ "wheel" "docker" "owner" ];
+    };
 
-    #xdg = {
-    #  enable = true;
-    #  userDirs = {
-    #    enable = true;
-    #    pictures    = "${home}/px";
-    #    videos      = "${home}/vd";
-    #    music       = "${home}/mu";
-    #    documents   = "${home}/dc";
-    #    downloads   = "${home}/dw";
-    #    desktop     = "${home}/dx";
-    #    publicShare = "${home}/pu";
-    #    templates   = "${config.xdg.dataHome}/templates";
-    #  };
-    #  mimeApps = {
-    #    enable = true;
-    #    defaultApplications = {
+    home-manager.users.${name} = {
+      home.stateVersion = "24.05";
 
-    #      # Files
-    #      "application/x-shellscript" = [ "nvim.desktop" ];
-    #      "text/x-shellscript" = [ "nvim.desktop" ];
-    #      "text/plain" = [ "nvim.desktop" ];
-    #      "inode/directory" = [ "pcmanfm.desktop" ];
+      home.packages = with pkgs; [
+        pinentry-tty
+      ];
 
-    #      # Images
-    #      "image/png" = [ "sxiv.desktop" ];
-    #      "image/jpeg" = [ "sxiv.desktop" ];
-    #      "image/gif" = [ "sxiv.desktop" ];
-    #      "image/webp" = [ "sxiv.desktop" ];
-    #      "image/x-xcf" = [ "gimp.desktop" ];
+      programs.password-store = {
+        enable = true;
+        package = (pkgs.pass.override {
+          x11Support     = false;
+          waylandSupport = false;
+          dmenuSupport   = false;
+        }).withExtensions (exts: with exts; [
+          pass-otp
+        ]);
+        settings.PASSWORD_STORE_DIR = "${home}/.pass";
+      };
 
-    #      # Videos
-    #      "video/x-matroska" = [ "mpv.desktop" ];
+      programs.gpg = {
+        enable  = true;
+        homedir = "${home}/.gnupg";
+      };
 
-    #      # # Application-specific
-    #      # "application/postscript" = [ "pdf.desktop" ];
-    #      # "application/pdf" = [ "pdf.desktop" ];
-    #      # "application/rss+xml" = [ "rss.desktop" ];
-    #      # "application/x-bittorrent" = [ "torrent.desktop" ];
+      services.gpg-agent = {
+        enable              = true;
+        pinentryPackage     = pkgs.pinentry-tty;
+        enableZshIntegration = true;
+        defaultCacheTtl     = 60 * 60;
+        maxCacheTtl         = 60 * 60 * 24;
+      };
 
-    #      # Protocols
-    #      "x-scheme-handler/http"  = [ "firefox.desktop" ];
-    #      "x-scheme-handler/https" = [ "firefox.desktop" ];
-    #      # "x-scheme-handler/magnet" = [ "torrent.desktop" ];
-    #      # "x-scheme-handler/mailto" = [ "mail.desktop" ];
-    #      # "x-scheme-handler/lbry" = [ "lbry.desktop" ];
-    #      # "x-scheme-handler/tg" = [ "telegram.desktop" ];
+      programs.bash.shellAliases = {
+        dev = "nix develop -c zsh";
+        # system-specific rebuild aliases can be added per-system
+      };
 
-    #      # text/x-shellscript=text.desktop;
-    #      # x-scheme-handler/magnet=torrent.desktop;
-    #      # application/x-bittorrent=torrent.desktop;
-    #      # x-scheme-handler/mailto=mail.desktop;
-    #      # text/plain=text.desktop;
-    #      # application/postscript=pdf.desktop;
-    #      # application/pdf=pdf.desktop;
-    #      # image/png=img.desktop;
-    #      # image/jpeg=img.desktop;
-    #      # image/gif=img.desktop;
-    #      # image/webp=img.desktop;
-    #      # application/rss+xml=rss.desktop;
-    #      # video/x-matroska=video.desktop;
-    #      # x-scheme-handler/lbry=lbry.desktop;
-    #      # inode/directory=file.desktop;
-    #      # text/html=chromium.desktop;
-    #      # x-scheme-handler/http=chromium.desktop;
-    #      # x-scheme-handler/https=chromium.desktop;
-    #      # x-scheme-handler/about=chromium.desktop;
-    #      # x-scheme-handler/unknown=chromium.desktop;
-    #    };
-    #  };
-    #};
+      programs.git = {
+        enable     = true;
+        lfs.enable = true;
+        userName   = "yukkop";
+        userEmail  = "hectic.yukkop@gmail.com";
+        extraConfig = {
+          push.autoSetupRemote = true;
+          init.defaultBranch   = "master";
+        };
+      };
+    };
   };
 }

@@ -9,7 +9,7 @@
   config,
   ...
 }: let
-  system = pkgs.system;
+  system = pkgs.stdenv.hostPlatform.system;
   cfg = config.hectic.services."sentinèlla";
   #   URLS="http://..."     # default: none
   #   VOLUMES="/ /home"     # default: all from df -P

@@ -1,7 +1,7 @@
 { inputs, flake, self }:
 { config, pkgs, lib, ... }: let
   cfg = config.hectic.services.support-bot;
-  system = pkgs.system;
+  system = pkgs.stdenv.hostPlatform.system;
 
   packagesAttr = lib.mapAttrs (packageName: packageConfig: 
     packageConfig // {
