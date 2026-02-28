@@ -58,5 +58,14 @@ in {
           htop-vim
         ]);
     };
+
+    # Adjust zsh prompt for dev archetype: show '#' instead of '%'
+    home-manager.sharedModules = lib.mkAfter [
+      {
+        programs.zsh.initExtra = lib.mkAfter ''
+          PROMPT="# %~ "
+        '';
+      }
+    ];
   };
 }

@@ -196,8 +196,14 @@ if [ "${push_deploy+x}" ]; then
   
     # shellcheck disable=SC2068
     nixos-anywhere -- $@ # --flake .#x86_64-linux --target-host proxydoe
+
+    log info "waiting for $target_host to become reachable via ssh..."
+    while ! puressh "$target_host" true 2>/dev/null; do
+       sleep 5
+    done
     
     server_public_age_key=$(puressh "$target_host" cat /etc/ssh/ssh_host_ed25519_key.pub | ssh-to-age)
+
   
     # shellcheck disable=SC2016
     log info 'server'"'"'s public age key is `%s` use it in sops file and run regular deploys' "$server_public_age_key"
