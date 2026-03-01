@@ -1,4 +1,4 @@
-{ inputs, symlinkJoin, dash, hectic, ssh-to-age, hcloud, system }:
+{ inputs, symlinkJoin, dash, hectic, ssh-to-age, hcloud, openssh, system }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -12,6 +12,7 @@ let
     runtimeInputs = [
       ssh-to-age
       hcloud
+      openssh
       inputs.nixos-anywhere.packages.${system}.nixos-anywhere
     ];
 

@@ -81,12 +81,13 @@
     "vmw_pvscsi"
   ];
 
-  # Dedicated keypair for the ephemeral builder.
-  # Private key lives at ~/.ssh/hetzner-builder on the operator's machine
-  # (generated once: ssh-keygen -t ed25519 -f ~/.ssh/hetzner-builder -C hetzner-builder).
-  # Only the public key is stored in the repo -- the builder is ephemeral and
-  # always destroyed after use, so there is no long-term exposure.
-  users.users.root.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICPGMqw0l8b46oiAmfyUWELIt6D9olH/rItLLjhw/LqG hetzner-builder"
+  # Ephemeral keypair injected at install time by nixos-anywhere --extra-files.
+  # deploy (--via-hetzner) generates a fresh ed25519 key per session, writes the
+  # public key to /root/.ssh/authorized_keys in the extra-files tree, and uses
+  # the matching private key for all subsequent SSH/nixos-rebuild connections.
+  # The key and the server are both destroyed on EXIT, so there is no long-term
+  # exposure.
+  users.users.root.openssh.authorizedKeys.keyFiles = [
+    /root/.ssh/authorized_keys
   ];
 }

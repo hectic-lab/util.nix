@@ -93,7 +93,7 @@
       "neuro|x86_64-linux"     = import ./nixos/system/neuro { inherit flake self inputs; system = "x86_64-linux"; };
       "games|x86_64-linux"     = import ./nixos/system/games { inherit flake self inputs; system = "x86_64-linux"; };
       "wsl|x86_64-linux"             = import ./nixos/system/wsl             { inherit flake self inputs; system = "x86_64-linux"; };
-      "hetzner-builder|x86_64-linux" = import ./nixos/system/hetzner-builder { inherit flake self inputs; system = "x86_64-linux"; };
+      "hetzner-builder" = import ./nixos/system/hetzner-builder { inherit flake self inputs; system = "x86_64-linux"; };
     };
   };
 }
