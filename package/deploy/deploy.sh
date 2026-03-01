@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
     push)
       if [ ${founded_command+x} ]; then
         # shellcheck disable=SC2016
-        log error 'ambiguous subcommand `%s` and `%s`' "$1" "$founded_command"
+        log error "ambiguous subcommand \`$1\` and \`$founded_command\`"
         exit 2
       fi
 
@@ -38,7 +38,7 @@ while [ $# -gt 0 ]; do
     rollback)
       if [ ${founded_command+x} ]; then
         # shellcheck disable=SC2016
-        log error 'ambiguous subcommand `%s` and `%s`' "$1" "$founded_command"
+        log error "ambiguous subcommand \`$1\` and \`$founded_command\`"
         exit 2
       fi
 
@@ -49,7 +49,7 @@ while [ $# -gt 0 ]; do
     history)
       if [ ${founded_command+x} ]; then
         # shellcheck disable=SC2016
-        log error 'ambiguous subcommand `%s` and `%s`' "$1" "$founded_command"
+        log error "ambiguous subcommand \`$1\` and \`$founded_command\`"
         exit 2
       fi
 
@@ -81,7 +81,7 @@ while [ $# -gt 0 ]; do
       if [ ${push_deploy+x} ]; then
         server_init=1
       else
-        log warn 'illegal %s' "$1"
+        log warn "illegal $1"
       fi 
       shift
       ;;
@@ -89,7 +89,7 @@ while [ $# -gt 0 ]; do
       if [ ${rollback_deploy+x} ]; then
         rollback_to="$2"
       else
-        log warn 'illegal %s' "$1"
+        log warn "illegal $1"
       fi
       shift 2
       ;;
@@ -113,7 +113,7 @@ while [ $# -gt 0 ]; do
   case $1 in
     --target-host)
       if [ "${target_host+x}" ] && [ "$target_host" != "$2" ]; then
-        log error 'you specified 2 ambiguous target hosts %s and %s' "$target_host" "$2"
+        log error "you specified 2 ambiguous target hosts \`$target_host\` and \`$2\`"
         exit 2
       fi
 
@@ -132,7 +132,7 @@ done
 set -- $saved_nix_args
 
 if ! [ ${target_host+x} ]; then
-  log error '%s not set, but required' '--target-host'
+  log error "$(printf '%s' '--target-host') not set, but required"
   exit 3
 fi
 
@@ -157,7 +157,7 @@ if [ "${rollback_deploy+x}" ]; then
 
     if [ -z "$rollback_to" ]; then
       # shellcheck disable=SC2016
-      log error 'no profile version older than the current `%s` exists' "$current_gen"
+      log error "no profile version older than the current \`$current_gen\` exists"
       exit
     fi
 
@@ -166,7 +166,7 @@ if [ "${rollback_deploy+x}" ]; then
       | grep -oP '(?<=system-)'"$rollback_to"'(?=-link)' > /dev/null
     then
       # shellcheck disable=SC2016
-      log error 'no profile version `%s` exists' "$rollback_to"
+      log error 'no profile version \`$rollback_to\` exists'
       exit
     fi
   fi
@@ -206,7 +206,7 @@ if [ "${push_deploy+x}" ]; then
 
   
     # shellcheck disable=SC2016
-    log info 'server'"'"'s public age key is `%s` use it in sops file and run regular deploys' "$server_public_age_key"
+    log info "server's public age key is \`$server_public_age_key\` use it in sops file and run regular deploys"
   else
     if [ "$is_target_host_nixos" -ne 1 ]; then
       log error 'remote system not nixos'
