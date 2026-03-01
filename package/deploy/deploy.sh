@@ -331,7 +331,7 @@ if [ "${push_deploy+x}" ]; then
     # Resolve builder flake ref from current git rev so the builder
     # bootstraps the exact same commit that is being deployed
     if [ -z "${builder_flake:-}" ]; then
-      git_rev=11d864a1323f78d2df162b38e226d551e6d66882
+      git_rev=a27a3d561cd824d9d5b06a5e61846d563bd74d0c
 
       builder_flake="github:hectic-lab/util.nix?ref=${git_rev}#hetzner-builder"
     fi
@@ -382,21 +382,33 @@ if [ "${push_deploy+x}" ]; then
 
     SERVER_ID=$(hcloud server describe "$BUILDER_NAME" -o format='{{.ID}}')
     SERVER_IP=$(hcloud server describe "$BUILDER_NAME" -o format='{{.PublicNet.IPv4.IP}}')
+    # IPv6 is returned as a /64 network prefix (e.g. "2a01:4f8:1c1b:6f10::/64").
+    # hectic.hardware.hetzner-cloud.ipv6 expects only the first four groups.
+    SERVER_IPV6_NET=$(hcloud server describe "$BUILDER_NAME" -o format='{{.PublicNet.IPv6.Network}}')
+    SERVER_IPV6=$(printf '%s' "$SERVER_IPV6_NET" | sed 's/::.*//')
 
-    log info "server created: id=${SERVER_ID} ip=${SERVER_IP}"
+    log info "server created: id=${SERVER_ID} ip=${SERVER_IP} ipv6=${SERVER_IPV6}"
 
     # 3. Wait for the rescue/ubuntu SSH to come up
     wait_for_ssh "root@${SERVER_IP}" "$builder_ssh_key"
 
     # 4. Bootstrap NixOS via nixos-anywhere.
-    #    Inject the ephemeral pubkey so the builder's root account accepts it.
-    #    The hetzner-builder NixOS config reads /root/.ssh/authorized_keys.
+    #    Inject into extra-files:
+    #      - /root/.ssh/authorized_keys  (ephemeral pubkey for post-install SSH)
+    #      - /etc/nixos/hetzner-ips.nix  (ipv4/ipv6 for hectic.hardware.hetzner-cloud)
     log info "bootstrapping nixos on builder (flake=${builder_flake})..."
     extra_files_dir="${builder_key_dir}/extra-files"
     mkdir -p "${extra_files_dir}/root/.ssh"
     printf '%s\n' "$builder_pubkey" > "${extra_files_dir}/root/.ssh/authorized_keys"
     chmod 700 "${extra_files_dir}/root/.ssh"
     chmod 600 "${extra_files_dir}/root/.ssh/authorized_keys"
+    mkdir -p "${extra_files_dir}/etc/nixos"
+    cat > "${extra_files_dir}/etc/nixos/hetzner-ips.nix" <<IPSNIX
+{ ... }: {
+  hectic.hardware.hetzner-cloud.ipv4 = "${SERVER_IP}";
+  hectic.hardware.hetzner-cloud.ipv6 = "${SERVER_IPV6}";
+}
+IPSNIX
     nixos-anywhere \
       --flake "$builder_flake" \
       --target-host "root@${SERVER_IP}" \

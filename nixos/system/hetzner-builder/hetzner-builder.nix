@@ -4,7 +4,6 @@
   self,
 }: {
   lib,
-  pkgs,
   modulesPath,
   ...
 }: {
@@ -12,22 +11,34 @@
     self.nixosModules.hectic
     (modulesPath + "/profiles/qemu-guest.nix")
     inputs.disko.nixosModules.disko
-  ];
+    # IPs injected at install time by deploy --via-hetzner via nixos-anywhere --extra-files.
+    # The file sets hectic.hardware.hetzner-cloud.ipv4 and .ipv6.
+    # During flake evaluation the file does not exist, so the import is skipped.
+  ] ++ (if builtins.pathExists /etc/nixos/hetzner-ips.nix
+        then [ /etc/nixos/hetzner-ips.nix ]
+        else []);
 
   hectic.archetype.base.enable = true;
 
-  # DHCP -- ephemeral server, no static IP needed
-  networking = {
-    useDHCP      = true;
-    useNetworkd  = false;
-    firewall.enable = lib.mkForce false;
+  hectic.hardware.hetzner-cloud = {
+    enable                 = true;
+    networkMatchConfigName = "enp1s0";
+    # ipv4 and ipv6 are provided by /etc/nixos/hetzner-ips.nix at install time.
+    # Placeholder values satisfy the type checker during flake evaluation.
+    ipv4 = lib.mkDefault "0.0.0.0";
+    ipv6 = lib.mkDefault "fe80:0:0:0";
   };
+
+  # cpx62 and all current Hetzner Cloud servers boot via UEFI.
+  boot.loader.systemd-boot.enable      = true;
+  boot.loader.efi.canTouchEfiVariables = true;
+
+  networking.firewall.enable = lib.mkForce false;
 
   # Use all cores for building
   nix.settings = {
-    max-jobs = "auto";
-    cores    = 0;
-    # Allow the target host to use this machine as a builder
+    max-jobs      = "auto";
+    cores         = 0;
     trusted-users = [ "root" ];
   };
 
@@ -40,46 +51,6 @@
     memoryMax     = null;
     swapDevices   = 1;
   };
-
-  # Disk layout -- plain GPT on /dev/sda (standard Hetzner Cloud device)
-  disko.devices.disk.main = {
-    type   = "disk";
-    device = "/dev/sda";
-    content = {
-      type = "gpt";
-      partitions = {
-        boot = {
-          size     = "1M";
-          type     = "EF02"; # BIOS boot
-          priority = 1;
-        };
-        ESP = {
-          size    = "512M";
-          type    = "EF00";
-          content = {
-            type       = "filesystem";
-            format     = "vfat";
-            mountpoint = "/boot";
-          };
-        };
-        root = {
-          size    = "100%";
-          content = {
-            type       = "filesystem";
-            format     = "ext4";
-            mountpoint = "/";
-          };
-        };
-      };
-    };
-  };
-
-  boot.initrd.availableKernelModules = [
-    "ata_piix"
-    "uhci_hcd"
-    "xen_blkfront"
-    "vmw_pvscsi"
-  ];
 
   # Ephemeral keypair injected at install time by nixos-anywhere --extra-files.
   # deploy (--via-hetzner) generates a fresh ed25519 key per session, writes the
