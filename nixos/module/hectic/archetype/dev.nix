@@ -11,6 +11,7 @@
 }: let
   cfg = config.hectic.archetype.dev;
 in {
+  # necessary imports:
   imports = [
     (modulesPath + "/profiles/qemu-guest.nix")
   ];
@@ -19,8 +20,6 @@ in {
 
   config = lib.mkIf cfg.enable {
     hectic.archetype.base.enable = true;
-    hectic.program.zsh.enable    = true;
-    hectic.program.nixvim.enable = true;
 
     services.getty.autologinUser = "root";
 

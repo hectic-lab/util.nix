@@ -1,7 +1,17 @@
-{ config, lib, pkgs, ... }: let
-  cfg = config.currentServer.matrix;
+{
+  inputs,
+  flake,
+  self,
+}:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}: let
+  cfg = config.hectic.services.matrix;
 in {
-  config = {
+  config = lib.mkIf cfg.enable {
     services.nginx.virtualHosts."element.${cfg.matrixDomain}" = {
       enableACME = true;
       forceSSL = true;

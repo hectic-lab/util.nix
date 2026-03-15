@@ -1,8 +1,19 @@
-{ pkgs, lib, config, ... }: let
-  cfg = config.currentServer.matrix;
+{
+  inputs,
+  flake,
+  self,
+}:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}: let
+  cfg = config.hectic.services.matrix;
 in {
   options = {
-    currentServer.matrix = {
+    hectic.services.matrix = {
+      enable = lib.mkEnableOption "Matrix Synapse homeserver with PostgreSQL and nginx";
       secretsFile = lib.mkOption {
         type = lib.types.path;
         description = ''
@@ -40,7 +51,7 @@ in {
       };
     };
   };
-  config  = {
+  config = lib.mkIf cfg.enable {
     services.matrix-synapse = {
       enable = true;
       settings = {
@@ -53,17 +64,17 @@ in {
             type = "http";
             tls = false;
             resources = [
-              { 
-                names = [ 
-                  "client" 
+              {
+                names = [
+                  "client"
                   # Ability speak between different matrix servers and get
                   # global id, requires .well-known
                   "federation"
                 ];
-                compress = false; 
+                compress = false;
               }
             ];
-          } 
+          }
         ];
 
         enable_registration = true;

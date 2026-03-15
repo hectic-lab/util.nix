@@ -1,9 +1,17 @@
-{ lib, config, ... }: let
-  cfg = config.currentServer.matrix;
-  shared_secret = "secret";
+{
+  inputs,
+  flake,
+  self,
+}:
+{
+  lib,
+  config,
+  ...
+}: let
+  cfg = config.hectic.services.matrix;
 in {
   options = {
-    currentServer.matrix = {
+    hectic.services.matrix = {
       turnSecretFile = lib.mkOption {
         type = lib.types.path;
         description = ''
@@ -12,9 +20,16 @@ in {
           just raw secret
         '';
       };
+      publicIp = lib.mkOption {
+        type = lib.types.str;
+        description = ''
+          public IP address of the server, used by coturn for
+          listening and relay
+        '';
+      };
     };
   };
-  config = {
+  config = lib.mkIf cfg.enable {
     services.coturn = rec {
       enable = true;
       realm = cfg.matrixDomain;
@@ -22,9 +37,9 @@ in {
       static-auth-secret-file = cfg.turnSecretFile;
       cert = "${config.security.acme.certs.${realm}.directory}/full.pem";
       pkey = "${config.security.acme.certs.${realm}.directory}/key.pem";
-      listening-ips = ["188.137.254.58"];
+      listening-ips = [cfg.publicIp];
       no-tcp-relay = true;
-      relay-ips = ["188.137.254.58"];
+      relay-ips = [cfg.publicIp];
       listening-port = 3478;
       tls-listening-port = 5349;
       no-cli = true;

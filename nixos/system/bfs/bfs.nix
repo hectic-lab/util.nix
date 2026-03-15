@@ -10,7 +10,6 @@
   ...
 }: let
   xrayPort = 10086;
-  matrixDomain = "accord.tube";
 in {
   # TODO:
   # white list
@@ -21,22 +20,18 @@ in {
   imports = [
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops
-    #./voice-tune.nix
-    #./matrix.nix
-    #./element-rtc.nix
-    #./element.nix
   ];
 
-  #currentServer = {
-  #  matrix = {
-  #    secretsFile  = config.sops.secrets."matrix/secrets".path;
-  #    turnSecretFile = config.sops.secrets."matrix/turn-secret".path; 
-  #    postgresql   = {
-  #      port = 5432;
-  #      initialEnvFile = config.sops.secrets."init-postgresql".path;
-  #    };
-  #    matrixDomain   = "accord.tube";
+  #hectic.services.matrix = {
+  #  enable           = true;
+  #  secretsFile      = config.sops.secrets."matrix/secrets".path;
+  #  turnSecretFile   = config.sops.secrets."matrix/turn-secret".path;
+  #  publicIp         = "188.137.254.58";
+  #  postgresql = {
+  #    port           = 5432;
+  #    initialEnvFile = config.sops.secrets."init-postgresql".path;
   #  };
+  #  matrixDomain     = "accord.tube";
   #};
 
   services.xray = {

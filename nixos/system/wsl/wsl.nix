@@ -14,8 +14,6 @@
 
   hectic = {
     archetype.base.enable = true;
-    program.zsh.enable    = true;
-    program.nixvim.enable = true;
     user.yukkop.enable    = true;
   };
 
@@ -83,6 +81,8 @@
   programs.bash.shellAliases = {
     nrs = "sudo nixos-rebuild switch --flake /home/yukkop/pj/util.nix#wsl";
   };
+
+  users.users.yukkop.shell = pkgs.zsh;
 
   # WSL: keep imperative stateVersion in the system module
   system.stateVersion = "25.05";

@@ -17,8 +17,12 @@ in {
   options.hectic.archetype.base.enable = lib.mkEnableOption "Enable archetupe.dev";
 
   config = lib.mkIf cfg.enable {
-    programs.zsh.shellAliases = self.lib.sharedShellAliases;
-    programs.zsh.enable = true;
+    hectic = {
+      program.zsh.enable    = lib.mkDefault true;
+      program.tmux.enable   = lib.mkDefault true;
+      program.nixvim.enable = lib.mkDefault true;
+    };
+
     users.defaultUserShell = pkgs.zsh;
 
     # Enable flakes and new 'nix' command
