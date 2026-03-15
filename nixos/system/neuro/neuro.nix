@@ -51,6 +51,17 @@
   #   };
   # };
 
+  hectic.services.matrix = {
+    enable           = true;
+    secretsFile      = config.sops.secrets."matrix/secrets".path;
+    turnSecretFile   = config.sops.secrets."matrix/turn-secret".path;
+    postgresql = {
+      port           = 5432;
+      initialEnvFile = config.sops.secrets."init-postgresql".path;
+    };
+    matrixDomain     = "accord.tube";
+  };
+
   networking = {
     networkmanager.enable = true;
     useDHCP = lib.mkDefault true;
@@ -78,6 +89,14 @@
     gnupg.sshKeyPaths         = [ ];
     age.sshKeyPaths           = [ "/etc/ssh/ssh_host_ed25519_key" ];
     defaultSopsFile           = ../../../sus/neuro.yaml;
+
+    secrets."init-postgresql"     = {};
+    secrets."matrix/secrets"      = {};
+    secrets."matrix/turn-secret"  = {
+      owner = "turnserver";
+      group = "turnserver";
+      mode = "0400";
+    };
   };
 
   boot.loader.systemd-boot.enable = true;
@@ -128,7 +147,7 @@
       hectic.py3-openai-shap-e  # Uncomment when needed; depends on torch
     ]);
   in [
-    python-ai
+    #python-ai
     git
     neovim
     wget

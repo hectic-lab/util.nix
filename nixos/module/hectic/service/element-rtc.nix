@@ -1,7 +1,17 @@
-{ pkgs, lib, config, ... }: let
-  cfg = config.currentServer.matrix;
+{
+  inputs,
+  flake,
+  self,
+}:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}: let
+  cfg = config.hectic.services.matrix;
 in {
-  config  = let 
+  config = lib.mkIf cfg.enable (let
     keyFile = "/run/livekit.key";
   in {
     services.livekit = {
@@ -94,5 +104,5 @@ in {
         7881
       ];
     };
-  };
+  });
 }
