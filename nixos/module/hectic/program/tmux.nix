@@ -17,7 +17,8 @@ in {
   options.hectic.program.tmux.enable = lib.mkEnableOption "Enable hectic tmux config";
 
   config = lib.mkIf cfg.enable {
-    programs.tmux.enable = true;
+    programs.tmux.enable   = true;
+    programs.tmux.terminal = lib.mkOverride 50 "tmux-256color";
 
     # alias depends on newSession = true (auto-creates session on attach)
     programs.zsh.shellAliases.tmux = "tmux a";
