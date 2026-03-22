@@ -14,6 +14,7 @@
 
   hectic = {
     archetype.base.enable = true;
+    program.tmux.enable   = lib.mkOverride 100 false;
     user.yukkop.enable    = true;
   };
 

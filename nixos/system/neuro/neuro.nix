@@ -20,6 +20,7 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIETMumAHP+htbRvbrmzVoeesbT0+WcH1Wz8htk+7Ik+6"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEJZFglwpPMFLnQDOqi84nlMFktZSSu1GzUIafvClUaD"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGj7u/JuY9RwjoxnmO2b+pwC8XbMn+QOy44UpuN0Y1do riquizu"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBbR42mLupcsF64ydGSx7HdB+qMVJq41a43UZMI7VvOj"
   ];
 
   # disko.devices = {
@@ -51,16 +52,16 @@
   #   };
   # };
 
-  hectic.services.matrix = {
-    enable           = true;
-    secretsFile      = config.sops.secrets."matrix/secrets".path;
-    turnSecretFile   = config.sops.secrets."matrix/turn-secret".path;
-    postgresql = {
-      port           = 5432;
-      initialEnvFile = config.sops.secrets."init-postgresql".path;
-    };
-    matrixDomain     = "accord.tube";
-  };
+  #hectic.services.matrix = {
+  #  enable           = true;
+  #  secretsFile      = config.sops.secrets."matrix/secrets".path;
+  #  turnSecretFile   = config.sops.secrets."matrix/turn-secret".path;
+  #  postgresql = {
+  #    port           = 5432;
+  #    initialEnvFile = config.sops.secrets."init-postgresql".path;
+  #  };
+  #  matrixDomain     = "accord.tube";
+  #};
 
   networking = {
     networkmanager.enable = true;
