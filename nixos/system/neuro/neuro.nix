@@ -63,6 +63,17 @@
   #  matrixDomain     = "accord.tube";
   #};
 
+  hectic.services.jitsi = {
+    enable   = true;
+    hostName = "meet.accord.tube";
+  };
+
+  hectic.services.xmpp = {
+    enable = true;
+    domain = "accord.tube";
+    admins = [ "yukkop@accord.tube" ];
+  };
+
   networking = {
     networkmanager.enable = true;
     useDHCP = lib.mkDefault true;
@@ -91,13 +102,13 @@
     age.sshKeyPaths           = [ "/etc/ssh/ssh_host_ed25519_key" ];
     defaultSopsFile           = ../../../sus/neuro.yaml;
 
-    secrets."init-postgresql"     = {};
-    secrets."matrix/secrets"      = {};
-    secrets."matrix/turn-secret"  = {
-      owner = "turnserver";
-      group = "turnserver";
-      mode = "0400";
-    };
+    #secrets."init-postgresql"     = {};
+    #secrets."matrix/secrets"      = {};
+    #secrets."matrix/turn-secret"  = {
+    #  owner = "turnserver";
+    #  group = "turnserver";
+    #  mode = "0400";
+    #};
   };
 
   boot.loader.systemd-boot.enable = true;
