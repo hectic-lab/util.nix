@@ -40,6 +40,10 @@ in self.lib.nixpkgs-lib.nixosSystem {
       "libcusparse"
       "cudnn"
     ];
+    # jitsi-meet depends on libolm which is marked insecure (CVE-2024-4519x)
+    config.permittedInsecurePackages = [
+      "jitsi-meet-1.0.8792"
+    ];
   };
   modules = [
     { networking.hostName = name; }
