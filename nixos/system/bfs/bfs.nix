@@ -102,4 +102,8 @@ in {
       80 443 # for acme
     ];
   };
+
+  environment.systemPackages = with pkgs; [
+    xray
+  ];
 }
