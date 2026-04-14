@@ -7,6 +7,7 @@
   rust       = import ./rust.nix       { inherit self system pkgs; };
   haskell    = import ./haskell.nix    { inherit self system pkgs; };
   neuro      = import ./neuro.nix      { inherit self system pkgs; };
+  xmpp       = import ./xmpp.nix       { inherit self system pkgs; };
   default    = pkgs.mkShell {
     buildInputs =
       (with self.packages.${system}; [
