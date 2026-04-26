@@ -47,6 +47,10 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixos-mailserver = {
+      url = "gitlab:simple-nixos-mailserver/nixos-mailserver/snm-25.11";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nix-minecraft.url = "github:Infinidoge/nix-minecraft";
   };
 
@@ -88,11 +92,12 @@
     nixosConfigurations = {
       # NOTE(yukkop): in bfs one of dependencies is shadow-4.17.4 that
       # unsupported on aarch64-darwin
-      "bfs|x86_64-linux"       = import ./nixos/system/bfs   { inherit flake self inputs; system = "x86_64-linux"; };
+      "bfs|x86_64-linux"        = import ./nixos/system/bfs        { inherit flake self inputs; system = "x86_64-linux"; };
       # FIXME(yukkop): some why I cannot merge nixosConfigurations from `forAllSystemsWithPkgs` with this 
-      "neuro|x86_64-linux"     = import ./nixos/system/neuro { inherit flake self inputs; system = "x86_64-linux"; };
-      "games|x86_64-linux"     = import ./nixos/system/games { inherit flake self inputs; system = "x86_64-linux"; };
-      "wsl|x86_64-linux"       = import ./nixos/system/wsl   { inherit flake self inputs; system = "x86_64-linux"; };
+      "neuro|x86_64-linux"     = import ./nixos/system/neuro       { inherit flake self inputs; system = "x86_64-linux"; };
+      "games|x86_64-linux"     = import ./nixos/system/games       { inherit flake self inputs; system = "x86_64-linux"; };
+      "wsl|x86_64-linux"       = import ./nixos/system/wsl         { inherit flake self inputs; system = "x86_64-linux"; };
+      "hectic-lab|x86_64-linux" = import ./nixos/system/hectic-lab { inherit flake self inputs; system = "x86_64-linux"; };
     };
   };
 }

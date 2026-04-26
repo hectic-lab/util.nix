@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Counter App</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-button {
+            padding: 10px 20px;
+            border: none;
+            background: #e5e7eb;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .tab-button.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .counter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .counter-button {
+            padding: 15px;
+            border: 1px solid #e5e7eb;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .counter-button:hover {
+            background: #f3f4f6;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .control-button {
+            padding: 10px 20px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .control-button:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <button class="control-button" onclick="resetCounters()">Reset</button>
+        <button class="control-button" onclick="saveCounters()">Save</button>
+        <input type="file" id="loadFile" style="display: none" onchange="loadCounters(event)">
+        <button class="control-button" onclick="document.getElementById('loadFile').click()">Load</button>
+    </div>
+
+    <div class="tab-buttons">
+        <button class="tab-button active" onclick="showTab('counters')">Counters</button>
+        <button class="tab-button" onclick="showTab('chart')">Chart</button>
+    </div>
+
+    <div id="counters" class="tab-content active">
+        <div class="counter-grid" id="counterGrid"></div>
+    </div>
+
+    <div id="chart" class="tab-content">
+        <canvas id="counterChart"></canvas>
+    </div>
+
+    <script>
+        let counters = Array(20).fill(0);
+        let chart = null;
+
+        function initializeCounters() {
+            const grid = document.getElementById('counterGrid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 20; i++) {
+                const button = document.createElement('button');
+                button.className = 'counter-button';
+                button.innerHTML = `Button ${i + 1}<br>Count: ${counters[i]}`;
+                button.onclick = () => incrementCounter(i);
+                grid.appendChild(button);
+            }
+            updateChart();
+        }
+
+        function incrementCounter(index) {
+            counters[index]++;
+            updateCounterDisplay();
+            updateChart();
+        }
+
+        function updateCounterDisplay() {
+            const buttons = document.querySelectorAll('.counter-button');
+            buttons.forEach((button, i) => {
+                button.innerHTML = `Button ${i + 1}<br>Count: ${counters[i]}`;
+            });
+        }
+
+        function updateChart() {
+            if (chart) {
+                chart.destroy();
+            }
+
+            const ctx = document.getElementById('counterChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 20}, (_, i) => `Button ${i + 1}`),
+                    datasets: [{
+                        label: 'Click Count',
+                        data: counters,
+                        backgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.getElementById(tabId).classList.add('active');
+            document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+            if (tabId === 'chart') {
+                updateChart();
+            }
+        }
+
+        function resetCounters() {
+            counters = Array(20).fill(0);
+            updateCounterDisplay();
+            updateChart();
+        }
+
+        function saveCounters() {
+            const data = JSON.stringify(counters);
+            const blob = new Blob([data], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'counters.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function loadCounters(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        counters = JSON.parse(e.target.result);
+                        updateCounterDisplay();
+                        updateChart();
+                    } catch (error) {
+                        alert('Invalid file format');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        initializeCounters();
+    </script>
+</body>
+</html>
