@@ -12,6 +12,7 @@
 in {
   imports = [
     inputs.disko.nixosModules.default
+    inputs.nixos-mailserver.nixosModules.mailserver
   ];
 
   options.hectic.archetype.base.enable = lib.mkEnableOption "Enable archetupe.dev";

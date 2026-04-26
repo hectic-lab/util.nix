@@ -2,7 +2,9 @@ mailserver:
     security:
         hashedPassword: ENC[AES256_GCM,data:Z03x7tWHIhlRPaRZSrukyYOKhs6LdasZhZdizHdhlaJp2bywQZXKBaDABj2ab4rhwAPCHWhSiBjz35zV,iv:Z3hLC/A4YLVQkflr4cg9/wkKzo/RUdnLTwYC7ZhS0Hk=,tag:mSF/mbzH7iG6PwzyEsmyGg==,type:str]
     yukkop:
-        hashedPassword: ENC[AES256_GCM,data:kwEki7VMcqKGN7MHJ3Ktcky+9w51v7XHsDzB1WGYkg228tEjY5xECokl0kWM7q5+wNK+Tob4lbq3BNkv,iv:ULaAjXXSrXAuoYF6PMlRhkMmmP29ce9FAxzDvTg1X20=,tag:3fba4FQFRSo/k8Ekp5w5qw==,type:str]
+        hashedPassword: ENC[AES256_GCM,data:zjhCFkmmMzQHn09uRz1S4NTNU8hVRY5ZSYRHn6Gd0u09Fc7inNVSPrO+Br41UagPmv526w9MMQoIbV3RiJq6E/mfhAouqybYbQ==,iv:aVjn+/X2ESgZU7p7jETONaqtsD2/NAFOd7IIbunTRaI=,tag:kueml9QdQYVBceFMCgWoGA==,type:str]
+    founders:
+        hashedPassword: ENC[AES256_GCM,data:E+Xu/Ul3rFLlYDD0LGGRnc6RADlWmXpOM2OfkZFSzAf5thm8leRi9x5sroP25cO8CcSyBcOiUCBv3RC5ooXklm4cmpOx8LA8ug==,iv:RLbU6SBHKOBRCNZ6naxQMaNjWZOlNui6OaaVM2QkdZs=,tag:sO7CD+PVkdtvPvlUrpzW+g==,type:str]
     snuff:
         hashedPassword: ENC[AES256_GCM,data:Dv0vhe5LEFbAi/hadztQUTrRbPENSTxxOSTM7iwosH5kO28FCK56ZkKD8p/CLva6v97Cp2sWAXwd0fS6,iv:nUF4deb/8iF1mS5h+Z6oDE16YVQZ6ArfSnXG9DzqzLE=,tag:rKKlkYOl5oABbnzEjTOSVQ==,type:str]
     antoshka:
@@ -68,7 +70,7 @@ sops:
             Yk43ZmlTc09aNFV1VjdjN2RWQlFWTDQKcYSvA2lHP8GS0lkYY19Tm8RXmFHQX5Ck
             qV2Fn22Fic4M5FVKDEMfaO6WmeXgki9a8dGeO9LlC+Phf16SOq7eLw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2025-08-12T11:42:59Z"
-    mac: ENC[AES256_GCM,data:gbZRWC1ruAJgynCbYknJCsuvrIiLQ/oq0wvbKTEU6PAii4ebUHhU4MzV7edu/YhHBM2Q4TGtRdbhk75k12cfdOoDmKigHgdZOq2ay1ZhN5lYK4DKyWmnJ8hy3d6SnXueceOexEgstohJjLO0fO59QCeh7RWSZPEbGzouxtKrtBg=,iv:SfjSG4id7+3D0CvWmMYZBxYGOFjJ3AsD5IBL/CSYMcU=,tag:A1nWtI0Ia9xRsPNps7h6Sg==,type:str]
+    lastmodified: "2026-04-26T10:30:18Z"
+    mac: ENC[AES256_GCM,data:D8O/NTSgI//jdDA8UX56t7EfqH+YKvGsDKCTopPPfg/o9uey+onhxDfiiHniUBWJf5lArgZVLR5KOoVwQQWY1fz3lp/2ZBzaDJnt+IiqVeXgImNuOmdWgmvJF6o2UmpjEISRGtC1ih8UHplaQw2e7YEiH/QUMHoz/TVRWDHaMas=,iv:UWJkyc6YYMush8ASgb0ntHXEBeo9u2eGJ93wBfQVm4g=,tag:nhaAeTvoObP9GT2iNNrAzA==,type:str]
     unencrypted_suffix: _unencrypted
-    version: 3.9.2
+    version: 3.10.2
