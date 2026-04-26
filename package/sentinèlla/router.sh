@@ -92,6 +92,8 @@ require_auth=false
 # --- read request & headers ---
 IFS= read -r req || exit 0
 cr=$(printf '\r')
+tok=""
+auth_ok=false
 while IFS= read -r line; do
   [ -z "$line" ] && break
   [ "$line" = "$cr" ] && break
@@ -99,8 +101,6 @@ while IFS= read -r line; do
     "Authorization: Basic "*) 
         tok=${line#Authorization: Basic }
         tok=$(printf '%s' "$tok" | tr -d '\r\n')
-        expect=$(base64 encode "$USER:$PASS")
-        [ "$tok" = "$expect" ] && auth_ok=true
         ;;
   esac
 done
@@ -117,7 +117,6 @@ unauth() {
   printf '%s' "$body"
 }
 
-auth_ok=false
 if $require_auth; then
   for t in $AUTH_TOKENS; do
     [ "$tok" = "$t" ] && auth_ok=true && break

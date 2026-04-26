@@ -11,144 +11,175 @@
 }: let
   system = pkgs.stdenv.hostPlatform.system;
   cfg = config.hectic.services."sentinèlla";
-  #   URLS="http://..."     # default: none
-  #   VOLUMES="/ /home"     # default: all from df -P
 in {
   options = {
     hectic.services."sentinèlla" = {
       probe = {
-        enable   = lib.mkEnableOption "enable sentinèlla probe services, that provides endpoints for server status check";
-        urls = lib.mkOption {
-          type = with lib.types; listOf str;
-	  default = [];
-          description = ''
-            urls to check
-          '';
+        enable = lib.mkEnableOption "sentinèlla probe — HTTP server exposing this node's health";
+        port = lib.mkOption {
+          type    = lib.types.port;
+          default = 5988;
+          description = "TCP port the probe listens on.";
         };
-        authFile = lib.mkOption {
-	  type = with lib.types; nullOr path;
-	  default = null;
-	  example = ''
-            config.sops.secrets."name-of-service/sentinèlla-probe".path
-	  '';
-	  description = ''
-            file with lines: user:pass
-	  '';
+        urls = lib.mkOption {
+          type    = with lib.types; listOf str;
+          default = [];
+          description = "URLs the probe health-checks on GET /status.";
         };
         volumes = lib.mkOption {
-          type = with lib.types; listOf str;
-	  default = [];
-          description = ''
-            volumes to check
-          '';
+          type    = with lib.types; listOf str;
+          default = [];
+          description = "Mount points reported on GET /disk. Empty means all volumes.";
         };
-        port = lib.mkOption {
-          type = lib.types.port;
-	  default = 5988;
-          description = ''
-            service's port
-          '';
+        authFile = lib.mkOption {
+          type    = with lib.types; nullOr path;
+          default = null;
+          example = "config.sops.secrets.\"sentinella-probe-auth\".path";
+          description = "Path to a file with lines of the form user:pass for Basic Auth.";
         };
-        environmentPath = lib.mkOption {
-          type = with lib.types; nullOr path;
-	  default = null;
-	  example = ''
-            config.sops.secrets."name-of-service/environment".path
-	  '';
-	  description = ''
-	    in case when you do not want show configurations in repository
-	    ```
-              VOLUMES=      # default: none
-              URLS=         # default: all from df -P
+        environmentFile = lib.mkOption {
+          type    = with lib.types; nullOr path;
+          default = null;
+          description = ''
+            Optional environment file for secrets. Supported variables:
               PORT=
-              AUTH_FILE=    # lines:   user:pass
-	    ```
-	  '';
+              URLS=
+              VOLUMES=
+              AUTH_FILE=
+          '';
         };
       };
-      sentinel = {
-        enable   = lib.mkEnableOption "enable sentinèlla sentinel services, that reported servers statuses based on probe polls";
-        respondents = lib.mkOption {
-          type = lib.types.listOf lib.types.attrsOf (
-            lib.types.submodule {
-              options = {
 
-	      };
-	    }
-	  );
-	};
-        environmentPath = lib.mkOption {
-          type = lib.types.path;
-	  example = ''
-            config.sops.secrets."name-of-service/environment".path
-	  '';
-	  description = ''
-	    in case when you do not want show configurations in repository
-	  '';
+      watcher = {
+        enable = lib.mkEnableOption "sentinèlla watcher — polls peers discovered via DNS and sends Telegram alerts";
+        peersDns = lib.mkOption {
+          type    = lib.types.str;
+          example = "peers.sentinella.com";
+          description = ''
+            DNS name with multiple A records, one per peer node.
+            Configure externally (e.g. Cloudflare) with TTL 60:
+              peers.sentinella.com  A  1.2.3.4
+              peers.sentinella.com  A  5.6.7.8
+          '';
+        };
+        self = lib.mkOption {
+          type    = with lib.types; nullOr str;
+          default = null;
+          example = "1.2.3.4";
+          description = ''
+            Override the auto-detected local IP. When null (default) the watcher
+            uses hostname -I to find all local IPs and excludes them from the
+            peer list automatically. Set this only if the node is behind NAT or
+            has a floating IP that hostname -I does not report correctly.
+          '';
+        };
+        peersPort = lib.mkOption {
+          type    = lib.types.port;
+          default = 5988;
+          description = "Port all peer probes listen on.";
+        };
+        peersScheme = lib.mkOption {
+          type    = lib.types.str;
+          default = "http";
+          description = "URL scheme used when connecting to peers (http or https).";
+        };
+        pollingIntervalSec = lib.mkOption {
+          type    = lib.types.int;
+          default = 3;
+          description = "Seconds between polling rounds.";
+        };
+        tgToken = lib.mkOption {
+          type    = with lib.types; nullOr str;
+          default = null;
+          description = "Telegram bot token. Prefer environmentFile for secrets.";
+        };
+        tgChatId = lib.mkOption {
+          type    = with lib.types; nullOr str;
+          default = null;
+          description = "Telegram chat ID. Prefer environmentFile for secrets.";
+        };
+        environmentFile = lib.mkOption {
+          type    = with lib.types; nullOr path;
+          default = null;
+          example = "config.sops.secrets.\"sentinella-watcher-env\".path";
+          description = ''
+            Optional environment file for secrets. Supported variables:
+              TG_TOKEN=
+              TG_CHAT_ID=
+              PEERS_TOKEN=   # Basic Auth token sent to all peers
+              SELF=
+              PEERS_DNS=
+          '';
         };
       };
     };
   };
+
   config = lib.mkMerge [
     (lib.mkIf cfg.probe.enable {
       systemd.services."sentinella-probe" = {
-        description = "Hectic server health check";
-        after = [ "network.target" ];
-        wantedBy = [ "multi-user.target" ];
+        description = "sentinèlla probe — node health HTTP server";
+        after       = [ "network.target" ];
+        wantedBy    = [ "multi-user.target" ];
         serviceConfig = lib.mkMerge [
-	  {
-            Type = "simple";
-            ExecStart = "${self.packages.${system}."sentinèlla"}/bin/probe";
-            Environment = [
-              "URLS=${lib.concatStringsSep "," cfg.probe.urls}"
-              "VOLUMES=${lib.concatStringsSep "," cfg.probe.volumes}"
-              "PORT=${builtins.toString cfg.probe.port}"
-            ];
-            Restart = "always";
-            RestartSec = "5s";
-            
-            # Shutdown configuration
-            TimeoutStopSec = "30s";
-            KillSignal = "SIGTERM";
-            KillMode = "mixed";
-            
-            # Security and process management
+          {
+            Type            = "simple";
+            ExecStart       = "${self.packages.${system}."sentinèlla"}/bin/probe";
+            Restart         = "always";
+            RestartSec      = "5s";
+            TimeoutStopSec  = "30s";
+            KillSignal      = "SIGTERM";
+            KillMode        = "mixed";
             RemainAfterExit = false;
-            StandardOutput = "journal";
-            StandardError = "journal";
+            StandardOutput  = "journal";
+            StandardError   = "journal";
+            Environment = lib.filter (s: s != "") [
+              "PORT=${builtins.toString cfg.probe.port}"
+              (lib.optionalString (cfg.probe.urls    != []) "URLS=${lib.concatStringsSep " " cfg.probe.urls}")
+              (lib.optionalString (cfg.probe.volumes != []) "VOLUMES=${lib.concatStringsSep " " cfg.probe.volumes}")
+              (lib.optionalString (cfg.probe.authFile != null) "AUTH_FILE=${cfg.probe.authFile}")
+            ];
           }
-	  (if cfg.probe.environmentPath != null then {
-            EnvironmentFile = cfg.probe.environmentPath;
-	  } else {})
-	];
+          (lib.mkIf (cfg.probe.environmentFile != null) {
+            EnvironmentFile = cfg.probe.environmentFile;
+          })
+        ];
       };
     })
-    (lib.mkIf cfg.sentinel.enable {
-      systemd.services."sentinella-sentinel" = {
-        description = "Hectic server health check";
-        after = [ "network.target" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "simple";
-          ExecStart = "${self.packages.${system}."sentinèlla"}/bin/probe";
-          Environment = [
-            "URLS=${lib.concatStringsSep " " cfg.probe.urls}"
-            "VOLUMES=${lib.concatStringsSep " " cfg.probe.volumes}"
-            "PORT=${builtins.toString cfg.probe.port}"
-          ];
-          Restart = "always";
-          RestartSec = "5s";
-          
-          # Shutdown configuration
-          TimeoutStopSec = "30s";
-          KillSignal = "SIGTERM";
-          KillMode = "mixed";
-          
-          # Security and process management
-          RemainAfterExit = false;
-          StandardOutput = "journal";
-          StandardError = "journal";
-	};
+
+    (lib.mkIf cfg.watcher.enable {
+      systemd.services."sentinella-watcher" = {
+        description = "sentinèlla watcher — p2p peer monitor";
+        after       = [ "network.target" ];
+        wantedBy    = [ "multi-user.target" ];
+        serviceConfig = lib.mkMerge [
+          {
+            Type            = "simple";
+            ExecStart       = "${self.packages.${system}."sentinèlla"}/bin/watcher";
+            Restart         = "always";
+            RestartSec      = "5s";
+            TimeoutStopSec  = "30s";
+            KillSignal      = "SIGTERM";
+            KillMode        = "mixed";
+            RemainAfterExit = false;
+            StandardOutput  = "journal";
+            StandardError   = "journal";
+            StateDirectory  = "sentinella";
+            Environment = lib.filter (s: s != "") [
+              "PEERS_DNS=${cfg.watcher.peersDns}"
+              (lib.optionalString (cfg.watcher.self     != null) "SELF=${cfg.watcher.self}")
+              "PEERS_PORT=${builtins.toString cfg.watcher.peersPort}"
+              "PEERS_SCHEME=${cfg.watcher.peersScheme}"
+              "POLLING_INTERVAL_SEC=${builtins.toString cfg.watcher.pollingIntervalSec}"
+              "STATE_DIR=/var/lib/sentinella"
+              (lib.optionalString (cfg.watcher.tgToken  != null) "TG_TOKEN=${cfg.watcher.tgToken}")
+              (lib.optionalString (cfg.watcher.tgChatId != null) "TG_CHAT_ID=${cfg.watcher.tgChatId}")
+            ];
+          }
+          (lib.mkIf (cfg.watcher.environmentFile != null) {
+            EnvironmentFile = cfg.watcher.environmentFile;
+          })
+        ];
       };
     })
   ];
