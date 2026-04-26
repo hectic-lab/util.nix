@@ -102,7 +102,7 @@ in {
 
   sops.secrets."mailserver/security/hashedPassword"     = {};
   sops.secrets."mailserver/yukkop/hashedPassword"       = {};
-  sops.secrets."mailserver/daniil-pelyk/hashedPassword" = {};
+  sops.secrets."mailserver/daniil-perlyk/hashedPassword" = {};
   sops.secrets."mailserver/snuff/hashedPassword"        = {};
   sops.secrets."mailserver/antoshka/hashedPassword"     = {};
   sops.secrets."mailserver/founders/hashedPassword"     = {};
@@ -120,8 +120,8 @@ in {
       "yukkop" = {
         hashedPasswordFile = config.sops.secrets."mailserver/yukkop/hashedPassword".path;
       };
-      "daniil-pelyk" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/daniil-pelyk/hashedPassword".path;
+      "daniil-perlyk" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/daniil-perlyk/hashedPassword".path;
       };
       "snuff" = {
         hashedPasswordFile = config.sops.secrets."mailserver/snuff/hashedPassword".path;
