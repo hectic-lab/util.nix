@@ -46,3 +46,8 @@ creation_rules:
         - *yukkop-alt
         - *hectic-lab-server
         - *umbriel-bfs
+
+  - path_regex: docs/.*\.md$
+    key_groups:
+      - age:
+        - *yukkop
