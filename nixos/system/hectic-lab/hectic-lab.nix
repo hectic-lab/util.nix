@@ -41,6 +41,19 @@ in {
     };
   };
 
+  # NOTE(yukkop): disk was provisioned by Hetzner rescue image, disko was never
+  # run, so partition labels don't exist. Override fileSystems with actual UUIDs.
+  fileSystems."/" = lib.mkForce {
+    device = "/dev/disk/by-uuid/48ba7286-d019-4cdc-9784-459767979b07";
+    fsType = "ext4";
+  };
+
+  fileSystems."/boot" = lib.mkForce {
+    device = "/dev/disk/by-uuid/71F2-4E98";
+    fsType = "vfat";
+    options = [ "umask=0077" ];
+  };
+
   programs.zsh.enable = true;
   programs.zsh.interactiveShellInit = ''
     setopt vi
@@ -89,27 +102,33 @@ in {
 
   sops.secrets."mailserver/security/hashedPassword" = {};
   sops.secrets."mailserver/yukkop/hashedPassword"   = {};
+  sops.secrets."mailserver/founders/hashedPassword"   = {};
   sops.secrets."mailserver/snuff/hashedPassword"    = {};
   sops.secrets."mailserver/antoshka/hashedPassword" = {};
 
-  # services.mailserver = {
-  #   enable = false;
-  #   domain = domain;
-  #   loginAccounts = {
-  #     "security" = {
-  #       hashedPasswordFile = config.sops.secrets."mailserver/security/hashedPassword".path;
-  #     };
-  #     "yukkop" = {
-  #       hashedPasswordFile = config.sops.secrets."mailserver/yukkop/hashedPassword".path;
-  #     };
-  #     "snuff" = {
-  #       hashedPasswordFile = config.sops.secrets."mailserver/snuff/hashedPassword".path;
-  #     };
-  #     "antoshka" = {
-  #       hashedPasswordFile = config.sops.secrets."mailserver/antoshka/hashedPassword".path;
-  #     };
-  #   };
-  # };
+  services.mailserver = {
+    enable = true;
+    domain = domain;
+    loginAccounts = {
+      "security" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/security/hashedPassword".path;
+      };
+      "founders" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/founders/hashedPassword".path;
+      };
+      "yukkop" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/yukkop/hashedPassword".path;
+      };
+      "snuff" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/snuff/hashedPassword".path;
+      };
+      "antoshka" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/antoshka/hashedPassword".path;
+      };
+    };
+  };
+
+  mailserver.stateVersion = 3;
 
   services.redis.servers."vproxy-bot-test-state" = {
     enable = true;
