@@ -36,7 +36,7 @@ in {
     hardware.hetzner-cloud = {
       enable                 = true;
       networkMatchConfigName = "enp1s0";
-      ipv4                   = "188.245.181.123";
+      ipv4                   = "128.140.75.58";
       ipv6                   = "2a01:4f8:c2c:d54a";
     };
   };
@@ -100,11 +100,11 @@ in {
     ];
   };
 
-  sops.secrets."mailserver/security/hashedPassword" = {};
-  sops.secrets."mailserver/yukkop/hashedPassword"   = {};
-  sops.secrets."mailserver/founders/hashedPassword"   = {};
-  sops.secrets."mailserver/snuff/hashedPassword"    = {};
-  sops.secrets."mailserver/antoshka/hashedPassword" = {};
+  sops.secrets."mailserver/security/hashedPassword"  = {};
+  sops.secrets."mailserver/yukkop/hashedPassword"    = {};
+  sops.secrets."mailserver/snuff/hashedPassword"     = {};
+  sops.secrets."mailserver/antoshka/hashedPassword"  = {};
+  sops.secrets."mailserver/founders/hashedPassword"  = {};
 
   services.mailserver = {
     enable = true;
