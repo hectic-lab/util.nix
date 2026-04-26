@@ -3,6 +3,8 @@ mailserver:
         hashedPassword: ENC[AES256_GCM,data:Z03x7tWHIhlRPaRZSrukyYOKhs6LdasZhZdizHdhlaJp2bywQZXKBaDABj2ab4rhwAPCHWhSiBjz35zV,iv:Z3hLC/A4YLVQkflr4cg9/wkKzo/RUdnLTwYC7ZhS0Hk=,tag:mSF/mbzH7iG6PwzyEsmyGg==,type:str]
     yukkop:
         hashedPassword: ENC[AES256_GCM,data:zjhCFkmmMzQHn09uRz1S4NTNU8hVRY5ZSYRHn6Gd0u09Fc7inNVSPrO+Br41UagPmv526w9MMQoIbV3RiJq6E/mfhAouqybYbQ==,iv:aVjn+/X2ESgZU7p7jETONaqtsD2/NAFOd7IIbunTRaI=,tag:kueml9QdQYVBceFMCgWoGA==,type:str]
+    daniil-perlyk:
+        hashedPassword: ENC[AES256_GCM,data:vlmz39OxJ0iavBYW1ij2pn/1wFOx+yBWR16ZCDlnGvc9/BNwd8vhAPJw7D+bujA89UMAvIC7ERiSNzR2uamp0+aH8gKyzchEXg==,iv:H1NVynfp5X18PcyR2/R4mNZ69KpcbzAc+D2akl3aAmE=,tag:YjYh/y5o3bkajWDsyctJUw==,type:str]
     founders:
         hashedPassword: ENC[AES256_GCM,data:E+Xu/Ul3rFLlYDD0LGGRnc6RADlWmXpOM2OfkZFSzAf5thm8leRi9x5sroP25cO8CcSyBcOiUCBv3RC5ooXklm4cmpOx8LA8ug==,iv:RLbU6SBHKOBRCNZ6naxQMaNjWZOlNui6OaaVM2QkdZs=,tag:sO7CD+PVkdtvPvlUrpzW+g==,type:str]
     snuff:
@@ -70,7 +72,7 @@ sops:
             Yk43ZmlTc09aNFV1VjdjN2RWQlFWTDQKcYSvA2lHP8GS0lkYY19Tm8RXmFHQX5Ck
             qV2Fn22Fic4M5FVKDEMfaO6WmeXgki9a8dGeO9LlC+Phf16SOq7eLw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-04-26T10:30:18Z"
-    mac: ENC[AES256_GCM,data:D8O/NTSgI//jdDA8UX56t7EfqH+YKvGsDKCTopPPfg/o9uey+onhxDfiiHniUBWJf5lArgZVLR5KOoVwQQWY1fz3lp/2ZBzaDJnt+IiqVeXgImNuOmdWgmvJF6o2UmpjEISRGtC1ih8UHplaQw2e7YEiH/QUMHoz/TVRWDHaMas=,iv:UWJkyc6YYMush8ASgb0ntHXEBeo9u2eGJ93wBfQVm4g=,tag:nhaAeTvoObP9GT2iNNrAzA==,type:str]
+    lastmodified: "2026-04-26T15:09:14Z"
+    mac: ENC[AES256_GCM,data:xDzKY+rn12ORC3HZHmMs3orTcg3kZiLwZYip/0ZZ7UJLJxoO98TIWvB1rxl8aAOjJCJ54LWRYkhMACn+4tdUhiy+RlsqVcL0jG9Vb1jpfVtPKy6tschoyVmWYOrc9dMHrnP3OEyYzqlAOdZ5tY9GubWx5hkdFOp17CtlCJV9faI=,iv:OXMlQ/ssDqiL9Lwv0EQefIIlv/VFBMwTSZ0WE3746k0=,tag:M3Oic7tiR/n71xEZrTa9tw==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2

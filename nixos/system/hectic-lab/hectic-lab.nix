@@ -100,11 +100,12 @@ in {
     ];
   };
 
-  sops.secrets."mailserver/security/hashedPassword"  = {};
-  sops.secrets."mailserver/yukkop/hashedPassword"    = {};
-  sops.secrets."mailserver/snuff/hashedPassword"     = {};
-  sops.secrets."mailserver/antoshka/hashedPassword"  = {};
-  sops.secrets."mailserver/founders/hashedPassword"  = {};
+  sops.secrets."mailserver/security/hashedPassword"     = {};
+  sops.secrets."mailserver/yukkop/hashedPassword"       = {};
+  sops.secrets."mailserver/daniil-pelyk/hashedPassword" = {};
+  sops.secrets."mailserver/snuff/hashedPassword"        = {};
+  sops.secrets."mailserver/antoshka/hashedPassword"     = {};
+  sops.secrets."mailserver/founders/hashedPassword"     = {};
 
   services.mailserver = {
     enable = true;
@@ -118,6 +119,9 @@ in {
       };
       "yukkop" = {
         hashedPasswordFile = config.sops.secrets."mailserver/yukkop/hashedPassword".path;
+      };
+      "daniil-pelyk" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/daniil-pelyk/hashedPassword".path;
       };
       "snuff" = {
         hashedPasswordFile = config.sops.secrets."mailserver/snuff/hashedPassword".path;
