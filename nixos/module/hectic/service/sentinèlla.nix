@@ -100,10 +100,18 @@ in {
         };
         environmentFile = lib.mkOption {
           type    = with lib.types; nullOr path;
-          default = null;
+          default = config.sops.secrets."sentinèlla/watcher/environment".path;
+          defaultText = lib.literalExpression
+            "config.sops.secrets.\"sentinèlla/watcher/environment\".path";
           example = "config.sops.secrets.\"sentinella-watcher-env\".path";
           description = ''
-            Optional environment file for secrets. Supported variables:
+            Environment file for secrets. Defaults to the auto-declared SOPS
+            secret sentinèlla/watcher/environment (resolved from
+            sus/sentinella-default.yaml in the flake). Override the sopsFile
+            via sops.secrets."sentinèlla/watcher/environment".sopsFile if you
+            need a host-specific file instead.
+
+            Supported variables:
               TG_TOKEN=
               TG_CHAT_ID=
               PEERS_TOKEN=   # Basic Auth token sent to all peers
@@ -148,6 +156,10 @@ in {
     })
 
     (lib.mkIf cfg.watcher.enable {
+      sops.secrets."sentinèlla/watcher/environment" = lib.mkDefault {
+        sopsFile = "${flake}/sus/sentinella-default.yaml";
+      };
+
       systemd.services."sentinella-watcher" = {
         description = "sentinèlla watcher — p2p peer monitor";
         after       = [ "network.target" ];
