@@ -1,0 +1,63 @@
+#!/usr/bin/env sh
+# Update SOPS keys for every encrypted file in the project.
+# Discovers files by matching path_regex rules from .sops.yaml —
+# no directories are hardcoded.
+#
+# Usage: script/update-sops-keys [--dry-run]
+set -eu
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DRY_RUN=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    *) printf 'unknown argument: %s\n' "$arg" >&2; exit 9 ;;
+  esac
+done
+
+SOPS_CONFIG="$REPO_ROOT/.sops.yaml"
+
+if [ ! -f "$SOPS_CONFIG" ]; then
+  printf 'error: .sops.yaml not found at %s\n' "$SOPS_CONFIG" >&2
+  exit 1
+fi
+
+# Extract every path_regex value from .sops.yaml.
+# Lines look like:   - path_regex: some/pattern$
+regexes="$(grep '^\s*-\s*path_regex:' "$SOPS_CONFIG" | sed 's/.*path_regex:[[:space:]]*//')"
+
+if [ -z "$regexes" ]; then
+  printf 'no path_regex rules found in .sops.yaml\n' >&2
+  exit 0
+fi
+
+# Collect all repo files (committed + untracked, excluding .gitignore).
+# Write matches to a temp file to avoid subshell variable scoping issues.
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard | while read -r rel; do
+  for regex in $regexes; do
+    if printf '%s\n' "$rel" | grep -qE "$regex"; then
+      printf '%s\n' "$rel" >> "$tmp"
+      break
+    fi
+  done
+done
+
+if [ ! -s "$tmp" ]; then
+  printf 'no matching sops files found\n'
+  exit 0
+fi
+
+while read -r rel; do
+  abs="$REPO_ROOT/$rel"
+  [ -f "$abs" ] || continue
+  if [ "$DRY_RUN" -eq 1 ]; then
+    printf '[dry-run] would updatekeys: %s\n' "$rel"
+  else
+    printf 'updating keys: %s\n' "$rel"
+    sops updatekeys --yes "$abs"
+  fi
+done < "$tmp"

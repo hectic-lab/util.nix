@@ -47,6 +47,20 @@ creation_rules:
         - *hectic-lab-server
         - *umbriel-bfs
 
+  - path_regex: sus/sentinella-default.yaml$
+    key_groups:
+      - age:
+        - *yukkop
+        - *yukkop-alt
+        - *nrv
+        - *bfs-server
+        - *bfs-pol-server
+        - *bfs-new-server
+        - *neuro-server
+        - *games-server
+        - *hectic-lab-server
+        - *umbriel-bfs
+
   - path_regex: docs/.*\.md$
     key_groups:
       - age:
