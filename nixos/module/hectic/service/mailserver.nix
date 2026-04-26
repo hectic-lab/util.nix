@@ -56,6 +56,9 @@ in {
       certificateScheme = "acme-nginx";
     };
 
+    # NOTE(yukkop): avoid Gmail rejection due to missing IPv6 PTR records
+    services.postfix.settings.main.inet_protocols = lib.mkDefault "ipv4";
+
     security.acme.acceptTerms       = true;
     security.acme.defaults.email    = "security@" + cfg.domain;
   };
