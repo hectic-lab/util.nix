@@ -136,13 +136,11 @@ while :; do
   printf '%s\n' "$peers" | while IFS= read -r url; do
     [ -n "$url" ] || continue
 
-    auth_h=""
-    [ -n "$PEERS_TOKEN" ] && auth_h="-H 'Authorization: Basic $PEERS_TOKEN'"
-
     tmpb=$(mktemp) || exit 1
-    # shellcheck disable=SC2086
-    code=$(sh -c "curl -sS -m \"$TIMEOUT\" -w '%{http_code}' -o \"$tmpb\" $auth_h \"$url\"") \
-      || code="000"
+    set -- curl -sS -m "$TIMEOUT" -w '%{http_code}' -o "$tmpb"
+    [ -n "$PEERS_TOKEN" ] && set -- "$@" -H "Authorization: Basic $PEERS_TOKEN"
+    set -- "$@" "$url"
+    code=$("$@" 2>/dev/null) || code="000"
     body=$(cat "$tmpb"); rm -f "$tmpb"
 
     ok="down"; total=0; good=0
@@ -166,6 +164,8 @@ while :; do
     if [ "$cur" != "$last" ] || [ "$SPAM" = "1" ]; then
       notify "$msg"
       printf '%s' "$cur" >"$sfile"
+    else
+      log info "no change: ${WHITE}${msg}${NC}"
     fi
   done
 
