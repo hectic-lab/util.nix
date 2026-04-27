@@ -61,7 +61,10 @@ local_ips() {
     printf '%s' "$SELF"
     return
   fi
-  hostname -I 2>/dev/null || true
+  # ip -o -4 addr show: "<idx>: <iface>    inet <ip>/<prefix> ..."
+  ip -o addr show 2>/dev/null \
+    | awk '$3 ~ /^inet6?$/ { sub(/\/.*/, "", $4); print $4 }' \
+    | tr '\n' ' '
 }
 
 # is_local_ip(ip) — returns 0 if ip belongs to this node
@@ -151,8 +154,15 @@ while :; do
 
     ok="down"; total=0; good=0
     if [ "$code" = "200" ]; then
-      summary=$(printf '%s' "$body" | parse_summary || true)
-      [ -n "$summary" ] && { total=${summary%% *}; good=${summary#* }; }
+      summary=$(printf '%s' "$body" | parse_summary 2>/dev/null || true)
+      if [ -n "$summary" ]; then
+        _total=${summary%% *}
+        _good=${summary#* }
+        case "$_total" in ''|*[!0-9]*) _total=0 ;; esac
+        case "$_good"  in ''|*[!0-9]*) _good=0  ;; esac
+        total=$_total
+        good=$_good
+      fi
       [ "$total" -eq "$good" ] && ok="up"
     fi
 
