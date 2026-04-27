@@ -82,8 +82,17 @@ is_local_ip() {
 resolve_peers() {
   # host -t SRV output:
   #   <name> has SRV record <prio> <weight> <port> <target>.
-  host -t SRV "$PEERS_SRV" 2>/dev/null \
-    | awk '/has SRV record/ { sub(/\.$/, "", $NF); print $(NF-1), $NF }' \
+  _srv_out=$(host -t SRV "$PEERS_SRV" 2>&1) || {
+    log warn "host -t SRV ${WHITE}${PEERS_SRV}${NC} failed: ${_srv_out}"
+    return 0
+  }
+  _parsed=$(printf '%s\n' "$_srv_out" \
+    | awk '/has SRV record/ { sub(/\.$/, "", $NF); print $(NF-1), $NF }')
+  if [ -z "$_parsed" ]; then
+    log warn "no SRV records parsed; raw output: ${_srv_out}"
+    return 0
+  fi
+  printf '%s\n' "$_parsed" \
     | while IFS=' ' read -r port target; do
         [ -n "$target" ] || continue
         ip=$(getent hosts "$target" | awk '{print $1; exit}')
