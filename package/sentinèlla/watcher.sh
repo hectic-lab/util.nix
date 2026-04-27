@@ -80,14 +80,13 @@ is_local_ip() {
 # resolve_peers — SRV-resolves PEERS_SRV, then A-resolves each target.
 # Emits "host port ip" per non-local peer, one per line.
 resolve_peers() {
-  # host -t SRV output:
-  #   <name> has SRV record <prio> <weight> <port> <target>.
-  _srv_out=$(host -t SRV "$PEERS_SRV" 2>&1) || {
-    log warn "host -t SRV ${WHITE}${PEERS_SRV}${NC} failed: ${_srv_out}"
+  # dig +short SRV output: "<prio> <weight> <port> <target>."
+  _srv_out=$(dig +short +time=3 +tries=2 SRV "$PEERS_SRV" 2>&1) || {
+    log warn "dig SRV ${WHITE}${PEERS_SRV}${NC} failed: ${_srv_out}"
     return 0
   }
   _parsed=$(printf '%s\n' "$_srv_out" \
-    | awk '/has SRV record/ { sub(/\.$/, "", $NF); print $(NF-1), $NF }')
+    | awk 'NF==4 { sub(/\.$/, "", $4); print $3, $4 }')
   if [ -z "$_parsed" ]; then
     log warn "no SRV records parsed; raw output: ${_srv_out}"
     return 0
