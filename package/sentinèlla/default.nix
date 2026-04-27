@@ -16,8 +16,10 @@ let
   probe = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "probe";
-    runtimeInputs = [ socat dash router ];
-    text = builtins.readFile ./probe.sh;
+    runtimeInputs = [ socat ];
+    text = ''
+      socat -T5 -t5 TCP-LISTEN:"''${PORT:-5988}",reuseaddr,fork EXEC:"${router}/bin/router",pipes
+    '';
   };
 
   router = hectic.writeShellApplication {
