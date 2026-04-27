@@ -1,26 +1,26 @@
 #!/bin/dash
-# watcher.sh — p2p peer monitor; polls all peers discovered via DNS and notifies on status change
+# watcher.sh — p2p peer monitor; polls all peers discovered via DNS SRV records
+# and notifies on status change via Telegram.
 #
 # Every node runs both probe (HTTP server) and watcher (this script).
-# Peer discovery: a single DNS name with multiple A records is resolved via
-# getent(1) on every poll cycle. Local IPs are detected automatically via
-# hostname(1) and excluded so the node never polls itself.
+# Peer discovery: a single SRV record name resolved on every poll cycle.
+# Each SRV entry yields (priority, weight, port, target-hostname); the target
+# is resolved to an IP via getent and excluded if it belongs to this node.
 # No central coordinator; all nodes are equal.
 #
-# DNS setup (external, any registrar, TTL 60):
-#   peers.example.com  A  1.2.3.4
-#   peers.example.com  A  5.6.7.8
-#   peers.example.com  A  9.10.11.12
+# DNS setup (any registrar, TTL 60):
+#   _sentinella._tcp.example.com.  SRV  0 10 5988 node-a.peers.example.com.
+#   _sentinella._tcp.example.com.  SRV  0 10 5988 node-b.peers.example.com.
+#   node-a.peers.example.com.      A    1.2.3.4
+#   node-b.peers.example.com.      A    5.6.7.8
 #
 # Required env:
-#   PEERS_DNS             DNS name that resolves to all peer IPs
+#   PEERS_SRV             SRV record name (e.g. _sentinella._tcp.example.com)
 #   TG_TOKEN              Telegram bot token
 #   TG_CHAT_ID            Telegram chat ID
 #
 # Optional env:
-#   SELF                  Override auto-detected local IP (useful behind NAT
-#                         or with floating IPs where hostname -I is unreliable)
-#   PEERS_PORT            default 5988
+#   SELF                  Override auto-detected local IPs (space-separated)
 #   PEERS_SCHEME          default http
 #   PEERS_TOKEN           Basic Auth token sent to all peers; omit for no auth
 #   TIMEOUT               curl timeout seconds (default 5)
@@ -35,9 +35,8 @@ PREFIX_FAIL="FAIL"
 
 TIMEOUT=${TIMEOUT:-5}
 POLLING_INTERVAL_SEC=${POLLING_INTERVAL_SEC:-3}
-PEERS_DNS=${PEERS_DNS:-}
+PEERS_SRV=${PEERS_SRV:-}
 SELF=${SELF:-}
-PEERS_PORT=${PEERS_PORT:-5988}
 PEERS_SCHEME=${PEERS_SCHEME:-http}
 PEERS_TOKEN=${PEERS_TOKEN:-}
 TG_TOKEN=${TG_TOKEN:-}
@@ -50,14 +49,13 @@ mkdir -p "$STATE_DIR" 2>/dev/null || {
   mkdir -p "$STATE_DIR"
 }
 
-[ -n "$PEERS_DNS" ]  || { printf >&2 'PEERS_DNS not set\n';  exit 3; }
+[ -n "$PEERS_SRV" ]  || { printf >&2 'PEERS_SRV not set\n';  exit 3; }
 [ -n "$TG_TOKEN" ]   || { printf >&2 'TG_TOKEN not set\n';   exit 3; }
 [ -n "$TG_CHAT_ID" ] || { printf >&2 'TG_CHAT_ID not set\n'; exit 3; }
 
 # --- helpers ---
 
-# local_ips — returns space-separated list of IPs assigned to local interfaces.
-# If SELF is set it is used directly (useful behind NAT / floating IPs).
+# local_ips — space-separated list of IPs assigned to this node.
 local_ips() {
   if [ -n "$SELF" ]; then
     printf '%s' "$SELF"
@@ -76,14 +74,19 @@ is_local_ip() {
   return 1
 }
 
-# resolve_peers — resolves PEERS_DNS to a newline-separated list of peer URLs,
-# excluding all local IPs. Re-called every poll cycle so DNS changes are
-# picked up without restarting the watcher.
+# resolve_peers — SRV-resolves PEERS_SRV, then A-resolves each target.
+# Emits "host port ip" per non-local peer, one per line.
 resolve_peers() {
-  getent hosts "$PEERS_DNS" \
-    | awk '{print $1}' \
-    | while IFS= read -r ip; do
-        is_local_ip "$ip" || printf '%s://%s:%s\n' "$PEERS_SCHEME" "$ip" "$PEERS_PORT"
+  # host -t SRV output:
+  #   <name> has SRV record <prio> <weight> <port> <target>.
+  host -t SRV "$PEERS_SRV" 2>/dev/null \
+    | awk '/has SRV record/ { sub(/\.$/, "", $NF); print $(NF-1), $NF }' \
+    | while IFS=' ' read -r port target; do
+        [ -n "$target" ] || continue
+        ip=$(getent hosts "$target" | awk '{print $1; exit}')
+        [ -n "$ip" ] || { log warn "could not resolve ${WHITE}${target}${NC}"; continue; }
+        is_local_ip "$ip" && continue
+        printf '%s %s %s\n' "$target" "$port" "$ip"
       done
 }
 
@@ -115,7 +118,7 @@ list_failures() {
   '
 }
 
-# server_status_message(prefix, peer_url, ok, total, fail_list)
+# server_status_message(prefix, peer_label, ok, total, fail_list)
 server_status_message() {
   printf '%s: %s [%s/%s]%s' "${1:?}" "${2:?}" "${3:?}" "${4:?}" "$5"
 }
@@ -125,21 +128,24 @@ server_status_message() {
 trap 'rm -f "$tmpb" 2>/dev/null' EXIT INT HUP
 
 while :; do
-  log info "polling peers via ${WHITE}${PEERS_DNS}${NC} every ${WHITE}${POLLING_INTERVAL_SEC}${NC}s"
+  log info "polling peers via SRV ${WHITE}${PEERS_SRV}${NC} every ${WHITE}${POLLING_INTERVAL_SEC}${NC}s"
 
   peers=$(resolve_peers) || peers=""
 
   if [ -z "$peers" ]; then
-    log warn "no peers resolved from ${WHITE}${PEERS_DNS}${NC} (all IPs are local or DNS returned nothing)"
+    log warn "no peers resolved from ${WHITE}${PEERS_SRV}${NC} (all targets local or DNS empty)"
   fi
 
-  printf '%s\n' "$peers" | while IFS= read -r url; do
-    [ -n "$url" ] || continue
+  printf '%s\n' "$peers" | while IFS=' ' read -r host port ip; do
+    [ -n "$host" ] || continue
+
+    url="${PEERS_SCHEME}://${ip}:${port}"
+    label="${host} (${ip})"
 
     tmpb=$(mktemp) || exit 1
     set -- curl -sS -m "$TIMEOUT" -w '%{http_code}' -o "$tmpb"
     [ -n "$PEERS_TOKEN" ] && set -- "$@" -H "Authorization: Basic $PEERS_TOKEN"
-    set -- "$@" "$url"
+    set -- "$@" "${url}/status"
     code=$("$@" 2>/dev/null) || code="000"
     body=$(cat "$tmpb"); rm -f "$tmpb"
 
@@ -156,9 +162,9 @@ while :; do
       fails=$(printf '%s' "$body" | list_failures | sed 's/[ ]$//')
       [ -n "$fails" ] && fail_list=" — ${fails}"
     fi
-    msg=$(server_status_message "$msg_prefix" "$url" "$good" "$total" "$fail_list")
+    msg=$(server_status_message "$msg_prefix" "$label" "$good" "$total" "$fail_list")
 
-    sfile="${STATE_DIR}/$(sid "$url").state"
+    sfile="${STATE_DIR}/$(sid "$host").state"
     last=""; [ -f "$sfile" ] && last=$(cat "$sfile")
     cur="${ok}:${good}/${total}:${code}"
     if [ "$cur" != "$last" ] || [ "$SPAM" = "1" ]; then
