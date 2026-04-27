@@ -10,17 +10,15 @@
   ...
 }: let
   system = pkgs.stdenv.hostPlatform.system;
-  cfg = config.hectic.services."sentinèlla";
+  cfg    = config.hectic.services."sentinèlla";
+
+  probePort = 5988;
+  peersDns  = "peers.sentinella.hectic-lab.com";
 in {
   options = {
     hectic.services."sentinèlla" = {
       probe = {
         enable = lib.mkEnableOption "sentinèlla probe — HTTP server exposing this node's health";
-        port = lib.mkOption {
-          type    = lib.types.port;
-          default = 5988;
-          description = "TCP port the probe listens on.";
-        };
         urls = lib.mkOption {
           type    = with lib.types; listOf str;
           default = [];
@@ -52,16 +50,6 @@ in {
 
       watcher = {
         enable = lib.mkEnableOption "sentinèlla watcher — polls peers discovered via DNS and sends Telegram alerts";
-        peersDns = lib.mkOption {
-          type    = lib.types.str;
-          example = "peers.sentinella.com";
-          description = ''
-            DNS name with multiple A records, one per peer node.
-            Configure externally (e.g. Cloudflare) with TTL 60:
-              peers.sentinella.com  A  1.2.3.4
-              peers.sentinella.com  A  5.6.7.8
-          '';
-        };
         self = lib.mkOption {
           type    = with lib.types; nullOr str;
           default = null;
@@ -72,11 +60,6 @@ in {
             peer list automatically. Set this only if the node is behind NAT or
             has a floating IP that hostname -I does not report correctly.
           '';
-        };
-        peersPort = lib.mkOption {
-          type    = lib.types.port;
-          default = 5988;
-          description = "Port all peer probes listen on.";
         };
         peersScheme = lib.mkOption {
           type    = lib.types.str;
@@ -125,6 +108,13 @@ in {
 
   config = lib.mkMerge [
     (lib.mkIf cfg.probe.enable {
+      networking.firewall = {
+        enable = true;
+        allowedTCPPorts = [
+          probePort     
+        ];
+      };
+
       systemd.services."sentinella-probe" = {
         description = "sentinèlla probe — node health HTTP server";
         after       = [ "network.target" ];
@@ -142,7 +132,7 @@ in {
             StandardOutput  = "journal";
             StandardError   = "journal";
             Environment = lib.filter (s: s != "") [
-              "PORT=${builtins.toString cfg.probe.port}"
+              "PORT=${builtins.toString probePort}"
               (lib.optionalString (cfg.probe.urls    != []) "URLS=${lib.concatStringsSep " " cfg.probe.urls}")
               (lib.optionalString (cfg.probe.volumes != []) "VOLUMES=${lib.concatStringsSep " " cfg.probe.volumes}")
               (lib.optionalString (cfg.probe.authFile != null) "AUTH_FILE=${cfg.probe.authFile}")
@@ -178,9 +168,9 @@ in {
             StandardError   = "journal";
             StateDirectory  = "sentinella";
             Environment = lib.filter (s: s != "") [
-              "PEERS_DNS=${cfg.watcher.peersDns}"
-              (lib.optionalString (cfg.watcher.self     != null) "SELF=${cfg.watcher.self}")
-              "PEERS_PORT=${builtins.toString cfg.watcher.peersPort}"
+              "PEERS_DNS=${peersDns}"
+              (lib.optionalString (cfg.watcher.self != null) "SELF=${cfg.watcher.self}")
+              "PEERS_PORT=${builtins.toString probePort}"
               "PEERS_SCHEME=${cfg.watcher.peersScheme}"
               "POLLING_INTERVAL_SEC=${builtins.toString cfg.watcher.pollingIntervalSec}"
               "STATE_DIR=/var/lib/sentinella"
