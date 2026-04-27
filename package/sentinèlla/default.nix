@@ -1,4 +1,4 @@
-{ symlinkJoin, writeTextFile, socat, dash, hectic, curl, gawk, jq, inetutils, getent }:
+{ symlinkJoin, writeTextFile, socat, dash, hectic, curl, gawk, jq, inetutils, getent, bind }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -36,7 +36,7 @@ let
   watcher = hectic.writeShellApplication {
     inherit shell bashOptions;
     name = "watcher";
-    runtimeInputs = [ curl jq gawk inetutils getent ];
+    runtimeInputs = [ curl jq gawk inetutils getent bind.dnsutils ];
     text = ''
       ${builtins.readFile ./log.sh}
       ${builtins.readFile ./colors.sh}

@@ -13,7 +13,7 @@
   cfg    = config.hectic.services."sentinèlla";
 
   probePort = 5988;
-  peersDns  = "peers.sentinella.hectic-lab.com";
+  peersSrv  = "_sentinella._tcp.hectic-lab.com";
 in {
   options = {
     hectic.services."sentinèlla" = {
@@ -99,7 +99,7 @@ in {
               TG_CHAT_ID=
               PEERS_TOKEN=   # Basic Auth token sent to all peers
               SELF=
-              PEERS_DNS=
+              PEERS_SRV=
           '';
         };
       };
@@ -168,9 +168,8 @@ in {
             StandardError   = "journal";
             StateDirectory  = "sentinella";
             Environment = lib.filter (s: s != "") [
-              "PEERS_DNS=${peersDns}"
+              "PEERS_SRV=${peersSrv}"
               (lib.optionalString (cfg.watcher.self != null) "SELF=${cfg.watcher.self}")
-              "PEERS_PORT=${builtins.toString probePort}"
               "PEERS_SCHEME=${cfg.watcher.peersScheme}"
               "POLLING_INTERVAL_SEC=${builtins.toString cfg.watcher.pollingIntervalSec}"
               "STATE_DIR=/var/lib/sentinella"
