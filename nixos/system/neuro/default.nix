@@ -17,6 +17,8 @@ in self.lib.nixpkgs-lib.nixosSystem {
     ];
     config.allowUnfreePredicate = pkg: builtins.elem (self.lib.nixpkgs-lib.getName pkg) [
       "minecraft-server"
+      "neoforge"
+
       "nvidia-x11"
 
       "cuda_nvcc"
