@@ -38,6 +38,16 @@ if ! psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -c 'SELECT * FROM hectic.migration'
   exit 1
 fi
 
+if ! psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -c 'SELECT * FROM hectic.version'; then
+  log error "test failed: ${WHITE} table hectic.version was not created"
+  exit 1
+fi
+
+if ! psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -c 'SELECT * FROM hectic.secret'; then
+  log error "test failed: ${WHITE} table hectic.secret was not created"
+  exit 1
+fi
+
 ### CASE 5
 log notice "test case: ${WHITE}reinit (must just be ignored)"
 
