@@ -100,14 +100,37 @@ in {
   # -- Cargo.toml --
   cargoToml = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
 
-  # SQL bundle bootstrapping `hectic.created_at` / `hectic.updated_at` inheritance enforcement.
-  # Consumers can either:
-  #   * read the SQL string for inline pipelines: `self.lib.hecticInheritance.sql`
-  #   * reference the source path: `self.lib.hecticInheritance.path`
-  #   * use the per-system package: `pkgs.hectic.hectic-inheritance` (provides
-  #     `$out/share/hectic/hectic-inheritance.sql`)
+  # Consolidated SQL bundles for the `hectic` schema. Single source of truth
+  # for everything that creates objects in the `hectic` namespace, used by
+  # migrator (init-time), db-tool (postgres-init), and pkgs.hectic.postgres-secrets.
+  #
+  # The whole hectic system shares one `versionString`; `hectic-version.sql`
+  # registers (`'hectic'`, versionString) into `hectic.version` and raises an
+  # exception on mismatch. Per-hook version rows are intentionally absent.
+  #
+  # Each entry exposes:
+  #   * .sql   — file contents as a string, with @HECTIC_VERSION@ substituted
+  #   * .path  — Nix store path (only on entries that need no substitution)
+  hectic = let
+    versionString = lib.fileContents ./hook/sql/HECTIC_VERSION;
+    static = path: { inherit path; sql = builtins.readFile path; };
+    templated = path: {
+      sql = builtins.replaceStrings
+        [ "@HECTIC_VERSION@" ]
+        [ versionString ]
+        (builtins.readFile path);
+    };
+  in {
+    inherit versionString;
+    version     = templated ./hook/sql/hectic-version.sql;
+    secret      = static    ./hook/sql/hectic-secret.sql;
+    migration   = static    ./hook/sql/hectic-migration.sql;
+    inheritance = static    ./hook/sql/hectic-inheritance.sql;
+  };
+
+  # Back-compat alias. Prefer `self.lib.hectic.inheritance`.
   hecticInheritance = let
-    path = ../package/db-tool/sql/hectic-inheritance.sql;
+    path = ./hook/sql/hectic-inheritance.sql;
   in {
     inherit path;
     sql = builtins.readFile path;

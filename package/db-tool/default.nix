@@ -2,7 +2,7 @@
 let
   shell = "${dash}/bin/dash";
 
-  hecticInheritanceSqlPath = ./sql/hectic-inheritance.sql;
+  hecticInheritanceSqlPath = ../../lib/hook/sql/hectic-inheritance.sql;
 
   hecticInheritance = runCommand "hectic-inheritance" { } ''
     mkdir -p "$out/share/hectic"
