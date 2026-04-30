@@ -1,14 +1,16 @@
 # shellcheck shell=dash
 
 HECTIC_NAMESPACE=test-db-tool-deploy-basic
+export HECTIC_NAMESPACE
 
-pg_harness_start
+PG_WORKING_DIR=$(mktemp -d)
+export PG_WORKING_DIR PG_DATABASE=testdb PG_PORT=5432 PG_SHARED_PRELOAD_LIBRARIES=''
+
+cleanup() { postgres-cleanup; rm -rf "$PG_WORKING_DIR"; }
+trap 'cleanup' EXIT INT TERM
 
 LOCAL_DIR=$(mktemp -d)
 export LOCAL_DIR
-mkdir -p "$LOCAL_DIR/devshell"
-printf '#!/bin/dash\nexit 0\n' > "$LOCAL_DIR/devshell/postgres-init.sh"
-chmod +x "$LOCAL_DIR/devshell/postgres-init.sh"
 
 log notice "test case: database deploy --no-hydrate --no-patch exits 0"
 if ! database deploy --no-hydrate --no-patch; then

@@ -391,7 +391,7 @@ ${BGREEN}Options:${NC}
 
 ${BGREEN}Process:${NC}
   1. If $BBLACK\`--archive\`$NC used: extract archive to temporary directory
-  2. Run $BBLACK$LOCAL_DIR/devshell/postgres-cleanup.sh$NC
+  2. Run $BBLACK\`postgres-cleanup\`$NC
      to stop and clean existing database
   3. Clear PG_WORKING_DIR directory completely
   4. Extract $BBLACK\`base.tar.gz\`$NC to $BBLACK$PG_WORKING_DIR$NC directory
@@ -505,7 +505,7 @@ This is the primary command for setting up a fresh database. It initializes
 PostgreSQL, builds the database from source files, and applies test data.
 
 ${BGREEN}Deployment Process:${NC}
-  1. Initialize PostgreSQL server via $BBLACK$LOCAL_DIR/devshell/postgres-init.sh$NC
+  1. Initialize PostgreSQL server via $BBLACK\`postgres-init\`$NC
   2. Run $BBLACK\`hydrate\`$NC to build database from source files (skips with $BBLACK\`--no-hydrate\`$NC)
      - Includes hectic secrets hook by default
   3. Run $BBLACK\`patch\`$NC to apply test-data.sql (skips with $BBLACK\`--no-patch\`$NC)
@@ -805,7 +805,7 @@ subcommand_restore() {
     RESTORE_BACKUP_PATH="$DEFAULT_BACKUP_PATH"
   fi
 
-  "$SHELL" "${LOCAL_DIR}/devshell/postgres-cleanup.sh"
+  postgres-cleanup
 
   local data="${PG_WORKING_DIR:?}/data"
 
@@ -817,7 +817,7 @@ subcommand_restore() {
     tar -xzf "${RESTORE_BACKUP_PATH:?}/pg_wal.tar.gz" -C "${data}/pg_wal"
   fi
 
-  env PG_REUSE= "$SHELL" "${LOCAL_DIR}/devshell/postgres-init.sh"
+  env PG_REUSE= postgres-init
 
   rm -f "${data}/standby.signal" "${data}/recovery.signal"
   restore_namespace
@@ -1061,7 +1061,7 @@ subcommand_init() {
 
   {
     [ "${DEPLOY_REUSE+x}" ] && export PG_REUSE
-    "$SHELL" "${LOCAL_DIR}/devshell/postgres-init.sh"
+    postgres-init
   }
 
   restore_namespace
@@ -1099,14 +1099,14 @@ subcommand_deploy() {
 
   {
     [ "${DEPLOY_REUSE+x}" ] && export PG_REUSE
-    "$SHELL" "${LOCAL_DIR}/devshell/postgres-init.sh"
+    postgres-init
   }
 
   ___run_deploy_flow
 
   if [ "${DEPLOY_CLEANUP+x}" ]; then
     log info "cleanup: stopping postgresql"
-    "$SHELL" "${LOCAL_DIR}/devshell/postgres-cleanup.sh"
+    postgres-cleanup
   fi
 
   restore_namespace
@@ -1207,10 +1207,10 @@ Does not affect your running development database.
 
 ${BGREEN}Process:${NC}
   1. Create a temporary working directory under $BBLACK\$LOCAL_DIR/focus/postgresql-check-tmp$NC
-  2. Run postgres-init.sh against that temporary cluster
+  2. Run postgres-init against that temporary cluster
   3. Run hydrate (unless $BBLACK\`--no-hydrate\`$NC)
   4. Run patch (unless $BBLACK\`--no-patch\`$NC)
-  5. Stop the temporary cluster via postgres-cleanup.sh
+  5. Stop the temporary cluster via postgres-cleanup
   6. Remove the temporary working directory
 
 ${BGREEN}Options:${NC}
@@ -1235,7 +1235,7 @@ ___stop_and_remove_working_dir() {
   _wd="${1:?___stop_and_remove_working_dir: working dir required}"
   log info "stopping cluster at $WHITE$_wd$NC"
   PG_WORKING_DIR="$_wd" \
-    "$SHELL" "${LOCAL_DIR}/devshell/postgres-cleanup.sh"
+    postgres-cleanup
   log info "removing $WHITE$_wd$NC"
   rm -rf "$_wd"
 }
@@ -1273,7 +1273,7 @@ subcommand_check() {
   PG_WORKING_DIR="$CHECK_WORKING_DIR" \
   PG_DATABASE="${PG_DATABASE:-testdb}" \
   PG_DISABLE_LOGGING=1 \
-    "$SHELL" "${LOCAL_DIR}/devshell/postgres-init.sh"
+    postgres-init
 
   PGURL="postgresql://$(id -un)/${PG_DATABASE:-testdb}?host=${CHECK_WORKING_DIR}/sock&port=${PG_PORT:-5432}"
   export PGURL
@@ -1406,11 +1406,11 @@ subcommand_diff() {
 
   log notice "provisioning ${WHITE}DB2$NC (current sources)"
 
-  log info "initializing ${WHITE}DB2$NC with postgres-init.sh"
+  log info "initializing ${WHITE}DB2$NC with postgres-init"
   PG_WORKING_DIR="$DIFF_PGDATA2" \
   PG_DATABASE="testdb" \
   PG_DISABLE_LOGGING=1 \
-    "$SHELL" "${LOCAL_DIR}/devshell/postgres-init.sh" || {
+    postgres-init || {
     log error "failed to initialize ${WHITE}DB2$NC"
     exit 1
   }
