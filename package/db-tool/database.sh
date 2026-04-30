@@ -12,7 +12,7 @@ SCRIPT_NAME=${SCRIPT_NAME%%.sh}
 
 if [ "${PG_LOG_PATH+x}" ]; then
   : "${PATCH_LOG:=${PG_LOG_PATH}/patch.stdout.log}"
-  : "${HYDRATE_LOG:=${PG_LOG_PATH}/hydate.stdout.log}"
+  : "${HYDRATE_LOG:=${PG_LOG_PATH}/hydrate.stdout.log}"
 fi
 
 : "${DATABASE_DIR:=${LOCAL_DIR:-$PWD}/db}"
