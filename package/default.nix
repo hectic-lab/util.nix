@@ -107,6 +107,7 @@
     };
     nativeBuildInputs = with pkgs; [pkg-config curl];
   };
+  dbToolPkgs = pkgs.callPackage ./db-tool {};
 in {
   py3-datetime                 = pkgs.callPackage ./py3-datetime.nix                  {};
   py3-marzban                  = pkgs.callPackage ./py3-marzban.nix                   { inherit self; };
@@ -140,6 +141,10 @@ in {
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   migrator                     = pkgs.callPackage ./migrator                          {};
+  "parse-uri"                  = pkgs.callPackage ./parse-uri                        {};
+  "db-tool"                    = dbToolPkgs."db-tool";
+  "postgres-init"              = dbToolPkgs."postgres-init";
+  "postgres-cleanup"           = dbToolPkgs."postgres-cleanup";
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
   hemar-parser                 = pkgs.callPackage ./hemar/parser                      {};
   AstroTuxLauncher              = pkgs.callPackage ./AstroTuxLauncher.nix             {};
