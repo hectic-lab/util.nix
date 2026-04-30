@@ -35,8 +35,8 @@ run_sql_expect_fail() {
 log notice "case 1: hectic schema and parent tables exist"
 got=$(run_sql "SELECT count(*) FROM pg_namespace WHERE nspname='hectic';") || exit 1
 [ "$got" = 1 ] || { log error "hectic schema missing"; exit 1; }
-got=$(run_sql "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='hectic' AND c.relname IN ('created_at','updated_at');") || exit 1
-[ "$got" = 2 ] || { log error "parent tables missing"; exit 1; }
+got=$(run_sql "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='hectic' AND c.relname IN ('created_at','updated_at','immutable');") || exit 1
+[ "$got" = 3 ] || { log error "parent tables missing"; exit 1; }
 
 log notice "case 2: CREATE TABLE without inheritance is rejected"
 if ! run_sql_expect_fail 'CREATE TABLE public.bad_table (id int);'; then
@@ -89,5 +89,55 @@ psql "$pgurl" -v ON_ERROR_STOP=1 -c "CREATE TABLE parts.events_us PARTITION OF p
   log error "declarative partition was rejected (should be exempt via relispartition)"
   exit 1
 }
+
+log notice "case 7: hectic.immutable inheritors are blocked from DML outside migration_mode"
+run_sql 'CREATE TABLE public.frozen (id int, label text) INHERITS ("hectic"."created_at", "hectic"."immutable");' || exit 1
+
+got=$(run_sql "SELECT count(*) FROM pg_trigger WHERE tgrelid='public.frozen'::regclass AND tgname IN ('hectic_block_immutable_dml','hectic_block_immutable_truncate') AND NOT tgisinternal;") || exit 1
+[ "$got" = 2 ] || { log error "immutable triggers missing on public.frozen (got: $got)"; exit 1; }
+
+if ! run_sql_expect_fail "INSERT INTO public.frozen (id, label) VALUES (1, 'x');"; then
+  log error "INSERT on immutable table accepted outside migration_mode"
+  exit 1
+fi
+if ! run_sql_expect_fail "UPDATE public.frozen SET label='y' WHERE id=1;"; then
+  log error "UPDATE on immutable table accepted outside migration_mode"
+  exit 1
+fi
+if ! run_sql_expect_fail "DELETE FROM public.frozen WHERE id=1;"; then
+  log error "DELETE on immutable table accepted outside migration_mode"
+  exit 1
+fi
+if ! run_sql_expect_fail "TRUNCATE public.frozen;"; then
+  log error "TRUNCATE on immutable table accepted outside migration_mode"
+  exit 1
+fi
+
+log notice "case 8: SET LOCAL hectic.migration_mode='on' allows DML"
+psql "$pgurl" -v ON_ERROR_STOP=1 <<'SQL' || { log error "migration_mode tx failed"; exit 1; }
+BEGIN;
+SET LOCAL hectic.migration_mode = 'on';
+INSERT INTO public.frozen (id, label) VALUES (1, 'x');
+UPDATE public.frozen SET label = 'y' WHERE id = 1;
+COMMIT;
+SQL
+got=$(run_sql "SELECT label FROM public.frozen WHERE id=1;") || exit 1
+[ "$got" = y ] || { log error "expected label=y after migration tx, got: $got"; exit 1; }
+
+log notice "case 9: GUC does not leak past COMMIT"
+if ! run_sql_expect_fail "INSERT INTO public.frozen (id, label) VALUES (2, 'z');"; then
+  log error "INSERT accepted after migration_mode tx committed (GUC leaked)"
+  exit 1
+fi
+
+log notice "case 10: TRUNCATE allowed under migration_mode"
+psql "$pgurl" -v ON_ERROR_STOP=1 <<'SQL' || { log error "truncate under migration_mode failed"; exit 1; }
+BEGIN;
+SET LOCAL hectic.migration_mode = 'on';
+TRUNCATE public.frozen;
+COMMIT;
+SQL
+got=$(run_sql "SELECT count(*) FROM public.frozen;") || exit 1
+[ "$got" = 0 ] || { log error "frozen not truncated"; exit 1; }
 
 log notice "test passed"

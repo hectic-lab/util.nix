@@ -112,7 +112,7 @@ To use `db-tool` in a Nix development shell, add the following to your `flake.ni
 ## hectic Inheritance Bundle
 
 `pkgs.hectic.hectic-inheritance` ships a SQL artifact that bootstraps a `hectic`
-schema with two parent tables and DDL event triggers:
+schema with three parent tables and DDL event triggers:
 
 - `hectic.created_at(created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` — every
   user table must `INHERITS (hectic.created_at)`. The event trigger
@@ -122,6 +122,20 @@ schema with two parent tables and DDL event triggers:
   Any table that inherits from it automatically gets a `BEFORE UPDATE FOR EACH
   ROW` trigger calling `hectic.set_updated_at()` attached by
   `hectic_attach_updated_at_trigger`.
+- `hectic.immutable()` — pure marker. Tables inheriting it are blocked from
+  `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` outside migration mode by triggers
+  attached by `hectic_attach_immutable_triggers`. Useful for reference data
+  that must only change via migrations. To allow DML inside a migration, wrap
+  it in a transaction:
+
+  ```sql
+  BEGIN;
+  SET LOCAL hectic.migration_mode = 'on';
+  INSERT INTO public.frozen (id, label) VALUES (1, 'x');
+  COMMIT;
+  ```
+
+  `SET LOCAL` is required so the permission cannot leak past `COMMIT`.
 
 Always-exempt schemas: `hectic`, `information_schema`, anything matching
 `pg_*`. Declarative partitions (`relispartition = true`) and temporary tables
@@ -133,6 +147,16 @@ Per-database opt-out for additional schemas via the
 ```sql
 ALTER DATABASE mydb SET hectic.inheritance_extra_excluded_schemas = 'legacy,etl';
 ```
+
+### `db-tool diff` and immutable tables
+
+`database diff` already includes immutable tables in its schema-level
+comparison (via `pg_dump --schema-only`). On top of that, when a `hectic`
+schema is present in either side, it appends an
+`--- IMMUTABLE TABLE DATA ---` section to the diff with a per-table unified
+diff of the rows of every table inheriting `hectic.immutable`. Drift in
+"frozen" reference data therefore surfaces in the same pager view as schema
+drift, and the subcommand exits non-zero when either differs.
 
 ### Apply via `postgres-init`
 
