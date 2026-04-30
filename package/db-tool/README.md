@@ -32,6 +32,8 @@ These variables must be set for `db-tool` to function.
 | `PG_CONF_FILE` | (unset) | Path to a `postgresql.conf` file. When set, replaces the script-generated config entirely on fresh init. `port` and `unix_socket_directories` are still appended at runtime (always overridden). When set, `PG_DISABLE_LOGGING` and `PG_SHARED_PRELOAD_LIBRARIES` are ignored. |
 | `PG_SHARED_PRELOAD_LIBRARIES` | `pg_cron` | Comma-separated `shared_preload_libraries` value. Set to empty string to disable. Ignored when `PG_CONF_FILE` is set. |
 | `PG_DISABLE_LOGGING` | `0` | Set to `1` to disable PostgreSQL logging collector. Ignored when `PG_CONF_FILE` is set. |
+| `PG_HECTIC_INHERITANCE` | `0` | Set to `1` to apply the [`hectic` inheritance bundle](#hectic-inheritance-bundle) to the target database after init. |
+| `HECTIC_INHERITANCE_SQL` | (auto) | Override path to the SQL file applied by `PG_HECTIC_INHERITANCE=1`. Defaults to the SQL shipped with `postgres-init`. |
 | `PATCH_LOG` | (stdout) | Path to log the output of database patches. |
 | `HYDRATE_LOG` | (stdout) | Path to log the output of database hydration. |
 
@@ -106,6 +108,54 @@ To use `db-tool` in a Nix development shell, add the following to your `flake.ni
   };
 }
 ```
+
+## hectic Inheritance Bundle
+
+`pkgs.hectic.hectic-inheritance` ships a SQL artifact that bootstraps a `hectic`
+schema with two parent tables and DDL event triggers:
+
+- `hectic.created_at(created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` — every
+  user table must `INHERITS (hectic.created_at)`. The event trigger
+  `hectic_enforce_created_at_inheritance` raises an exception on `CREATE TABLE`
+  otherwise.
+- `hectic.updated_at(updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` — optional.
+  Any table that inherits from it automatically gets a `BEFORE UPDATE FOR EACH
+  ROW` trigger calling `hectic.set_updated_at()` attached by
+  `hectic_attach_updated_at_trigger`.
+
+Always-exempt schemas: `hectic`, `information_schema`, anything matching
+`pg_*`. Declarative partitions (`relispartition = true`) and temporary tables
+are also auto-exempt.
+
+Per-database opt-out for additional schemas via the
+`hectic.inheritance_extra_excluded_schemas` GUC (comma-separated):
+
+```sql
+ALTER DATABASE mydb SET hectic.inheritance_extra_excluded_schemas = 'legacy,etl';
+```
+
+### Apply via `postgres-init`
+
+```sh
+export PG_HECTIC_INHERITANCE=1
+postgres-init
+```
+
+### Apply via `migrator` or any psql pipeline
+
+```nix
+# in your devshell
+shellHook = ''
+  export HECTIC_INHERITANCE_SQL=${pkgs.hectic.hectic-inheritance}/share/hectic/hectic-inheritance.sql
+'';
+```
+
+```sh
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$HECTIC_INHERITANCE_SQL"
+```
+
+The SQL is also exposed via `self.lib.hecticInheritance.sql` (string) and
+`self.lib.hecticInheritance.path` (Nix path) for inline pipelines.
 
 ## Exit Codes
 
