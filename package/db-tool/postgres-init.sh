@@ -44,6 +44,4 @@ postgres_init_main() {
   return 0
 }
 
-if [ "$(basename "$0")" = 'postgres-init' ]; then
-  postgres_init_main "$@"
-fi
+postgres_init_main "$@"
