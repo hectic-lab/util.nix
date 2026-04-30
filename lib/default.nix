@@ -102,7 +102,8 @@ in {
 
   # Consolidated SQL bundles for the `hectic` schema. Single source of truth
   # for everything that creates objects in the `hectic` namespace, used by
-  # migrator (init-time), db-tool (postgres-init), and pkgs.hectic.postgres-secrets.
+  # migrator (init-time) and db-tool (postgres-init + hydrate). Consumers apply
+  # the full bundle via lib/hook/apply-hectic-bundle.sh.
   #
   # The whole hectic system shares one `versionString`; `hectic-version.sql`
   # registers (`'hectic'`, versionString) into `hectic.version` and raises an
@@ -126,6 +127,7 @@ in {
     secret      = static    ./hook/sql/hectic-secret.sql;
     migration   = static    ./hook/sql/hectic-migration.sql;
     inheritance = static    ./hook/sql/hectic-inheritance.sql;
+    applyBundleScript = ./hook/apply-hectic-bundle.sh;
   };
 
   # Back-compat alias. Prefer `self.lib.hectic.inheritance`.
