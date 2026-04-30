@@ -1529,7 +1529,7 @@ if ! [ "${AS_LIBRARY+x}" ]; then
 
   parsed_uri=$(mktemp)
   trap 'rm -rf "$parsed_uri"' EXIT INT HUP
-  parse-uri "$PGURL" > "$parsed_uri"
+  parse-uri "${PGURL:-}" > "$parsed_uri"
   # shellcheck disable=SC1090
   . "$parsed_uri"
 
