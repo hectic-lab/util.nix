@@ -29,8 +29,29 @@ These variables must be set for `db-tool` to function.
 | `DATABASE_SOURCE` | `${DATABASE_DIR}/src` | Directory containing source SQL files for hydration. |
 | `PG_URL_VAR` | `PGURL` | The name of the environment variable where the computed PG URL will be exported. |
 | `PG_LOG_PATH` | (unset) | Path to redirect PostgreSQL server logs. |
+| `PG_CONF_FILE` | (unset) | Path to a `postgresql.conf` file. When set, replaces the script-generated config entirely on fresh init. `port` and `unix_socket_directories` are still appended at runtime (always overridden). When set, `PG_DISABLE_LOGGING` and `PG_SHARED_PRELOAD_LIBRARIES` are ignored. |
+| `PG_SHARED_PRELOAD_LIBRARIES` | `pg_cron` | Comma-separated `shared_preload_libraries` value. Set to empty string to disable. Ignored when `PG_CONF_FILE` is set. |
+| `PG_DISABLE_LOGGING` | `0` | Set to `1` to disable PostgreSQL logging collector. Ignored when `PG_CONF_FILE` is set. |
 | `PATCH_LOG` | (stdout) | Path to log the output of database patches. |
 | `HYDRATE_LOG` | (stdout) | Path to log the output of database hydration. |
+
+## Postgres Package Override
+
+By default, `db-tool`/`postgres-init`/`postgres-cleanup` use plain `postgresql_17` from nixpkgs. If you need extensions (e.g. `pg_cron`), override the postgres package per-output:
+
+```nix
+let
+  myPg = pkgs.postgresql_17.withJIT.withPackages (_: [
+    pkgs.postgresql_17.pkgs.pg_cron
+  ]);
+in {
+  packages = [
+    (pkgs.hectic."db-tool".override          { postgresql = myPg; })
+    (pkgs.hectic."postgres-init".override    { postgresql = myPg; })
+    (pkgs.hectic."postgres-cleanup".override { postgresql = myPg; })
+  ];
+}
+```
 
 ## pull_staging Contract
 

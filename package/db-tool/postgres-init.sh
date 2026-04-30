@@ -24,7 +24,12 @@ postgres_init_main() {
     rm -rf "$data" "$sockdir" || return 1
     mkdir -p "$sockdir" || return 1
     initdb -D "$data" --no-locale -E UTF8 || return 1
-    { printf '%s\n' "listen_addresses = ''"; [ "$PG_DISABLE_LOGGING" -eq 0 ] && { printf '%s\n' 'logging_collector = on'; printf '%s\n' "log_directory = 'log'"; }; [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ] && { printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"; printf '%s\n' "cron.database_name = '$db'"; printf '%s\n' "cron.host = '$sockdir'"; }; :; } >> "$data/postgresql.conf" || return 1
+    if [ -n "${PG_CONF_FILE:-}" ]; then
+      [ -r "$PG_CONF_FILE" ] || { printf '%s\n' "postgres-init: PG_CONF_FILE not readable: $PG_CONF_FILE" >&2; return 1; }
+      cp -f -- "$PG_CONF_FILE" "$data/postgresql.conf" || return 1
+    else
+      { printf '%s\n' "listen_addresses = ''"; [ "$PG_DISABLE_LOGGING" -eq 0 ] && { printf '%s\n' 'logging_collector = on'; printf '%s\n' "log_directory = 'log'"; }; [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ] && { printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"; printf '%s\n' "cron.database_name = '$db'"; printf '%s\n' "cron.host = '$sockdir'"; }; :; } >> "$data/postgresql.conf" || return 1
+    fi
     sed -i "1ilocal all all trust" "$data/pg_hba.conf" || return 1
   fi
 
