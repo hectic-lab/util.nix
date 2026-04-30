@@ -27,9 +27,23 @@ in {
     self.nixosModules."shadowsocks-rust" # NOTE(nrv): impl
     self.nixosModules."shadowsocks"      # NOTE(nrv): usage/instance
 
+    inputs.hectic-landing.nixosModules.hectic-landing
+
     (import ./containers.nix          { inherit flake self inputs; })
     (import (./. + "/sentinèlla.nix") { inherit flake self inputs domain sslOpts; })
   ];
+
+  services.hectic-landing = {
+    enable  = true;
+    package = inputs.hectic-landing.packages.${pkgs.system}.hectic-landing;
+    domain  = domain;
+    port    = 3000;
+    host    = "127.0.0.1";
+  };
+
+  # NOTE(yukkop): both nixos-mailserver and hectic-landing module set
+  # security.acme.defaults.email. Force the mailserver-aligned address.
+  security.acme.defaults.email = lib.mkForce "security@${domain}";
 
   hectic = {
     archetype.dev.enable = true;
@@ -169,24 +183,8 @@ in {
 
   services.nginx = {
     enable = true;
-    virtualHosts.${domain} = sslOpts // {
-      forceSSL = true;
-      locations."/" = {
-        extraConfig = ''
-          root ${"${flake}/nixos/system/hectic-lab/static"};
-          try_files $uri $uri/ /index.html;
-        '';
-      };
-    };
-    virtualHosts."umbriel.${domain}" = sslOpts // {
-      forceSSL = true;
-      locations."/" = {
-        extraConfig = ''
-          root ${"${flake}/nixos/system/hectic-lab/static"};
-          try_files $uri $uri/ /index.html;
-        '';
-      };
-    };
+    # NOTE(yukkop): virtualHosts.${domain} is owned by the hectic-landing module
+    # (ACME-managed). See services.hectic-landing above.
     virtualHosts."store.${domain}" = sslOpts // {
       forceSSL = true;
       root = "/var/www/store";
