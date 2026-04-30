@@ -32,8 +32,7 @@ These variables must be set for `db-tool` to function.
 | `PG_CONF_FILE` | (unset) | Path to a `postgresql.conf` file. When set, replaces the script-generated config entirely on fresh init. `port` and `unix_socket_directories` are still appended at runtime (always overridden). When set, `PG_DISABLE_LOGGING` and `PG_SHARED_PRELOAD_LIBRARIES` are ignored. |
 | `PG_SHARED_PRELOAD_LIBRARIES` | `pg_cron` | Comma-separated `shared_preload_libraries` value. Set to empty string to disable. Ignored when `PG_CONF_FILE` is set. |
 | `PG_DISABLE_LOGGING` | `0` | Set to `1` to disable PostgreSQL logging collector. Ignored when `PG_CONF_FILE` is set. |
-| `PG_HECTIC_INHERITANCE` | `1` | Apply the [`hectic` inheritance bundle](#hectic-inheritance-bundle) to the target database after init. Set to `0` to disable. |
-| `HECTIC_INHERITANCE_SQL` | (auto) | Override path to the SQL file applied by `PG_HECTIC_INHERITANCE=1`. Defaults to the SQL shipped with `postgres-init`. |
+| `HECTIC_DOTENV_FILE` | (unset) | Optional dotenv file. When set and readable, `database hydrate` passes its contents to `hectic.load_secrets_from_env(...)` after applying the bundle. Falls back to `${LOCAL_DIR}/.env.${ENVIRONMENT}` when unset. |
 | `PATCH_LOG` | (stdout) | Path to log the output of database patches. |
 | `HYDRATE_LOG` | (stdout) | Path to log the output of database hydration. |
 
@@ -109,24 +108,36 @@ To use `db-tool` in a Nix development shell, add the following to your `flake.ni
 }
 ```
 
-## hectic Inheritance Bundle
+## hectic Bundle
 
-`pkgs.hectic.hectic-inheritance` ships a SQL artifact that bootstraps a `hectic`
-schema with three parent tables and DDL event triggers:
+`db-tool` and `migrator` apply a single bundle of SQL files that bootstrap the
+`hectic` schema. The bundle lives in
+[`lib/hook/sql/`](../../lib/hook/sql/README.md) — see that README for full
+contract, file layout, and the `self.lib.hectic.*` Nix API.
+
+The bundle creates:
+
+- `hectic.version` — single version row for the entire hectic system.
+  Mismatch between database and bundle raises an exception.
+- `hectic.secret` + `hectic.load_secrets_from_env(text)` +
+  `hectic.get_secret(text)` — encrypted secret storage and dotenv loader.
+- `hectic.migration` — table consumed by `migrator`.
+- `hectic.created_at` / `hectic.updated_at` / `hectic.immutable` parent tables
+  and the DDL event triggers that enforce inheritance, attach
+  `BEFORE UPDATE` triggers, and block DML on immutable tables outside
+  `migration_mode`.
+
+Inheritance details:
 
 - `hectic.created_at(created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` — every
   user table must `INHERITS (hectic.created_at)`. The event trigger
-  `hectic_enforce_created_at_inheritance` raises an exception on `CREATE TABLE`
-  otherwise.
-- `hectic.updated_at(updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` — optional.
-  Any table that inherits from it automatically gets a `BEFORE UPDATE FOR EACH
-  ROW` trigger calling `hectic.set_updated_at()` attached by
-  `hectic_attach_updated_at_trigger`.
-- `hectic.immutable()` — pure marker. Tables inheriting it are blocked from
-  `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` outside migration mode by triggers
-  attached by `hectic_attach_immutable_triggers`. Useful for reference data
-  that must only change via migrations. To allow DML inside a migration, wrap
-  it in a transaction:
+  `hectic_enforce_created_at_inheritance` raises on `CREATE TABLE` otherwise.
+- `hectic.updated_at(updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())` —
+  optional. Any inheriting table automatically gets a
+  `BEFORE UPDATE FOR EACH ROW` trigger calling `hectic.set_updated_at()`.
+- `hectic.immutable()` — pure marker. Inheriting tables are blocked from
+  `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE` outside migration mode. To allow DML
+  inside a migration, wrap it in a transaction:
 
   ```sql
   BEGIN;
@@ -148,6 +159,16 @@ Per-database opt-out for additional schemas via the
 ALTER DATABASE mydb SET hectic.inheritance_extra_excluded_schemas = 'legacy,etl';
 ```
 
+### Responsibility split
+
+| Component | Applies bundle? |
+| --- | --- |
+| `postgres-init` | **No.** Pure PostgreSQL provisioner — starts a vanilla cluster, nothing more. |
+| `migrator init` | **Yes, mandatory.** The bundle is a hard prerequisite for `hectic.migration`. |
+| `database hydrate` | **Yes, by default.** Re-applied on every hydrate. Skip with `--no-hook`. After applying the bundle, hydrate also calls `hectic.load_secrets_from_env(<dotenv>)` if `HECTIC_DOTENV_FILE` (or `${LOCAL_DIR}/.env.${ENVIRONMENT}`) is readable. |
+
+The bundle is idempotent — repeated application is safe.
+
 ### `db-tool diff` and immutable tables
 
 `database diff` already includes immutable tables in its schema-level
@@ -158,25 +179,21 @@ diff of the rows of every table inheriting `hectic.immutable`. Drift in
 "frozen" reference data therefore surfaces in the same pager view as schema
 drift, and the subcommand exits non-zero when either differs.
 
-### Apply via `postgres-init`
+### Apply manually via `psql`
 
-Applied automatically. Set `PG_HECTIC_INHERITANCE=0` to opt out.
-
-### Apply via `migrator` or any psql pipeline
+For external consumers (e.g. NixOS modules) bypass the helper and call `psql`
+directly against the paths exposed by `self.lib.hectic.*.path`:
 
 ```nix
-# in your devshell
-shellHook = ''
-  export HECTIC_INHERITANCE_SQL=${pkgs.hectic.hectic-inheritance}/share/hectic/hectic-inheritance.sql
+services.postgresql.initialScript = pkgs.writeText "hectic-init.sql" ''
+  \i ${self.lib.hectic.secret.path}
+  \i ${self.lib.hectic.migration.path}
+  \i ${self.lib.hectic.inheritance.path}
 '';
 ```
 
-```sh
-psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$HECTIC_INHERITANCE_SQL"
-```
-
-The SQL is also exposed via `self.lib.hecticInheritance.sql` (string) and
-`self.lib.hecticInheritance.path` (Nix path) for inline pipelines.
+The version file (`self.lib.hectic.version`) is templated and only exposes
+`.sql` (a string). Materialize it with `pkgs.writeText` if a path is needed.
 
 ## Exit Codes
 
