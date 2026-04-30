@@ -323,6 +323,26 @@
         "type": "github"
       }
     },
+    "hectic-landing": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-fixed"
+        ]
+      },
+      "locked": {
+        "lastModified": 1777564161,
+        "narHash": "sha256-2ZyXQDOTtcB6B7pSJnSrmGyUcC/JUrfBl6RbvnKwzcE=",
+        "ref": "refs/heads/main",
+        "rev": "88bae39c4c60fdffa1b20f533146b41bfbe8e1c5",
+        "revCount": 8,
+        "type": "git",
+        "url": "ssh://git@github.com/liquizz/hectic-landing.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@github.com/liquizz/hectic-landing.git"
+      }
+    },
     "home-manager": {
       "inputs": {
         "nixpkgs": [
@@ -938,6 +958,7 @@
       "inputs": {
         "deploy-rs": "deploy-rs",
         "disko": "disko",
+        "hectic-landing": "hectic-landing",
         "home-manager": "home-manager",
         "hyprland": "hyprland",
         "impermanence": "impermanence",
