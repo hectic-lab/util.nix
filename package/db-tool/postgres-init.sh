@@ -39,7 +39,13 @@ postgres_init_main() {
   pg_ctl -D "$data" -o "-F" -w start || return 2
 
   user="$(id -un)" || return 1
-  if [ "$PG_REUSE" -eq 0 ]; then createdb -h "$sockdir" -U "$user" "$db" || return 1; fi
+  if [ "$PG_REUSE" -eq 0 ]; then
+    createdb -h "$sockdir" -U "$user" "$db" || return 1
+  else
+    if ! psql -h "$sockdir" -p "$PG_PORT" -U "$user" -d postgres -tAc "select 1 from pg_database where datname = '$db'" 2>/dev/null | grep -q '^1$'; then
+      createdb -h "$sockdir" -U "$user" "$db" || return 1
+    fi
+  fi
   psql -h "$sockdir" -p "$PG_PORT" -d "$db" -v ON_ERROR_STOP=1 -c 'select 1;' || return 1
 
   export POSTGRESQL_HOST="$sockdir" POSTGRESQL_PORT="$PG_PORT" POSTGRESQL_USER="$user" POSTGRESQL_DATABASE="$db"
