@@ -32,7 +32,7 @@ These variables must be set for `db-tool` to function.
 | `PG_CONF_FILE` | (unset) | Path to a `postgresql.conf` file. When set, replaces the script-generated config entirely on fresh init. `port` and `unix_socket_directories` are still appended at runtime (always overridden). When set, `PG_DISABLE_LOGGING` and `PG_SHARED_PRELOAD_LIBRARIES` are ignored. |
 | `PG_SHARED_PRELOAD_LIBRARIES` | `pg_cron` | Comma-separated `shared_preload_libraries` value. Set to empty string to disable. Ignored when `PG_CONF_FILE` is set. |
 | `PG_DISABLE_LOGGING` | `0` | Set to `1` to disable PostgreSQL logging collector. Ignored when `PG_CONF_FILE` is set. |
-| `PG_HECTIC_INHERITANCE` | `0` | Set to `1` to apply the [`hectic` inheritance bundle](#hectic-inheritance-bundle) to the target database after init. |
+| `PG_HECTIC_INHERITANCE` | `1` | Apply the [`hectic` inheritance bundle](#hectic-inheritance-bundle) to the target database after init. Set to `0` to disable. |
 | `HECTIC_INHERITANCE_SQL` | (auto) | Override path to the SQL file applied by `PG_HECTIC_INHERITANCE=1`. Defaults to the SQL shipped with `postgres-init`. |
 | `PATCH_LOG` | (stdout) | Path to log the output of database patches. |
 | `HYDRATE_LOG` | (stdout) | Path to log the output of database hydration. |
@@ -136,10 +136,7 @@ ALTER DATABASE mydb SET hectic.inheritance_extra_excluded_schemas = 'legacy,etl'
 
 ### Apply via `postgres-init`
 
-```sh
-export PG_HECTIC_INHERITANCE=1
-postgres-init
-```
+Applied automatically. Set `PG_HECTIC_INHERITANCE=0` to opt out.
 
 ### Apply via `migrator` or any psql pipeline
 
