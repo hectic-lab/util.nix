@@ -48,7 +48,7 @@ postgres_init_main() {
   fi
   psql -h "$sockdir" -p "$PG_PORT" -d "$db" -v ON_ERROR_STOP=1 -c 'select 1;' || return 1
 
-  if [ "${PG_HECTIC_INHERITANCE:-0}" = "1" ]; then
+  if [ "${PG_HECTIC_INHERITANCE:-1}" = "1" ]; then
     sql_file="${HECTIC_INHERITANCE_SQL:-${HECTIC_INHERITANCE_SQL_DEFAULT:-}}"
     if [ -z "$sql_file" ]; then
       printf '%s\n' 'postgres-init: PG_HECTIC_INHERITANCE=1 but no SQL file resolved (set HECTIC_INHERITANCE_SQL)' >&2
