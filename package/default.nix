@@ -107,7 +107,7 @@
     };
     nativeBuildInputs = with pkgs; [pkg-config curl];
   };
-  dbToolPkgs = pkgs.callPackage ./db-tool {};
+  dbToolPkgs = pkgs.callPackage ./db-tool { inherit self; };
 in {
   py3-datetime                 = pkgs.callPackage ./py3-datetime.nix                  {};
   py3-marzban                  = pkgs.callPackage ./py3-marzban.nix                   { inherit self; };
@@ -140,7 +140,7 @@ in {
   deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
-  migrator                     = pkgs.callPackage ./migrator                          {};
+  migrator                     = pkgs.callPackage ./migrator                          { inherit self; };
   "parse-uri"                  = pkgs.callPackage ./parse-uri                        {};
   "db-tool"                    = dbToolPkgs."db-tool";
   "postgres-init"              = dbToolPkgs."postgres-init";

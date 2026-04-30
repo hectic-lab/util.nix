@@ -170,35 +170,19 @@ init() {
 
   db_type=$(detect_db_type)
 
-  # INHERITS is PostgreSQL-only feature
-  [ ${INHERITS_LIST+x} ] && {
-    if [ "$db_type" != "postgresql" ]; then
-      log error "INHERITS is only supported for PostgreSQL"
-      exit 1
+  if [ "$db_type" = "postgresql" ]; then
+    if ! apply_hectic_bundle "$DB_URL"; then
+      log error "init failed: hectic bundle apply"
+      exit 13
     fi
+  fi
 
-    oldIFS="$IFS"
-    IFS=','
-    check_inherits=
-    for table in $INHERITS_LIST; do
-      check_inherits="$(printf '%s\nSELECT 1 FROM %s LIMIT 1;' "$check_inherits" "$table")"
-    done
-    IFS="$oldIFS"
-
-    check_inherits=$(printf '%s\n' \
-      'BEGIN;' \
-      "$check_inherits" \
-      'COMMIT;')
-
-    if ! db_exec "$check_inherits"; then
-      log error "init failed: ${WHITE}one of inherits table does not exists: ${CYAN}$INHERITS_LIST"
-      exit 5
+  init_sql_extra="$(init_sql)"
+  if [ -n "$init_sql_extra" ]; then
+    if ! db_exec "$init_sql_extra"; then
+      log error "init failed"
+      exit 13
     fi
-  }
-
-  if ! db_exec "$(init_sql)"; then
-    log error "init failed"
-    exit 13
   fi
 }
 
@@ -209,86 +193,11 @@ error_handler_no_db_url() {
 }
 
 init_sql_postgresql() {
-  local sql inherits
-
-  inherits=
-  [ ${INHERITS_LIST+x} ] && inherits="$(printf 'INHERITS(%s)' "$INHERITS_LIST")"
-
-  sql="$(cat <<EOF
-BEGIN;
-
-DO \$\$
-DECLARE
-  ver TEXT;
-BEGIN
-  CREATE SCHEMA IF NOT EXISTS hectic;
-    
-  -- NOTE(yukkop): check version table exists
-  IF EXISTS (
-    SELECT 1
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.relname = 'version'
-      AND n.nspname = 'hectic'
-      AND c.relkind = 'r'
-  ) THEN
-    SELECT v.version INTO ver FROM hectic.version v WHERE v.name = 'migrator';
-    IF ver IS NOT NULL AND ver != '$VERSION' THEN
-      RAISE EXCEPTION 'Incompatible migrator versions: % and $VERSION', ver;
-    END IF;
-  ELSE
-    CREATE TABLE hectic.version (
-        name          TEXT                 PRIMARY KEY,
-        version       TEXT                 NOT NULL,
-        installed_at  TIMESTAMPTZ          NOT NULL DEFAULT NOW()
-    )$inherits;
-  END IF;
-
-  -- NOTE(yukkop): check migrator is registered in version table
-  IF NOT EXISTS (
-    SELECT 1 FROM hectic.version WHERE name = 'migrator'
-  ) THEN
-    INSERT INTO hectic.version (name, version) VALUES ('migrator', '$VERSION');
-  END IF;
-
-  -- NOTE(yukkop): create migrator-specific objects if not yet present
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.relname = 'migration'
-      AND n.nspname = 'hectic'
-      AND c.relkind = 'r'
-  ) THEN
-    CREATE DOMAIN hectic.migration_name AS TEXT CHECK (VALUE ~ '^[0-9]{14}-.*');
-    CREATE DOMAIN hectic.sha256 AS CHAR(64) CHECK (VALUE ~ '^[0-9a-f]{64}\$');
-
-    CREATE OR REPLACE FUNCTION hectic.sha256_lower() RETURNS trigger AS \$fn\$
-    BEGIN
-      NEW.hash = lower(NEW.hash);
-      RETURN NEW;
-    END;
-    \$fn\$ LANGUAGE plpgsql;
-
-    CREATE TABLE hectic.migration (
-        id          SERIAL                 PRIMARY KEY,
-        name        hectic.migration_name  UNIQUE NOT NULL,
-        hash        hectic.sha256          UNIQUE NOT NULL,
-        applied_at  TIMESTAMPTZ            NOT NULL DEFAULT NOW()
-    )$inherits;
-
-    CREATE TRIGGER hectic_t_sha256_lower
-    BEFORE INSERT OR UPDATE ON hectic.migration
-    FOR EACH ROW EXECUTE FUNCTION hectic.sha256_lower();
-  END IF;
-END;
-\$\$;
-
-COMMIT;
-EOF
-  )"
-
-  printf '%s' "$sql"
+  # PostgreSQL init is delegated to apply_hectic_bundle (full hectic bundle
+  # applied as one unit on every `migrator init`). This function returns
+  # empty for the dry-run / db_exec path; bundle SQL paths are exposed via
+  # HECTIC_*_SQL env vars for inspection if needed.
+  printf ''
 }
 
 init_sql_sqlite() {
@@ -1102,7 +1011,7 @@ if ! [ "${AS_LIBRARY+x}" ]; then
         shift 2
       ;;
       --inherits)
-        INHERITS_LIST="${INHERITS_LIST+$INHERITS_LIST\"}$2"
+        log warn "--inherits is deprecated and ignored: hectic schema is auto-exempt from inheritance enforcement"
         shift 2
       ;;
       --*|-*) REMAINING_ARS="$REMAINING_ARS $(quote "$1")"; shift ;;              # unknown global -> pass through
@@ -1110,7 +1019,6 @@ if ! [ "${AS_LIBRARY+x}" ]; then
     esac
   done
   
-  [ "${INHERITS_LIST+x}" ] && INHERITS_LIST="$(printf '%s' "$INHERITS_LIST" | sed -E 's/"/,/g; s/([^,]+)/"\1"/g')"
   [ "${SUBCOMMAND+x}"    ] || { log error "no subcommand specified. Use 'migrator help' for usage information."; exit 1; }
   
   

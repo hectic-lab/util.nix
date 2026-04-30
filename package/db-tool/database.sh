@@ -942,15 +942,21 @@ subcommand_hydrate() {
   done
 
   if [ ! "${HYDRATE_NO_HOOK+x}" ]; then
-    log info "hectic secrets hook"
+    log info "hectic bundle hook"
     # shellcheck disable=SC2059
     printf "${BBLACK}"
-    sh "${LOCAL_DIR}/lib/hook/postgres-secrets.sh" "$PGURL" "$ENVIRONMENT"
+    dotenv_content=""
+    if [ -n "${HECTIC_DOTENV_FILE:-}" ] && [ -r "$HECTIC_DOTENV_FILE" ]; then
+      dotenv_content="$(cat "$HECTIC_DOTENV_FILE")"
+    elif [ -n "${ENVIRONMENT:-}" ] && [ -r "${LOCAL_DIR}/.env.${ENVIRONMENT}" ]; then
+      dotenv_content="$(cat "${LOCAL_DIR}/.env.${ENVIRONMENT}")"
+    fi
+    apply_hectic_bundle "$PGURL" "$dotenv_content"
 
     # shellcheck disable=SC2059
     printf "${NC}"
   else
-    log info "skipping hectic secrets hook"
+    log info "skipping hectic bundle hook"
   fi
 
   local mock_arg=""
