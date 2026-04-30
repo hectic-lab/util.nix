@@ -1197,6 +1197,78 @@ ___diff_dump_schema() {
   fi
 }
 
+___diff_immutable_tables() {
+  local socket_dir="$1"
+  local port="$2"
+  psql -h "$socket_dir" -p "$port" -d testdb -tAv ON_ERROR_STOP=1 -c "$(cat <<'SQL'
+SELECT n.nspname || '.' || c.relname
+FROM pg_inherits i
+JOIN pg_class    c ON c.oid = i.inhrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE i.inhparent = 'hectic.immutable'::regclass
+  AND c.relkind = 'r'
+ORDER BY 1
+SQL
+)" 2>/dev/null
+}
+
+___diff_immutable_data() {
+  local sock1="$1"
+  local port1="$2"
+  local sock2="$3"
+  local port2="$4"
+  local out_file="$5"
+
+  if ! psql -h "$sock1" -p "$port1" -d testdb -tAc \
+    "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='hectic' AND c.relname='immutable';" \
+    >/dev/null 2>&1
+  then
+    return 0
+  fi
+
+  local tables1 tables2 tables
+  tables1=$(___diff_immutable_tables "$sock1" "$port1" || true)
+  tables2=$(___diff_immutable_tables "$sock2" "$port2" || true)
+  tables=$(printf '%s\n%s\n' "$tables1" "$tables2" | sort -u | sed '/^$/d')
+
+  if [ -z "$tables" ]; then
+    return 0
+  fi
+
+  log notice "diffing data of tables inheriting hectic.immutable"
+
+  printf '\n--- IMMUTABLE TABLE DATA ---\n' >> "$out_file"
+
+  local data1 data2 differs=0
+  data1=$(mktemp)
+  data2=$(mktemp)
+  trap 'rm -f "$data1" "$data2"' EXIT INT HUP
+
+  for tbl in $tables; do
+    log info "  $tbl"
+    : > "$data1"
+    : > "$data2"
+    pg_dump -h "$sock1" -p "$port1" testdb \
+      --data-only --no-owner --no-privileges --column-inserts -t "$tbl" \
+      > "$data1" 2>/dev/null || :
+    pg_dump -h "$sock2" -p "$port2" testdb \
+      --data-only --no-owner --no-privileges --column-inserts -t "$tbl" \
+      > "$data2" 2>/dev/null || :
+    {
+      printf '\n=== %s ===\n' "$tbl"
+      if diff --color=always -u "$data1" "$data2"; then
+        printf '(no differences)\n'
+      else
+        differs=1
+      fi
+    } >> "$out_file"
+  done
+
+  rm -f "$data1" "$data2"
+  trap - EXIT INT HUP
+  return $differs
+}
+
 help_check() {
   # shellcheck disable=SC2059
   printf "$(cat <<EOF
@@ -1451,9 +1523,22 @@ subcommand_diff() {
   if diff --color=always -u "$DIFF_DUMP1" "$DIFF_DUMP2" \
     > "$DIFF_TMPDIR/diff"
   then
+    log notice "no schema differences found"
+    schema_differs=0
+  else
+    log notice "schema differences found"
+    schema_differs=1
+  fi
+
+  ___diff_immutable_data \
+    "$DIFF_PGDATA1/sock" "5432" \
+    "$DIFF_PGDATA2/sock" "5432" \
+    "$DIFF_TMPDIR/diff"
+  data_status=$?
+
+  if [ "$schema_differs" = 0 ] && [ "$data_status" = 0 ]; then
     log notice "no differences found"
   else
-    log notice "differences found"
     "$PAGER_OR_CAT" "$DIFF_TMPDIR/diff"
   fi
 
