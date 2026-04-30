@@ -145,6 +145,7 @@ in {
   "db-tool"                    = dbToolPkgs."db-tool";
   "postgres-init"              = dbToolPkgs."postgres-init";
   "postgres-cleanup"           = dbToolPkgs."postgres-cleanup";
+  "hectic-inheritance"         = dbToolPkgs."hectic-inheritance";
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
   hemar-parser                 = pkgs.callPackage ./hemar/parser                      {};
   AstroTuxLauncher              = pkgs.callPackage ./AstroTuxLauncher.nix             {};

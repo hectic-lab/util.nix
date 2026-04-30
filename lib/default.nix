@@ -100,6 +100,19 @@ in {
   # -- Cargo.toml --
   cargoToml = src: (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml"));
 
+  # SQL bundle bootstrapping `hectic.created_at` / `hectic.updated_at` inheritance enforcement.
+  # Consumers can either:
+  #   * read the SQL string for inline pipelines: `self.lib.hecticInheritance.sql`
+  #   * reference the source path: `self.lib.hecticInheritance.path`
+  #   * use the per-system package: `pkgs.hectic.hectic-inheritance` (provides
+  #     `$out/share/hectic/hectic-inheritance.sql`)
+  hecticInheritance = let
+    path = ../package/db-tool/sql/hectic-inheritance.sql;
+  in {
+    inherit path;
+    sql = builtins.readFile path;
+  };
+
   ssh.keys = {
     hetzner-test = {
       yukkop = ''ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ8scy1tv6zfXX6xyaukhO/fsZwif5rC89DvXNc6XxOf'';
