@@ -39,7 +39,15 @@ install_nix() {
     exit 1
   fi
 
-  sh "$NIX_INSTALL" --no-daemon || true
+  if [ "$(id -u)" -eq 0 ] && ! [ -d /nix ]; then
+    log_info "Running as root, creating /nix manually..."
+    mkdir -p /nix
+  fi
+
+  if ! sh "$NIX_INSTALL" --no-daemon; then
+    log_error "Nix installer failed."
+    exit 1
+  fi
 
   NIX_CONF_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/nix"
   mkdir -p "$NIX_CONF_DIR"
