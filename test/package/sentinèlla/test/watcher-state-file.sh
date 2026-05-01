@@ -3,9 +3,9 @@
 #
 # Setup:
 #   - Start a probe on 127.0.0.1:15990
-#   - Stub getent to resolve peers.test -> 127.0.0.1 (the probe) and 10.0.0.1 (fake peer)
-#   - Stub hostname to return 10.0.0.1 as the local IP so 10.0.0.1 is excluded
-#     and 127.0.0.1 (the real probe) is kept as a peer
+#   - Stub dig to return SRV record for _sentinella._tcp.peers.test
+#   - Stub getent to resolve node-a.peers.test -> 127.0.0.1 (the probe)
+#   - Set SELF=10.0.0.1 so the local IP is excluded and 127.0.0.1 is kept as peer
 #   - Assert a state file appears in STATE_DIR within 15s
 
 log notice "test case: ${WHITE}watcher writes state file after first successful poll"
@@ -22,46 +22,46 @@ sleep 2
 # Create stubs directory
 stub_dir=$(mktemp -d)
 
-# Stub getent: returns two IPs for peers.test
+# Stub dig: returns SRV record
+# The watcher calls: $DIG +short +time=3 +tries=2 SRV "$PEERS_SRV"
+# SRV format: "priority weight port target."
+cat >"${stub_dir}/dig" <<'EOF'
+#!/bin/sh
+printf '0 10 15990 node-a.peers.test.\n'
+EOF
+chmod +x "${stub_dir}/dig"
+
+# Stub getent: resolves the SRV target to the probe IP
+# The watcher calls: $GETENT hosts "$target"
 cat >"${stub_dir}/getent" <<'EOF'
 #!/bin/sh
-if [ "$1" = "hosts" ] && [ "$2" = "peers.test" ]; then
-  printf '127.0.0.1 peers.test\n'
-  printf '10.0.0.1 peers.test\n'
+if [ "$1" = "hosts" ] && [ "$2" = "node-a.peers.test" ]; then
+  printf '127.0.0.1 node-a.peers.test\n'
 else
   /usr/bin/getent "$@"
 fi
 EOF
 chmod +x "${stub_dir}/getent"
 
-# Stub hostname: -I returns 10.0.0.1 so watcher excludes it and keeps 127.0.0.1
-cat >"${stub_dir}/hostname" <<'EOF'
-#!/bin/sh
-case "$1" in
-  -I) printf '10.0.0.1\n' ;;
-  *)  /bin/hostname "$@" ;;
-esac
-EOF
-chmod +x "${stub_dir}/hostname"
-
 state_dir=$(mktemp -d)
 
-export PEERS_DNS="peers.test"
-export PEERS_PORT="$PORT"
+export PEERS_SRV="_sentinella._tcp.peers.test"
 export PEERS_SCHEME="http"
 export TG_TOKEN="test-token"
 export TG_CHAT_ID="test-chat"
 export STATE_DIR="$state_dir"
 export POLLING_INTERVAL_SEC="1"
 export SPAM="0"
-unset SELF  # ensure auto-detection is used
+export SELF="10.0.0.1"  # exclude this IP, keep 127.0.0.1 as peer
+export DIG="${stub_dir}/dig"
+export GETENT="${stub_dir}/getent"
 
-PATH="${stub_dir}:${PATH}" watcher &
+watcher &
 watcher_pid=$!
 
 log info "waiting for state file in $state_dir ..."
-peer_url="http://127.0.0.1:${PORT}"
-state_file="${state_dir}/$(printf '%s' "$peer_url" | cksum | awk '{print $1}').state"
+peer_host="node-a.peers.test"
+state_file="${state_dir}/$(printf '%s' "$peer_host" | cksum | awk '{print $1}').state"
 wait_for_file "$state_file" 15
 
 state=$(cat "$state_file")
