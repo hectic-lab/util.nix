@@ -2,8 +2,8 @@
   lib = inputs.nixpkgs.lib;
 in final: prev: (
   let
-    packages = self.packages.${prev.system};
-    legacyPackages = self.legacyPackages.${prev.system};
+    packages = self.packages.${prev.stdenv.hostPlatform.system};
+    legacyPackages = self.legacyPackages.${prev.stdenv.hostPlatform.system};
   in {
     hectic = packages // legacyPackages;
     postgresql_17 = prev.postgresql_17 // {pkgs = prev.postgresql_17.pkgs // {

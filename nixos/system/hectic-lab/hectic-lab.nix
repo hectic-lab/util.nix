@@ -35,7 +35,7 @@ in {
 
   services.hectic-landing = {
     enable  = true;
-    package = inputs.hectic-landing.packages.${pkgs.system}.hectic-landing;
+    package = inputs.hectic-landing.packages.${pkgs.stdenv.hostPlatform.system}.hectic-landing;
     domain  = domain;
     port    = 3000;
     host    = "127.0.0.1";
