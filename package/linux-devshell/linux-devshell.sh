@@ -27,7 +27,13 @@ install_nix() {
   log_info "Nix not found. Installing via nixos.org/nix/install --no-daemon..."
 
   if ! command -v curl >/dev/null 2>&1; then
-    log_error "curl is required. Install it with: sudo pacman -S curl"
+    if command -v apt >/dev/null 2>&1; then
+      log_error "curl is required. Install it with: sudo apt update && sudo apt install -y curl"
+    elif command -v pacman >/dev/null 2>&1; then
+      log_error "curl is required. Install it with: sudo pacman -S curl"
+    else
+      log_error "curl is required. Install it with your system package manager."
+    fi
     exit 1
   fi
 
