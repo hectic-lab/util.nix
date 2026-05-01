@@ -17,6 +17,7 @@ in self.lib.nixpkgs-lib.nixosSystem {
   modules = [
     { networking.hostName = name; }
     inputs.nixos-wsl.nixosModules.default
+    inputs.sops-nix.nixosModules.sops
     { wsl.enable = true; }
     (import ./${name}.nix { inherit flake self inputs; })
   ];
