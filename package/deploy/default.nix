@@ -1,4 +1,4 @@
-{ inputs, symlinkJoin, dash, hectic, ssh-to-age, system }:
+{ inputs, symlinkJoin, dash, hectic, ssh-to-age, stdenv }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -11,7 +11,7 @@ let
     name = "deploy";
     runtimeInputs = [
       ssh-to-age
-      inputs.nixos-anywhere.packages.${system}.nixos-anywhere
+      inputs.nixos-anywhere.packages.${stdenv.hostPlatform.system}.nixos-anywhere
     ];
 
     text = ''

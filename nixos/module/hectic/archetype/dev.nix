@@ -61,7 +61,7 @@ in {
     # Adjust zsh prompt for dev archetype: show '#' instead of '%'
     home-manager.sharedModules = lib.mkAfter [
       {
-        programs.zsh.initExtra = lib.mkAfter ''
+        programs.zsh.initContent = lib.mkAfter ''
           PROMPT="# %~ "
         '';
       }

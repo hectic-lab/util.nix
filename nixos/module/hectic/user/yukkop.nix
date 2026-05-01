@@ -53,7 +53,7 @@ in {
 
       services.gpg-agent = {
         enable              = true;
-        pinentryPackage     = pkgs.pinentry-tty;
+        pinentry.package    = pkgs.pinentry-tty;
         enableZshIntegration = true;
         defaultCacheTtl     = 60 * 60;
         maxCacheTtl         = 60 * 60 * 24;
@@ -67,9 +67,9 @@ in {
       programs.git = {
         enable     = true;
         lfs.enable = true;
-        userName   = "yukkop";
-        userEmail  = "hectic.yukkop@gmail.com";
-        extraConfig = {
+        settings = {
+          user.name  = "yukkop";
+          user.email = "hectic.yukkop@gmail.com";
           push.autoSetupRemote = true;
           init.defaultBranch   = "master";
         };

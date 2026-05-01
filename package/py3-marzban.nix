@@ -1,4 +1,4 @@
-{ self,fetchPypi, python3Packages, system }: python3Packages.buildPythonPackage rec {
+{ self,fetchPypi, python3Packages, stdenv }: python3Packages.buildPythonPackage rec {
     pname = "marzban";
     version = "0.4.3";
     
@@ -22,7 +22,7 @@
       pydantic
       paramiko
       sshtunnel
-    ]) ++ (with self.packages.${system}; [
+    ]) ++ (with self.packages.${stdenv.hostPlatform.system}; [
       py3-datetime
     ]);
 

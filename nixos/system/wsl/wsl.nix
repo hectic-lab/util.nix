@@ -40,7 +40,7 @@
 
   virtualisation.docker.enable = true;
 
-  hardware.opengl.enable = true;
+  hardware.graphics.enable = true;
 
   console.keyMap = "us";
 
@@ -58,11 +58,13 @@
 
   services.samba = {
     enable = true;
-    shares.sshfs = {
-      path        = "/home/yukkop/umbriel/vproxy";
-      browseable  = true;
-      "read only" = false;
-      "guest ok"  = true;
+    settings = {
+      sshfs = {
+        path        = "/home/yukkop/umbriel/vproxy";
+        browseable  = true;
+        "read only" = false;
+        "guest ok"  = true;
+      };
     };
   };
 
