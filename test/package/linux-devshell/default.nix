@@ -52,7 +52,7 @@
       mkdir -p "$out"
     '';
 
-  archTest = pkgs.runCommand "linux-devshell-test-arch-integration"
+  mkArchTest = name: root: pkgs.runCommand "linux-devshell-test-arch-${name}"
     {
       nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.zstd pkgs.git ];
       buildInputs       = [ pkgs.dash pkgs.proot ];
@@ -62,7 +62,7 @@
       ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
       export HECTIC_LOG=trace
 
-      log notice "test case: ''${WHITE}arch integration"
+      log notice "test case: ''${WHITE}arch ${name}"
 
       ARCH_DIR="$(mktemp -d)"
       trap 'rm -rf "$ARCH_DIR"' EXIT
@@ -99,42 +99,52 @@
       git -C "$ARCH_DIR/root/test-repo" add .
       git -C "$ARCH_DIR/root/test-repo" commit -m "init"
 
-      log info "Running linux-devshell in Arch via proot..."
-      proot -b /dev -r "$ARCH_DIR" -w /root/test-repo /bin/sh -c '
+      log info "Running linux-devshell as ${name} in Arch via proot..."
+      ${lib.optionalString root "proot -b /dev -0 -r \"$ARCH_DIR\" -w /root/test-repo /bin/sh -c '"}
+      ${lib.optionalString (!root) "proot -b /dev -r \"$ARCH_DIR\" -w /root/test-repo /bin/sh -c '"}
         export PATH="/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         export TMPDIR=/tmp
         mkdir -p /nix /build /tmp
         /root/test-repo/script/linux-devshell 2>&1
       ' | tee /tmp/proot-output || true
 
-      log info "Checking script behavior in Arch environment..."
+      log info "Checking ${name} behavior..."
 
       if ! grep -q "Nix not found" /tmp/proot-output; then
-        log error "Script did not detect missing Nix"
+        log error "Script did not detect missing Nix as ${name}"
         cat /tmp/proot-output
         exit 1
       fi
-      log success "Script correctly detects missing Nix"
+      log success "Script detects missing Nix as ${name}"
 
       if ! grep -q "Installing via nixos.org" /tmp/proot-output; then
-        log error "Script did not attempt Nix installation"
+        log error "Script did not attempt Nix installation as ${name}"
         cat /tmp/proot-output
         exit 1
       fi
-      log success "Script attempts Nix installation"
+      log success "Script attempts Nix installation as ${name}"
+
+      if grep -q "installing Nix as root is not supported" /tmp/proot-output; then
+        log success "Script handles root install warning"
+      fi
+
+      if grep -q "Patched nix.conf" /tmp/proot-output; then
+        log success "Script patches nix.conf for ${name} install"
+      fi
 
       if ! grep -q "Failed to download Nix installer" /tmp/proot-output; then
-        log error "Script did not handle download failure (no network in sandbox)"
+        log error "Script did not handle download failure as ${name}"
         cat /tmp/proot-output
         exit 1
       fi
-      log success "Script handles network failure gracefully"
+      log success "Script handles network failure as ${name}"
 
-      log success "Script runs correctly in Arch Linux environment"
+      log success "Script runs correctly in Arch Linux as ${name}"
 
       mkdir -p "$out"
     '';
 in
   (lib.mapAttrs (name: drv: mkTest name drv) testDrvs) // {
-    arch-integration = archTest;
+    arch-integration-root = mkArchTest "root" true;
+    arch-integration-user = mkArchTest "user" false;
   }
