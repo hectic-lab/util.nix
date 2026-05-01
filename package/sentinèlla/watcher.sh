@@ -42,6 +42,8 @@ PEERS_TOKEN=${PEERS_TOKEN:-}
 TG_TOKEN=${TG_TOKEN:-}
 TG_CHAT_ID=${TG_CHAT_ID:-}
 SPAM=${SPAM:-0}
+DIG=${DIG:-dig}
+GETENT=${GETENT:-getent}
 
 STATE_DIR=${STATE_DIR:-/var/lib/sentinella}
 mkdir -p "$STATE_DIR" 2>/dev/null || {
@@ -81,7 +83,7 @@ is_local_ip() {
 # Emits "host port ip" per non-local peer, one per line.
 resolve_peers() {
   # dig +short SRV output: "<prio> <weight> <port> <target>."
-  _srv_out=$(dig +short +time=3 +tries=2 SRV "$PEERS_SRV" 2>&1) || {
+  _srv_out=$($DIG +short +time=3 +tries=2 SRV "$PEERS_SRV" 2>&1) || {
     log warn "dig SRV ${WHITE}${PEERS_SRV}${NC} failed: ${_srv_out}"
     return 0
   }
@@ -94,7 +96,7 @@ resolve_peers() {
   printf '%s\n' "$_parsed" \
     | while IFS=' ' read -r port target; do
         [ -n "$target" ] || continue
-        ip=$(getent hosts "$target" | awk '{print $1; exit}')
+        ip=$($GETENT hosts "$target" | awk '{print $1; exit}')
         [ -n "$ip" ] || { log warn "could not resolve ${WHITE}${target}${NC}"; continue; }
         is_local_ip "$ip" && continue
         printf '%s %s %s\n' "$target" "$port" "$ip"

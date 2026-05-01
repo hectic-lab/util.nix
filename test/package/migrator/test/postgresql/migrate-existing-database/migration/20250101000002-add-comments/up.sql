@@ -5,5 +5,5 @@ CREATE TABLE comments (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
-);
+) INHERITS ("hectic"."created_at");
 
