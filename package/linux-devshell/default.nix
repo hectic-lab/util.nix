@@ -30,7 +30,7 @@ let
     name = "linux-devshell";
     executable = true;
     text = ''
-      #!${shell}
+      #!/bin/sh
       ${lib.concatMapStringsSep "\n" (option: "set -o ${option}") bashOptions}
 
       ${logHelpers}
