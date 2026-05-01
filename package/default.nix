@@ -108,6 +108,7 @@
     nativeBuildInputs = with pkgs; [pkg-config curl];
   };
   dbToolPkgs = pkgs.callPackage ./db-tool { inherit self; };
+  linuxDevShellPkgs = pkgs.callPackage ./linux-devshell {};
 in {
   py3-datetime                 = pkgs.callPackage ./py3-datetime.nix                  {};
   py3-marzban                  = pkgs.callPackage ./py3-marzban.nix                   { inherit self; };
@@ -146,6 +147,8 @@ in {
   "postgres-init"              = dbToolPkgs."postgres-init";
   "postgres-cleanup"           = dbToolPkgs."postgres-cleanup";
   "hectic-inheritance"         = dbToolPkgs."hectic-inheritance";
+  "linux-devshell"             = linuxDevShellPkgs.linux-devshell;
+  "linux-devshell-standalone"  = linuxDevShellPkgs.linux-devshell-standalone;
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
   hemar-parser                 = pkgs.callPackage ./hemar/parser                      {};
   AstroTuxLauncher              = pkgs.callPackage ./AstroTuxLauncher.nix             {};
