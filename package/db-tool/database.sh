@@ -945,8 +945,10 @@ subcommand_hydrate() {
     log info "hectic bundle hook"
     # shellcheck disable=SC2059
     printf "${BBLACK}"
-    dotenv_content=""
-    if [ -n "${HECTIC_DOTENV_FILE:-}" ] && [ -r "$HECTIC_DOTENV_FILE" ]; then
+    dotenv_content="${HECTIC_DOTENV_CONTENT:-}"
+    if [ -n "$dotenv_content" ]; then
+      :
+    elif [ -n "${HECTIC_DOTENV_FILE:-}" ] && [ -r "$HECTIC_DOTENV_FILE" ]; then
       dotenv_content="$(cat "$HECTIC_DOTENV_FILE")"
     elif [ -n "${ENVIRONMENT:-}" ] && [ -r "${LOCAL_DIR}/.env.${ENVIRONMENT}" ]; then
       dotenv_content="$(cat "${LOCAL_DIR}/.env.${ENVIRONMENT}")"
