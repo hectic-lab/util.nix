@@ -109,6 +109,9 @@
   };
   dbToolPkgs = pkgs.callPackage ./db-tool { inherit self; };
   linuxDevShellPkgs = pkgs.callPackage ./linux-devshell {};
+  windowsDevShellPkgs = pkgs.callPackage ./windows-devshell {
+    inherit (linuxDevShellPkgs) linux-devshell-standalone;
+  };
 in {
   py3-datetime                 = pkgs.callPackage ./py3-datetime.nix                  {};
   py3-marzban                  = pkgs.callPackage ./py3-marzban.nix                   { inherit self; };
@@ -149,6 +152,7 @@ in {
   "hectic-inheritance"         = dbToolPkgs."hectic-inheritance";
   "linux-devshell"             = linuxDevShellPkgs.linux-devshell;
   "linux-devshell-standalone"  = linuxDevShellPkgs.linux-devshell-standalone;
+  "windows-devshell-standalone" = windowsDevShellPkgs.windows-devshell-standalone;
   nbt2json                     = pkgs.callPackage ./nbt2json                          {};
   hemar-parser                 = pkgs.callPackage ./hemar/parser                      {};
   AstroTuxLauncher              = pkgs.callPackage ./AstroTuxLauncher.nix             {};
