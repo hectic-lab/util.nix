@@ -5,10 +5,63 @@
 }: {
   lib,
   pkgs,
-  modulesPath,
   config,
   ...
-}: let system = pkgs.stdenv.hostPlatform.system; in {
+}: let
+  ollamaLibraryPath = lib.makeLibraryPath [
+    pkgs.stdenv.cc.cc.lib
+    pkgs.zlib
+  ];
+
+  ollamaWrapperBundledLibraryPath = "$out/lib/ollama:$out/lib/ollama/cuda_v12:$out/lib/ollama/cuda_v13";
+
+  ollamaServiceBundledLibraryPath = "${ollamaPrebuilt}/lib/ollama:${ollamaPrebuilt}/lib/ollama/cuda_v12:${ollamaPrebuilt}/lib/ollama/cuda_v13";
+
+  ollamaPrebuilt = pkgs.stdenvNoCC.mkDerivation {
+    pname = "ollama";
+    version = "0.22.1";
+
+    src = pkgs.fetchurl {
+      url = "https://github.com/ollama/ollama/releases/download/v0.22.1/ollama-linux-amd64.tar.zst";
+      hash = "sha256-4nwP6PYKgkFi+Bzge0v9p2fc5PNX12LhSbPQ3gq62fs=";
+    };
+
+    nativeBuildInputs = [
+      pkgs.autoPatchelfHook
+      pkgs.gnutar
+      pkgs.makeWrapper
+      pkgs.zstd
+    ];
+
+    buildInputs = [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.zlib
+    ];
+
+    autoPatchelfIgnoreMissingDeps = [
+      "libcuda.so.1"
+    ];
+
+    unpackPhase = ''
+      runHook preUnpack
+      tar --zstd -xf $src
+      runHook postUnpack
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p $out
+      cp -R . $out/
+      test -x $out/bin/ollama
+      mv $out/bin/ollama $out/bin/.ollama-unwrapped
+      makeWrapper $out/bin/.ollama-unwrapped $out/bin/ollama \
+        --set-default LD_LIBRARY_PATH "${ollamaLibraryPath}:/run/opengl-driver/lib:${ollamaWrapperBundledLibraryPath}"
+      runHook postInstall
+    '';
+
+    meta.mainProgram = "ollama";
+  };
+in {
   imports = [
     self.nixosModules.hectic
     inputs.sops-nix.nixosModules.sops
@@ -72,6 +125,20 @@
     enable = true;
     domain = "accord.tube";
     admins = [ "yukkop@accord.tube" ];
+  };
+
+  services.ollama = {
+    enable = true;
+    host = "127.0.0.1";
+    port = 11434;
+    package = ollamaPrebuilt;
+    home = "/var/lib/ollama";
+    models = "/var/lib/ollama/models";
+    environmentVariables = {
+      LD_LIBRARY_PATH = "${ollamaLibraryPath}:/run/opengl-driver/lib:${ollamaServiceBundledLibraryPath}";
+      OLLAMA_NEW_ENGINE = "true";
+    };
+    openFirewall = false;
   };
 
   networking = {
