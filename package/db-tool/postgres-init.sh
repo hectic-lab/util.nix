@@ -36,7 +36,7 @@ postgres_init_main() {
   sed -i '/^[[:space:]]*port[[:space:]]*=/d' "$data/postgresql.conf" || return 1
   sed -i '/^[[:space:]]*unix_socket_directories[[:space:]]*=/d' "$data/postgresql.conf" || return 1
   { printf '%s\n' "port = $PG_PORT"; printf '%s\n' "unix_socket_directories = '$sockdir'"; } >> "$data/postgresql.conf" || return 1
-  pg_ctl -D "$data" -o "-F" -w start || return 2
+  with_closed_fds pg_ctl -D "$data" -o "-F" -w start || return 2
 
   user="$(id -un)" || return 1
   if [ "$PG_REUSE" -eq 0 ]; then
