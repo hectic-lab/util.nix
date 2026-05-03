@@ -21,4 +21,7 @@ in {
   pager_or_cat = hectic.writeDash "pager_or_cat.sh" ''
     ${builtins.readFile ./pager_or_cat.sh}
   '';
+  with_closed_fds = hectic.writeDash "with_closed_fds.sh" ''
+    ${builtins.readFile ./with_closed_fds.sh}
+  '';
 }

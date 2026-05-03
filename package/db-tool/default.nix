@@ -43,6 +43,7 @@ let
         ${builtins.readFile hectic.helpers.posix-shell.change_namespace}
         ${builtins.readFile hectic.helpers.posix-shell.quote}
         ${builtins.readFile hectic.helpers.posix-shell.pager_or_cat}
+        ${builtins.readFile hectic.helpers.posix-shell.with_closed_fds}
         ${hecticEnv}
         ${applyBundle}
         ${builtins.readFile ./database.sh}
@@ -62,7 +63,11 @@ let
       name = "postgres-init";
       runtimeInputs = [ postgresql coreutils ];
 
-      text = builtins.readFile ./postgres-init.sh;
+      text = ''
+        ${builtins.readFile hectic.helpers.posix-shell.with_closed_fds}
+        ${builtins.readFile ./postgres-init.sh}
+      '';
+
 
       meta = {
         description = "Initialize local PostgreSQL instance";
