@@ -35,6 +35,7 @@ These variables must be set for `db-tool` to function.
 | `HECTIC_DOTENV_FILE` | (unset) | Optional dotenv file. When set and readable, `database hydrate` passes its contents to `hectic.load_secrets_from_env(...)` after applying the bundle. Falls back to `${LOCAL_DIR}/.env.${ENVIRONMENT}` when unset. |
 | `PATCH_LOG` | (stdout) | Path to log the output of database patches. |
 | `HYDRATE_LOG` | (stdout) | Path to log the output of database hydration. |
+| `NO_TTY` | `0` | Set to `1` to redirect `pg_ctl` stdout/stderr to `/dev/null`. Prevents hanging in non-interactive environments (e.g., CI, agents) where open file descriptors from background PostgreSQL processes keep the parent session alive. |
 
 ## Postgres Package Override
 
