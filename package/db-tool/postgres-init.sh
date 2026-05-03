@@ -16,7 +16,13 @@ postgres_init_main() {
   mkdir -p "$PG_WORKING_DIR" || return 1
   wd="$PG_WORKING_DIR"; data="$wd/data"; sockdir="$wd/sock"; db="$PG_DATABASE"
 
-  pg_ctl -D "$data" -m fast -w stop >/dev/null 2>&1 || :
+  if [ "${NO_TTY:-0}" = "1" ]; then
+    _pg_log="$(mktemp /tmp/postgres-init-stop.XXXXXX.log)"
+    pg_ctl -D "$data" -m fast -w stop >"$_pg_log" 2>&1 || :
+    printf '%s\n' "postgres-init: pg_ctl stop output redirected to $_pg_log" >&2
+  else
+    pg_ctl -D "$data" -m fast -w stop || :
+  fi
   mkdir -p "$sockdir" || return 1
 
   if [ "${PG_REUSE+x}" ] && [ -f "$data/PG_VERSION" ]; then PG_REUSE=1; else PG_REUSE=0; fi
@@ -36,7 +42,13 @@ postgres_init_main() {
   sed -i '/^[[:space:]]*port[[:space:]]*=/d' "$data/postgresql.conf" || return 1
   sed -i '/^[[:space:]]*unix_socket_directories[[:space:]]*=/d' "$data/postgresql.conf" || return 1
   { printf '%s\n' "port = $PG_PORT"; printf '%s\n' "unix_socket_directories = '$sockdir'"; } >> "$data/postgresql.conf" || return 1
-  with_closed_fds pg_ctl -D "$data" -o "-F" -w start || return 2
+  if [ "${NO_TTY:-0}" = "1" ]; then
+    _pg_log="$(mktemp /tmp/postgres-init-start.XXXXXX.log)"
+    with_closed_fds pg_ctl -D "$data" -o "-F" -w start >"$_pg_log" 2>&1 || return 2
+    printf '%s\n' "postgres-init: pg_ctl start output redirected to $_pg_log" >&2
+  else
+    with_closed_fds pg_ctl -D "$data" -o "-F" -w start || return 2
+  fi
 
   user="$(id -un)" || return 1
   if [ "$PG_REUSE" -eq 0 ]; then
