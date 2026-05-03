@@ -148,7 +148,7 @@ log() {
       ''
 
     # shellcheck disable=SC1003
-    fmt="$(printf "%s$delimetr" "$@" | sed 's/\\033\[0m/'\'"$color"'/g')"
+    fmt="$(printf "%s$delimetr" "$@" | sed 's/\\033\[0m/''\'"$color"'/g')"
     shift
     # shellcheck disable=SC1003
     printf "${BBLACK}${HECTIC_NAMESPACE}> %b\n" "$color$fmt$NC" >&3
