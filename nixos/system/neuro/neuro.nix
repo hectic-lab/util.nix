@@ -138,7 +138,7 @@ in {
       LD_LIBRARY_PATH = "${ollamaLibraryPath}:/run/opengl-driver/lib:${ollamaServiceBundledLibraryPath}";
       OLLAMA_NEW_ENGINE = "true";
     };
-    loadModels = [ "qwen3.6:27b" "qwen3.5:9b" "gemma3:4b" ];
+    loadModels = [ "qwen3.6:27b" "qwen3.5:9b" "gemma3:4b" "gpt-oss:20b" ];
     openFirewall = false;
   };
 
