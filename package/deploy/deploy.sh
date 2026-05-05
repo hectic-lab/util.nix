@@ -61,6 +61,10 @@ while [ $# -gt 0 ]; do
       target_host=$2
       shift 2
       ;;
+    -y|--yes)
+      assume_yes=1
+      shift
+      ;;
     --)
       shift
       break
@@ -187,10 +191,14 @@ if [ "${push_deploy+x}" ]; then
   if [ "${server_init+x}" ]; then
     if [ "$is_target_host_nixos" -eq 1 ]; then
       log warn 'target host already is nixos, are you really want to reinstall nixos?'
-      printf 'This may delete all data [y/N]\n'
-      read -r CONTINUE
-      if [ "$CONTINUE" != "y" ]; then
-        exit 0
+      if [ "${assume_yes+x}" ]; then
+        log info 'assuming yes (-y/--yes), proceeding with reinstall'
+      else
+        printf 'This may delete all data [y/N]\n'
+        read -r CONTINUE
+        if [ "$CONTINUE" != "y" ]; then
+          exit 0
+        fi
       fi
     fi
   
