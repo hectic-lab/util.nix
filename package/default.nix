@@ -125,6 +125,7 @@ in {
   py3-openai-shap-e            = pkgs.callPackage ./py3-openai-shap-e.nix             {};
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};
+  merge-archive                = pkgs.callPackage ./merge-archive                     {};
   nvim-pager                   = pkgs.callPackage ./nvim-pager.nix                    {};
   colorize                     = pkgs.callPackage ./colorize.nix                      {};
   github-gh-tl                 = pkgs.callPackage ./github/gh-tl.nix                  {};
