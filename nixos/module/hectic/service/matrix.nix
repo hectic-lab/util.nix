@@ -10,6 +10,23 @@
   ...
 }: let
   cfg = config.hectic.services.matrix;
+  matrixUsers = builtins.attrNames cfg.users;
+  mkUserRegistration = name: let
+    user = cfg.users.${name};
+    adminFlag = if user.admin then "--admin" else "--no-admin";
+  in ''
+    if [ ! -r "${user.passwordFile}" ]; then
+      printf 'Missing Matrix password file for %s: %s\n' '${name}' '${user.passwordFile}' >&2
+      exit 1
+    fi
+
+    ${pkgs.matrix-synapse}/bin/register_new_matrix_user \
+      -u '${name}' \
+      -p "$(tr -d '\n' < "${user.passwordFile}")" \
+      -k "$REGISTRATION_SHARED_SECRET" \
+      ${adminFlag} \
+      http://127.0.0.1:8008 || true
+  '';
 in {
   options = {
     hectic.services.matrix = {
@@ -49,13 +66,39 @@ in {
           domain to matrix
         '';
       };
+      users = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.submodule {
+          options = {
+            passwordFile = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                Full path to a file containing the Matrix user's password.
+              '';
+            };
+            admin = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Whether to create the Matrix user as an admin.
+              '';
+            };
+          };
+        });
+        default = {};
+        description = ''
+          Declarative Matrix users to provision after Synapse starts.
+        '';
+      };
     };
   };
   config = lib.mkIf cfg.enable {
     services.matrix-synapse = {
       enable = true;
-       settings = {
-         server_name = cfg.matrixDomain;
+      extraConfigFiles = [
+        cfg.secretsFile
+      ];
+      settings = {
+          server_name = cfg.matrixDomain;
          public_baseurl = "https://${cfg.matrixDomain}";
          experimental_features = {
            msc3266_enabled = true;
@@ -95,9 +138,6 @@ in {
         enable_registration = true;
         enable_registration_without_verification = true;
 
-        extraConfigFiles = [
-          cfg.secretsFile
-        ];
       };
     };
 
@@ -182,6 +222,31 @@ in {
         email = "hectic.yukkop.it@gmail.com";
         enableDebugLogs = true;
       };
+    };
+    systemd.services.matrix-synapse-users = lib.mkIf (matrixUsers != []) {
+      description = "Provision Matrix Synapse users";
+      wantedBy = [ "multi-user.target" ];
+      after = [ config.services.matrix-synapse.serviceUnit ];
+      requires = [ config.services.matrix-synapse.serviceUnit ];
+      path = with pkgs; [ curl coreutils gawk ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "matrix-synapse";
+      };
+      script = ''
+        until curl -sf http://127.0.0.1:8008/_matrix/client/versions >/dev/null; do
+          sleep 2
+        done
+
+        REGISTRATION_SHARED_SECRET="$(awk -F': *' '$1 == "registration_shared_secret" { print $2; exit }' "${cfg.secretsFile}")"
+
+        if [ -z "$REGISTRATION_SHARED_SECRET" ]; then
+          printf 'registration_shared_secret not found in %s\n' '${cfg.secretsFile}' >&2
+          exit 1
+        fi
+
+${builtins.concatStringsSep "\n" (map mkUserRegistration matrixUsers)}
+      '';
     };
   };
 }

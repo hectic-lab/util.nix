@@ -20,8 +20,13 @@ in {
         conf = {
           default_server_config = {
             "m.homeserver".base_url = "https://${cfg.matrixDomain}";
+            "m.homeserver".server_name = cfg.matrixDomain;
             "m.identity_server".base_url = "https://vector.im";
           };
+
+          room_directory.servers = [
+            cfg.matrixDomain
+          ];
 
           default_theme = "dark";
           show_labs_settings = true;

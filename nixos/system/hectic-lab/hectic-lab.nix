@@ -63,6 +63,15 @@ in {
         port           = 5432;
         initialEnvFile = config.sops.secrets."init-postgresql".path;
       };
+      users = {
+        yukkop = {
+          passwordFile = config.sops.secrets."matrix/users/yukkop/password".path;
+          admin = true;
+        };
+        liquiz = {
+          passwordFile = config.sops.secrets."matrix/users/liquiz/password".path;
+        };
+      };
       inherit matrixDomain;
     };
   };
@@ -137,12 +146,21 @@ in {
   };
   sops.secrets."matrix/secrets" = {
     key = "matrix/secrets";
+    owner = "matrix-synapse";
   };
   sops.secrets."matrix/turn-secret" = {
     key   = "matrix/turn-secret";
     owner = "turnserver";
     group = "turnserver";
     mode  = "0400";
+  };
+  sops.secrets."matrix/users/yukkop/password" = {
+    key = "matrix/users/yukkop/password";
+    owner = "matrix-synapse";
+  };
+  sops.secrets."matrix/users/liquiz/password" = {
+    key = "matrix/users/liquiz/password";
+    owner = "matrix-synapse";
   };
 
   services.mailserver = {
