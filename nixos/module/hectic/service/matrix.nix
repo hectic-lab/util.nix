@@ -54,26 +54,41 @@ in {
   config = lib.mkIf cfg.enable {
     services.matrix-synapse = {
       enable = true;
-      settings = {
-        server_name = cfg.matrixDomain;
-        public_baseurl = "https://${cfg.matrixDomain}";
-        listeners = [
-          {
-            port = 8008;
-            bind_addresses = [ "0.0.0.0" ];
-            type = "http";
+       settings = {
+         server_name = cfg.matrixDomain;
+         public_baseurl = "https://${cfg.matrixDomain}";
+         experimental_features = {
+           msc3266_enabled = true;
+           msc4140_enabled = true;
+           msc4143_enabled = true;
+           msc4222_enabled = true;
+         };
+         matrix_rtc = {
+           transports = [
+             {
+               type = "livekit";
+               livekit_service_url = "https://${cfg.matrixDomain}/livekit/jwt";
+             }
+           ];
+         };
+         listeners = [
+           {
+             port = 8008;
+             bind_addresses = [ "0.0.0.0" ];
+             type = "http";
             tls = false;
             resources = [
               {
-                names = [
-                  "client"
-                  # Ability speak between different matrix servers and get
-                  # global id, requires .well-known
-                  "federation"
-                ];
-                compress = false;
-              }
-            ];
+                 names = [
+                   "client"
+                   # Ability speak between different matrix servers and get
+                   # global id, requires .well-known
+                   "federation"
+                   "openid"
+                 ];
+                 compress = false;
+               }
+             ];
           }
         ];
 
@@ -100,7 +115,7 @@ in {
       ];
 
       enableTCPIP = true;
-      port = cfg.postgresql.port;
+      settings.port = cfg.postgresql.port;
       authentication = builtins.concatStringsSep "\n" [
         "local all         all           trust"
         "host  sameuser    all           127.0.0.1/32 scram-sha-256"
@@ -153,6 +168,8 @@ in {
           extraConfig = ''
             default_type application/json;
             add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS";
+            add_header Access-Control-Allow-Headers "X-Requested-With, Content-Type, Authorization";
           '';
           return = "200 '{\"m.server\": \"${cfg.matrixDomain}:443\"}'";
         };

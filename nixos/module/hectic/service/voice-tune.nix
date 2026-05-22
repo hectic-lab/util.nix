@@ -61,7 +61,11 @@ in {
       turn_uris = [
         "turn:${cfg.matrixDomain}:3478?transport=udp"
         "turn:${cfg.matrixDomain}:3478?transport=tcp"
+        "turns:${cfg.matrixDomain}:5349?transport=udp"
+        "turns:${cfg.matrixDomain}:5349?transport=tcp"
       ];
+      turn_user_lifetime = 86400000;
+      turn_allow_guests = true;
     };
   };
 }

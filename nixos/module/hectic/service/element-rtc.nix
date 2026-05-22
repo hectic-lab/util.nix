@@ -47,14 +47,13 @@ in {
       virtualHosts.${cfg.matrixDomain} = {
         forceSSL = true;
         enableACME = true;
-        locations."/" = {
-          proxyPass = "http://127.0.0.1:8008";
-        };
 
         locations."=/.well-known/matrix/client" = {
           extraConfig = ''
             default_type application/json;
             add_header Access-Control-Allow-Origin *;
+            add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS";
+            add_header Access-Control-Allow-Headers "X-Requested-With, Content-Type, Authorization";
           '';
           return = ''200 '{
             "m.homeserver": {

@@ -15,6 +15,7 @@ with builtins;
 with lib;
 let
   domain = "hectic-lab.com";
+  matrixDomain = "accord.tube";
   sslOpts = {
     sslCertificate    = config.sops.secrets."ssl/porkbun/${domain}/domain.cert.pem".path;
     sslCertificateKey = config.sops.secrets."ssl/porkbun/${domain}/private.key.pem".path;
@@ -52,6 +53,17 @@ in {
       networkMatchConfigName = "enp1s0";
       ipv4                   = "128.140.75.58";
       ipv6                   = "2a01:4f8:c2c:d54a";
+    };
+    services.matrix = {
+      enable         = true;
+      secretsFile    = config.sops.secrets."matrix/secrets".path;
+      turnSecretFile = config.sops.secrets."matrix/turn-secret".path;
+      publicIp       = "128.140.75.58";
+      postgresql = {
+        port           = 5432;
+        initialEnvFile = config.sops.secrets."init-postgresql".path;
+      };
+      inherit matrixDomain;
     };
   };
 
@@ -120,6 +132,18 @@ in {
   sops.secrets."mailserver/snuff/hashedPassword"         = {};
   sops.secrets."mailserver/antoshka/hashedPassword"      = {};
   sops.secrets."mailserver/founders/hashedPassword"      = {};
+  sops.secrets."init-postgresql" = {
+    key = "init-postgresql";
+  };
+  sops.secrets."matrix/secrets" = {
+    key = "matrix/secrets";
+  };
+  sops.secrets."matrix/turn-secret" = {
+    key   = "matrix/turn-secret";
+    owner = "turnserver";
+    group = "turnserver";
+    mode  = "0400";
+  };
 
   services.mailserver = {
     enable = true;
@@ -160,6 +184,7 @@ in {
 
   networking.firewall = {
     allowedTCPPorts = [
+      80
       443
       3306  # mysql
       25565
