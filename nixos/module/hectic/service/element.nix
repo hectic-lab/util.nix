@@ -9,23 +9,29 @@
   config,
   ...
 }: let
-  cfg = config.hectic.services.matrix;
+  legacyCfg = config.hectic.services.matrix;
+  clusterCfg = config.hectic.generic.matrix-cluster;
+  clusterSynapseEnabled =
+    clusterCfg.enable
+    && (if clusterCfg.overrideEnableSynapse != null then clusterCfg.overrideEnableSynapse else clusterCfg.role == "primary");
+  enabled = legacyCfg.enable || clusterSynapseEnabled;
+  matrixDomain = if legacyCfg.enable then legacyCfg.matrixDomain else clusterCfg.matrixDomain;
 in {
-  config = lib.mkIf cfg.enable {
-    services.nginx.virtualHosts."element.${cfg.matrixDomain}" = {
+  config = lib.mkIf enabled {
+    services.nginx.virtualHosts."element.${matrixDomain}" = {
       enableACME = true;
       forceSSL = true;
 
       root = pkgs.element-web.override {
         conf = {
           default_server_config = {
-            "m.homeserver".base_url = "https://${cfg.matrixDomain}";
-            "m.homeserver".server_name = cfg.matrixDomain;
+            "m.homeserver".base_url = "https://${matrixDomain}";
+            "m.homeserver".server_name = matrixDomain;
             "m.identity_server".base_url = "https://vector.im";
           };
 
           room_directory.servers = [
-            cfg.matrixDomain
+            matrixDomain
           ];
 
           default_theme = "dark";

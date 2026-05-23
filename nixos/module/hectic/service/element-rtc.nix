@@ -9,9 +9,15 @@
   config,
   ...
 }: let
-  cfg = config.hectic.services.matrix;
+  legacyCfg = config.hectic.services.matrix;
+  clusterCfg = config.hectic.generic.matrix-cluster;
+  clusterSynapseEnabled =
+    clusterCfg.enable
+    && (if clusterCfg.overrideEnableSynapse != null then clusterCfg.overrideEnableSynapse else clusterCfg.role == "primary");
+  enabled = legacyCfg.enable || clusterSynapseEnabled;
+  matrixDomain = if legacyCfg.enable then legacyCfg.matrixDomain else clusterCfg.matrixDomain;
 in {
-  config = lib.mkIf cfg.enable (let
+  config = lib.mkIf enabled (let
     keyFile = "/run/livekit.key";
   in {
     services.livekit = {
@@ -23,7 +29,7 @@ in {
 
     services.lk-jwt-service = {
       enable = true;
-      livekitUrl = "wss://${cfg.matrixDomain}/livekit/sfu";
+      livekitUrl = "wss://${matrixDomain}/livekit/sfu";
       inherit keyFile;
     };
 
@@ -40,11 +46,11 @@ in {
     };
 
     systemd.services.lk-jwt-service.environment.LIVEKIT_FULL_ACCESS_HOMESERVERS =
-      cfg.matrixDomain;
+      matrixDomain;
 
     services.nginx = {
       enable = true;
-      virtualHosts.${cfg.matrixDomain} = {
+      virtualHosts.${matrixDomain} = {
         forceSSL = true;
         enableACME = true;
 
@@ -57,18 +63,18 @@ in {
           '';
           return = ''200 '{
             "m.homeserver": {
-              "base_url": "https://${cfg.matrixDomain}"
+              "base_url": "https://${matrixDomain}"
             },
             "m.identity_server": {
               "base_url": "https://vector.im"
             },
             "org.matrix.msc3575.proxy": {
-              "url": "https://${cfg.matrixDomain}"
+              "url": "https://${matrixDomain}"
             },
             "org.matrix.msc4143.rtc_foci": [
               {
                 "type": "livekit",
-                "livekit_service_url": "https://${cfg.matrixDomain}/livekit/jwt"
+                "livekit_service_url": "https://${matrixDomain}/livekit/jwt"
               }
             ]
           }' '';
