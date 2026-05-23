@@ -262,7 +262,42 @@ def view_s3(key):
             Params=params,
             ExpiresIn=3600)
         
-        return jsonify({'url': url})
+        return jsonify({'url': url, 'mimetype': mimetype, 'source': 's3'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/view/media/<media_id>')
+def view_media(media_id):
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT media_type FROM local_media_repository WHERE media_id = %s",
+            (media_id,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        mimetype = row[0] if row else None
+        local_path = f"local_content/{media_id[0:2]}/{media_id[2:4]}/{media_id[4:]}"
+        full_local_path = os.path.join(MEDIA_STORE_PATH, local_path)
+        
+        if os.path.exists(full_local_path):
+            return send_file(full_local_path, mimetype=mimetype)
+        
+        s3 = get_s3_client()
+        full_key = f"{S3_PREFIX}/{local_path}" if S3_PREFIX else local_path
+        
+        params = {'Bucket': S3_BUCKET, 'Key': full_key}
+        if mimetype:
+            params['ResponseContentType'] = mimetype
+        
+        url = s3.generate_presigned_url('get_object',
+            Params=params,
+            ExpiresIn=3600)
+        
+        return jsonify({'url': url, 'mimetype': mimetype, 'source': 's3'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -498,7 +533,7 @@ HTML_TEMPLATE = '''
                         <td>${row.last_access ? row.last_access.slice(0, 19).replace("T", " ") : "-"}</td>
                         <td>${row.upload_name || "-"}</td>
                         <td>${status}${quarantined}</td>
-                        <td><a href="#" onclick="showPreview('/view/local/${row.local_path}', '${row.media_type || ""}', '${row.upload_name || row.media_id}'); return false;">View</a></td>
+                        <td><a href="#" onclick="viewMedia('${row.media_id}', '${row.media_type || ""}', '${row.upload_name || row.media_id}'); return false;">View</a></td>
                     </tr>`;
                 });
                 html += "</tbody></table>";
@@ -597,7 +632,7 @@ HTML_TEMPLATE = '''
             const r = await fetch("/view/s3/" + encodeURIComponent(key));
             const data = await r.json();
             if (data.url) {
-                showPreview(data.url, '', key);
+                showPreview(data.url, data.mimetype || '', key);
             }
         }
         
@@ -618,6 +653,21 @@ HTML_TEMPLATE = '''
                 return;
             }
             modal.classList.add("active");
+        }
+        
+        async function viewMedia(mediaId, mimetype, name) {
+            const r = await fetch("/view/media/" + encodeURIComponent(mediaId));
+            const contentType = r.headers.get("content-type") || "";
+            if (contentType.includes("application/json")) {
+                const data = await r.json();
+                if (data.url) {
+                    showPreview(data.url, data.mimetype || mimetype, name);
+                }
+            } else {
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                showPreview(url, mimetype, name);
+            }
         }
         
         document.getElementById("preview-modal").addEventListener("click", function(e) {
