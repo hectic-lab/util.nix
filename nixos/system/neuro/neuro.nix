@@ -116,15 +116,49 @@ in {
   #  matrixDomain     = "accord.tube";
   #};
 
-  hectic.services.jitsi = {
-    enable   = true;
-    hostName = "meet.accord.tube";
+  #hectic.services.jitsi = {
+  #  enable   = true;
+  #  hostName = "meet.accord.tube";
+  #};
+
+  #hectic.services.xmpp = {
+  #  enable = true;
+  #  domain = "accord.tube";
+  #  admins = [ "yukkop@accord.tube" ];
+  #};
+
+  # Static landing page for bfs.band on :80 and :443 (no HTTP->HTTPS redirect).
+  security.acme = {
+    acceptTerms = true;
+    defaults.email = "security@bfs.band";
   };
 
-  hectic.services.xmpp = {
+  services.nginx = {
     enable = true;
-    domain = "accord.tube";
-    admins = [ "yukkop@accord.tube" ];
+    virtualHosts."bfs.band" = let
+      site = pkgs.runCommand "bfs-band-site" {} ''
+        mkdir -p $out
+        cat > $out/index.html <<'EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>bfs.band</title>
+          </head>
+          <body>
+            <h1>bfs.band</h1>
+            <p>Coming soon.</p>
+          </body>
+        </html>
+        EOF
+      '';
+    in {
+      serverAliases = [ "www.bfs.band" ];
+      enableACME    = true;
+      addSSL        = true;   # serve on both :80 and :443, no forced redirect
+      forceSSL      = false;
+      root          = "${site}";
+    };
   };
 
   services.ollama = {
