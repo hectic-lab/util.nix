@@ -71,6 +71,9 @@ in {
         liquiz = {
           passwordFile = config.sops.secrets."matrix/users/liquiz/password".path;
         };
+        lvgkcfjl = {
+          passwordFile = config.sops.secrets."matrix/users/lvgkcfjl/password".path;
+        };
       };
       inherit matrixDomain;
     };
@@ -160,6 +163,10 @@ in {
   };
   sops.secrets."matrix/users/liquiz/password" = {
     key = "matrix/users/liquiz/password";
+    owner = "matrix-synapse";
+  };
+  sops.secrets."matrix/users/lvgkcfjl/password" = {
+    key = "matrix/users/lvgkcfjl/password";
     owner = "matrix-synapse";
   };
 
