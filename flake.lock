@@ -668,6 +668,26 @@
         "type": "github"
       }
     },
+    "mechabellum-replay-analysis": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs-fixed"
+        ]
+      },
+      "locked": {
+        "lastModified": 1779564179,
+        "narHash": "sha256-rcR0Sq6782vF5cilXvZJHUG/MMBG6JtHoMXiuBYlfEs=",
+        "ref": "refs/heads/master",
+        "rev": "087d4dfd1d8517bc32b55404125ad3ca5746ed6f",
+        "revCount": 101,
+        "type": "git",
+        "url": "ssh://git@github.com/LysmiMx/mechabellum-replay-analysis.git"
+      },
+      "original": {
+        "type": "git",
+        "url": "ssh://git@github.com/LysmiMx/mechabellum-replay-analysis.git"
+      }
+    },
     "nix-minecraft": {
       "inputs": {
         "flake-compat": "flake-compat_3",
@@ -962,6 +982,7 @@
         "home-manager": "home-manager",
         "hyprland": "hyprland",
         "impermanence": "impermanence",
+        "mechabellum-replay-analysis": "mechabellum-replay-analysis",
         "nix-minecraft": "nix-minecraft",
         "nixos-anywhere": "nixos-anywhere",
         "nixos-hardware": "nixos-hardware",

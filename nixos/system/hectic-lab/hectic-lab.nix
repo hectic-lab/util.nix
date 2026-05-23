@@ -31,6 +31,7 @@ in {
     inputs.hectic-landing.nixosModules.hectic-landing
 
     (import ./containers.nix          { inherit flake self inputs; })
+    (import ./mechabellum.nix         { inherit flake self inputs domain sslOpts; })
     (import (./. + "/sentinèlla.nix") { inherit flake self inputs domain sslOpts; })
   ];
 

@@ -58,6 +58,12 @@
       url = "git+ssh://git@github.com/liquizz/hectic-landing.git";
       inputs.nixpkgs.follows = "nixpkgs-fixed";
     };
+    mechabellum-replay-analysis = {
+      # NOTE(yukkop): private repo - SSH access required.
+      # Only evaluated when nixosConfigurations."hectic-lab|x86_64-linux" is built.
+      url = "git+ssh://git@github.com/LysmiMx/mechabellum-replay-analysis.git";
+      inputs.nixpkgs.follows = "nixpkgs-fixed";
+    };
   };
 
   outputs = {
