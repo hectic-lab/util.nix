@@ -76,9 +76,25 @@
     ${s3Plugin}/bin/s3_media_upload upload "${s3Cfg.mediaStorePath}" "${s3Cfg.bucket}" \
       --endpoint-url "${s3Cfg.endpointUrl}" \
       --storage-class "${s3Cfg.storageClass}" \
-      ${lib.optionalString (s3Cfg.prefix != "") "--prefix \"${s3Cfg.prefix}\" \\"}
+      --prefix "${s3Cfg.prefix}" \
       ${lib.optionalString s3Cfg.sync.deleteLocalAfterUpload "--delete"}
-    ${s3Plugin}/bin/s3_media_upload update-db 0s
+    cat > /tmp/synapse-merge-config.py << 'PYEOF'
+import yaml
+with open("${config.services.matrix-synapse.configFile}") as f:
+    config = yaml.safe_load(f)
+with open("${cfg.secretsFile}") as f:
+    secrets = yaml.safe_load(f)
+config.update(secrets)
+config.setdefault("database", {}).setdefault("args", {})
+config["database"]["args"].setdefault("password", "")
+config["database"]["args"].setdefault("host", "/run/postgresql")
+config["database"]["args"].setdefault("port", 5432)
+with open("/tmp/synapse-combined-config.yaml", "w") as f:
+    yaml.dump(config, f, default_flow_style=False)
+PYEOF
+    ${pkgs.python3.withPackages (ps: [ps.pyyaml])}/bin/python3 /tmp/synapse-merge-config.py
+    ${s3Plugin}/bin/s3_media_upload update-db --homeserver-config-path /tmp/synapse-combined-config.yaml 0s
+    rm -f /tmp/synapse-combined-config.yaml
     ${s3Plugin}/bin/s3_media_upload check-deleted "${s3Cfg.mediaStorePath}"
   '';
 in {
