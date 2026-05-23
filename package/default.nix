@@ -169,4 +169,5 @@ in {
   pg-15-ext-smtp-client        = buildSmtpExt      pkgs "15";
   pg-15-ext-plhaskell          = buildPlHaskellExt pkgs "15";
   pg-15-ext-plsh               = buildPlShExt      pkgs "15";
+  media-browser                = pkgs.callPackage ./media-browser {};
 }
