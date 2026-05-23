@@ -5,7 +5,7 @@
 }: let
   aiogram-newsletter = pkgs.python3Packages.buildPythonPackage {
     pname = "aiogram-newsletter";
-    version = "0.0.10";
+    version = "0.0.12";
 
     pyproject = true;
     build-system = [ pkgs.python3Packages.setuptools ];
@@ -16,8 +16,15 @@
       rev = "bb8a42e4bcff66a9a606fc92ccc27b1d094b20fc";
       sha256 = "sha256-atKhccp8Pr8anJUo+M9hnYkYrcgnB9SxrpmsiVusJZs=";
     };
-  
-    propagatedBuildInputs = [ ];
+
+    postPatch = ''
+      substituteInPlace setup.py --replace-fail '"apscheduler==3.10"' '"apscheduler>=3.10"'
+    '';
+
+    propagatedBuildInputs = with pkgs.python3Packages; [
+      aiogram
+      apscheduler
+    ];
   
     meta = {
       description = "";
@@ -45,12 +52,12 @@ in pkgs.python3Packages.buildPythonPackage {
       name="support-bot",
       version="1.0.0",
       install_requires=[
-        "aiogram==3.7.0",
+        "aiogram>=3",
         "aiogram-newsletter>=0.0.10",
-        "cachetools==5.3.2",
-        "environs==10.3.0",
-        "pydantic==2.5.3",
-        "redis==5.0.1",
+        "cachetools>=5.3.2",
+        "environs>=10.3.0",
+        "pydantic>=2.5.3",
+        "redis>=5.0.1",
         "apscheduler",
       ],
       entry_points={

@@ -121,7 +121,7 @@ in {
   py3-cryptomus                = pkgs.callPackage ./py3-cryptomus.nix                 {};
   py3-modulegraph              = pkgs.callPackage ./py3-modulegraph.nix               {};
   py3-swifter                  = pkgs.callPackage ./py3-swifter.nix                   {};
-  py3-aiogram-newsletter       = pkgs.callPackage ./py3-swifter.nix                   {};
+  py3-aiogram-newsletter       = pkgs.callPackage ./py3-aiogram-newsletter.nix        {};
   py3-openai-shap-e            = pkgs.callPackage ./py3-openai-shap-e.nix             {};
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};

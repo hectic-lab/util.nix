@@ -19,6 +19,8 @@ matrix:
             password: ENC[AES256_GCM,data:2JUc8U87HVrJIDc9j2InZKgTRQBP,iv:0tuM7TFENbiVi7aM0nTgvRJrK0vGLewsmWJz2MUi62g=,tag:RL61PCXzQFLObBwXthpk5Q==,type:str]
         liquiz:
             password: ENC[AES256_GCM,data:6y3eFrfAZ88=,iv:yEIr1Oq4x3jnWcymHwrLDioKqapzaiOfNPvkgiNIOiw=,tag:CJ3gWTRpQtEEaMkYUOb8Mg==,type:str]
+        lvgkcfjl:
+            password: ENC[AES256_GCM,data:heZSXKj9MCQcY7wH,iv:PdIo3PhXTiGt8JiwafxQA7ysjJ3MJ0hrgCMO+sCs4Oo=,tag:iQYP6r44F3J+xEkam7Zjiw==,type:str]
     turn-secret: ENC[AES256_GCM,data:2RerKgYNFXEVM/YVmXt2l+t3BqduS+FlmjBWTA==,iv:6odb0HB9mntsceNaJtU2kwEVAiF0O88u47eDPLZVJbs=,tag:BJXAvK8abcnCLi96Kra5zA==,type:str]
 wg-bfs:
     private-key: ENC[AES256_GCM,data:/J02asiesrQcsO7Xbq66HQIQeSPmFEMkM2q/z+9Y42K8SYEQP0OYQz+8fXI=,iv:PdGhPWgGxhe0a7C6CaVM/ePKABT+y8HRFOAPzNwQk+c=,tag:9AI30JFh6uyaXXVjMBJ1zg==,type:str]
@@ -81,7 +83,7 @@ sops:
             Yk43ZmlTc09aNFV1VjdjN2RWQlFWTDQKcYSvA2lHP8GS0lkYY19Tm8RXmFHQX5Ck
             qV2Fn22Fic4M5FVKDEMfaO6WmeXgki9a8dGeO9LlC+Phf16SOq7eLw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-05-22T20:46:03Z"
-    mac: ENC[AES256_GCM,data:IE3N17kJDlgoIp4kYSpWqLRC1wA61OEBB/vz3wCEmZuQpO4uPd+ymSjGtTHXSc+Ppie5mFv9t+mHbhqsDjw33yts7FDdMB8OFxSO4qBQu4itLHWA+lSylknn/a/aZg6YZO9ppYjD4NQVZhFVJUl+7oBuuHlaEofB9i7c1lIkXts=,iv:X3nLOMhpZaba/NBl2vAIX0TXQp0k99N7y+gVRXVNbiM=,tag:RHB3a4yYaSgsJ5atrREf9g==,type:str]
+    lastmodified: "2026-05-23T07:08:25Z"
+    mac: ENC[AES256_GCM,data:D7V2jX6AK89s/TRjrNXBHHyJHIbp+OQSzV2XfZ3qUOxJKfrNvNes8tARGO7fF1OMdbnZJVC7VBCMVOg0UtN6UlLepF9lL/jYzKPbPO6ohhhTdgv4OUkiTNVZ6MGQOY2win9NiHoAhn6zdNw8bZeXNPN5D7eY+Spy6zXLvjrl2EY=,iv:CoVVHHmFga/ecqP0KNp0Gy6rx08SuqImNuc6zc0JGpU=,tag:s4tJBGtBUjRyDCkPXqaQAQ==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2
