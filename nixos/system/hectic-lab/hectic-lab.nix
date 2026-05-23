@@ -160,6 +160,7 @@ in {
   sops.secrets."mailserver/snuff/hashedPassword"         = {};
   sops.secrets."mailserver/antoshka/hashedPassword"      = {};
   sops.secrets."mailserver/founders/hashedPassword"      = {};
+  sops.secrets."mailserver/lvgkcfjl/hashedPassword"      = {};
   sops.secrets."init-postgresql" = {
     key = "init-postgresql";
   };
@@ -200,6 +201,9 @@ in {
       };
       "founders" = {
         hashedPasswordFile = config.sops.secrets."mailserver/founders/hashedPassword".path;
+      };
+      "lvgkcfjl" = {
+        hashedPasswordFile = config.sops.secrets."mailserver/lvgkcfjl/hashedPassword".path;
       };
       "yukkop" = {
         hashedPasswordFile = config.sops.secrets."mailserver/yukkop/hashedPassword".path;

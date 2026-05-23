@@ -11,6 +11,8 @@ mailserver:
         hashedPassword: ENC[AES256_GCM,data:Dv0vhe5LEFbAi/hadztQUTrRbPENSTxxOSTM7iwosH5kO28FCK56ZkKD8p/CLva6v97Cp2sWAXwd0fS6,iv:nUF4deb/8iF1mS5h+Z6oDE16YVQZ6ArfSnXG9DzqzLE=,tag:rKKlkYOl5oABbnzEjTOSVQ==,type:str]
     antoshka:
         hashedPassword: ENC[AES256_GCM,data:6Rgj4JIrEF9ZRRRwGpV4yCdS7cw81xKLfavuii1cHqZK3JDlD2HOAVYgrrl+fWD6rNxUPAXpVuAIgxCu,iv:Y67je0qtEpnbwhiYXL2FJUAedPlKdTTb6wGeSVVEaPQ=,tag:Thvt+gsebEjoIjwOmNgBGQ==,type:str]
+    lvgkcfjl:
+        hashedPassword: ENC[AES256_GCM,data:Nm1ijH8DU+HdeN5fOjAsf1Y0jEubiIbBq6NMJsxeMqFNBt6dU1IN9e99Y/7X6xh55JN2e8H1cUohgT7lWTywTOAtjAbOz5SHHQ==,iv:PVormkYkIIV39rjoODcZFtNBUWbO/yeiJWhwusGTnrE=,tag:96Xab0zoZtGkiIigq8Weyg==,type:str]
 init-postgresql: ENC[AES256_GCM,data:Iw8M2P1QoqPVaEdM8Zo0qlHrYgop0iknDY4NtgDo,iv:RWj9AFnh4/KWCm3UH4RoCdM2lzsXGY7A7qko8xCxjp8=,tag:l8acSq8+NBXB4L1rVzG6kw==,type:str]
 matrix:
     object-storage:
@@ -85,7 +87,7 @@ sops:
             Yk43ZmlTc09aNFV1VjdjN2RWQlFWTDQKcYSvA2lHP8GS0lkYY19Tm8RXmFHQX5Ck
             qV2Fn22Fic4M5FVKDEMfaO6WmeXgki9a8dGeO9LlC+Phf16SOq7eLw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-05-23T09:54:16Z"
-    mac: ENC[AES256_GCM,data:n3ljtQmDWFbhYo8eXjxPpE6xi/HIAMHaT1SATANIHi2Ged0c5PI/YS8jodRPUdb4zgLSMtoJjX5bqfJZ1en4WBY1rg69hDXst2sZ42zmDkafGTFpPBoS+QtC1c9UYQwvJfJ+4fX5qIcO6wplhIZG5PZrqb2dpPUD4vkRNxez2ho=,iv:ny5RCC7/3bNTiR2V4Hn3DuLdn8lThZeUKoCwXrzL0V0=,tag:v6THc2C4w7Uujh1VLKcokw==,type:str]
+    lastmodified: "2026-05-23T13:25:00Z"
+    mac: ENC[AES256_GCM,data:YIH27Hn/hc5AXgyezoVjOf0rajMAyuKq2anYG1PfOw3uu7Xoc8SXm4FqL9FHy1WFW+HPxl0opGFSRXA5xJPqyYuHz0XQJ2iMADip94z88rjehP9KV5B4hDaR53kcsLDlqIhgLWyfLMxj9rceJ/HBKI7OpeVXEtCP2CKUkOS6+Hc=,iv:D391UC/Q90+yJ841RZS9HaQgDhXeOBheHWR3N/CglPo=,tag:XeMOT9oSPJcjtvsV7s3XaQ==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2

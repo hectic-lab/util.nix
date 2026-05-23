@@ -149,6 +149,14 @@ in {
         '';
       };
 
+      enableRegistration = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Allow open user registration on the homeserver.
+        '';
+      };
+
       objectStorage.s3 = {
         enable = lib.mkEnableOption "S3-compatible object storage for Matrix media";
 
@@ -352,8 +360,8 @@ in {
             }
           ];
 
-          enable_registration = true;
-          enable_registration_without_verification = true;
+          enable_registration = cfg.enableRegistration;
+          enable_registration_without_verification = cfg.enableRegistration;
         };
       };
 
