@@ -13,6 +13,8 @@ mailserver:
         hashedPassword: ENC[AES256_GCM,data:6Rgj4JIrEF9ZRRRwGpV4yCdS7cw81xKLfavuii1cHqZK3JDlD2HOAVYgrrl+fWD6rNxUPAXpVuAIgxCu,iv:Y67je0qtEpnbwhiYXL2FJUAedPlKdTTb6wGeSVVEaPQ=,tag:Thvt+gsebEjoIjwOmNgBGQ==,type:str]
 init-postgresql: ENC[AES256_GCM,data:Iw8M2P1QoqPVaEdM8Zo0qlHrYgop0iknDY4NtgDo,iv:RWj9AFnh4/KWCm3UH4RoCdM2lzsXGY7A7qko8xCxjp8=,tag:l8acSq8+NBXB4L1rVzG6kw==,type:str]
 matrix:
+    object-storage:
+        credentials: ENC[AES256_GCM,data:n2sDhGMR8y0in9pdn4zNEQBC5dqk+4JwbuJgEeQxyjn8bL9GebFBaqeE+frvPAGXj/DgpU6lFlFPgaGTWaMZAEEVpXyFeOdODpgW049q83ug5e4j/mbZgFM36XoItw==,iv:MW9H0zASdrY7SX1XM/jfoBihBYX0Fmlew4f71AvvV6Y=,tag:cAiOKUtOeTnczudps8YgQw==,type:str]
     secrets: ENC[AES256_GCM,data:ivXp2YSiMI4hgL6122Ex+fGW0lsZvGD6XmiRvNgFgvzLH5yDv9uLsYcGCTYfQSL3X5VyIMGvsdRF+4pbIjBZMuQKrjvXv74E7aFBLQ2Qk98N3IIrznUFR3KXbHR6xXy5ILd7Bmw5JI/ZHULbmITahXUBt2kEJvfh4eAtqShNA4vsJrabHX9A8Q+2Ddp16w0cWftV5++WXzlNpvIc2Py6BwvfroNAjpSaO+ILYDOIL7XjPvF83fTt64pxZ9nsi3hCzcDtBgGkqc8=,iv:wvt9V2uYQUwivSwEIYZwcHjXr5WwMw19lgFDIa1CcVw=,tag:/22UZvp7+1hLbt+kV+wokQ==,type:str]
     users:
         yukkop:
@@ -83,7 +85,7 @@ sops:
             Yk43ZmlTc09aNFV1VjdjN2RWQlFWTDQKcYSvA2lHP8GS0lkYY19Tm8RXmFHQX5Ck
             qV2Fn22Fic4M5FVKDEMfaO6WmeXgki9a8dGeO9LlC+Phf16SOq7eLw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-05-23T07:08:25Z"
-    mac: ENC[AES256_GCM,data:D7V2jX6AK89s/TRjrNXBHHyJHIbp+OQSzV2XfZ3qUOxJKfrNvNes8tARGO7fF1OMdbnZJVC7VBCMVOg0UtN6UlLepF9lL/jYzKPbPO6ohhhTdgv4OUkiTNVZ6MGQOY2win9NiHoAhn6zdNw8bZeXNPN5D7eY+Spy6zXLvjrl2EY=,iv:CoVVHHmFga/ecqP0KNp0Gy6rx08SuqImNuc6zc0JGpU=,tag:s4tJBGtBUjRyDCkPXqaQAQ==,type:str]
+    lastmodified: "2026-05-23T09:54:16Z"
+    mac: ENC[AES256_GCM,data:n3ljtQmDWFbhYo8eXjxPpE6xi/HIAMHaT1SATANIHi2Ged0c5PI/YS8jodRPUdb4zgLSMtoJjX5bqfJZ1en4WBY1rg69hDXst2sZ42zmDkafGTFpPBoS+QtC1c9UYQwvJfJ+4fX5qIcO6wplhIZG5PZrqb2dpPUD4vkRNxez2ho=,iv:ny5RCC7/3bNTiR2V4Hn3DuLdn8lThZeUKoCwXrzL0V0=,tag:v6THc2C4w7Uujh1VLKcokw==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2

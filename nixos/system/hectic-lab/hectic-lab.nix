@@ -75,6 +75,13 @@ in {
           passwordFile = config.sops.secrets."matrix/users/lvgkcfjl/password".path;
         };
       };
+      objectStorage.s3 = {
+        enable = true;
+        bucket = "matrix-hectic-lab";
+        regionName = "hel1";
+        endpointUrl = "https://hel1.your-objectstorage.com";
+        credentialsFile = config.sops.secrets."matrix/object-storage/credentials".path;
+      };
       inherit matrixDomain;
     };
   };
@@ -168,6 +175,11 @@ in {
   sops.secrets."matrix/users/lvgkcfjl/password" = {
     key = "matrix/users/lvgkcfjl/password";
     owner = "matrix-synapse";
+  };
+  sops.secrets."matrix/object-storage/credentials" = {
+    key = "matrix/object-storage/credentials";
+    owner = "matrix-synapse";
+    mode = "0400";
   };
 
   services.mailserver = {
