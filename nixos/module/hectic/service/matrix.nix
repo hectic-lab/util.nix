@@ -143,7 +143,7 @@ in {
 
       maxUploadSize = lib.mkOption {
         type = lib.types.str;
-        default = "100M";
+        default = "2G";
         description = ''
           Maximum file upload size accepted by Synapse and nginx.
         '';

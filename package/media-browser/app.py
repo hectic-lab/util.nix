@@ -207,11 +207,30 @@ def api_sync_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def get_media_type_from_path(filepath):
+    try:
+        parts = filepath.split('/')
+        if len(parts) >= 4 and parts[0] == 'local_content':
+            media_id = parts[1] + parts[2] + parts[3]
+            conn = get_db_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT media_type FROM local_media_repository WHERE media_id = %s",
+                (media_id,)
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if row:
+                return row[0]
+    except Exception:
+        pass
+    return None
+
 @app.route('/view/local/<path:filepath>')
 def view_local(filepath):
     try:
         safe_path = os.path.join(MEDIA_STORE_PATH, filepath)
-        # Security: ensure path is within MEDIA_STORE_PATH
         real_path = os.path.realpath(safe_path)
         real_base = os.path.realpath(MEDIA_STORE_PATH)
         if not real_path.startswith(real_base):
@@ -219,8 +238,9 @@ def view_local(filepath):
         
         if not os.path.exists(real_path):
             return 'Not found', 404
-            
-        return send_file(real_path)
+        
+        mimetype = get_media_type_from_path(filepath)
+        return send_file(real_path, mimetype=mimetype)
     except Exception as e:
         return str(e), 500
 
@@ -230,8 +250,16 @@ def view_s3(key):
         s3 = get_s3_client()
         full_key = f"{S3_PREFIX}/{key}" if S3_PREFIX else key
         
+        mimetype = None
+        if key.startswith('local_content/'):
+            mimetype = get_media_type_from_path(key)
+        
+        params = {'Bucket': S3_BUCKET, 'Key': full_key}
+        if mimetype:
+            params['ResponseContentType'] = mimetype
+        
         url = s3.generate_presigned_url('get_object',
-            Params={'Bucket': S3_BUCKET, 'Key': full_key},
+            Params=params,
             ExpiresIn=3600)
         
         return jsonify({'url': url})
@@ -338,6 +366,34 @@ HTML_TEMPLATE = '''
         .size { font-family: monospace; color: #8b949e; }
         .path { font-family: monospace; font-size: 0.85em; }
         #content { max-height: 70vh; overflow-y: auto; }
+        .preview-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        .preview-modal.active { display: flex; }
+        .preview-modal img, .preview-modal video {
+            max-width: 90vw;
+            max-height: 80vh;
+            border-radius: 8px;
+        }
+        .preview-modal audio { width: 500px; }
+        .preview-close {
+            position: absolute;
+            top: 20px; right: 30px;
+            font-size: 2em; color: white;
+            cursor: pointer; background: none; border: none;
+        }
+        .preview-info {
+            color: #8b949e;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -374,6 +430,12 @@ HTML_TEMPLATE = '''
             <h2>S3 Objects</h2>
             <div id="s3-objects-table" class="loading">Loading...</div>
         </div>
+    </div>
+    
+    <div id="preview-modal" class="preview-modal">
+        <button class="preview-close">&times;</button>
+        <div id="preview-container"></div>
+        <div id="preview-info" class="preview-info"></div>
     </div>
 
     <script>
@@ -436,7 +498,7 @@ HTML_TEMPLATE = '''
                         <td>${row.last_access ? row.last_access.slice(0, 19).replace("T", " ") : "-"}</td>
                         <td>${row.upload_name || "-"}</td>
                         <td>${status}${quarantined}</td>
-                        <td><a href="/view/local/${row.local_path}" target="_blank">View</a></td>
+                        <td><a href="#" onclick="showPreview('/view/local/${row.local_path}', '${row.media_type || ""}', '${row.upload_name || row.media_id}'); return false;">View</a></td>
                     </tr>`;
                 });
                 html += "</tbody></table>";
@@ -496,7 +558,7 @@ HTML_TEMPLATE = '''
                         <td class="path">${f.path}</td>
                         <td class="size">${formatBytes(f.size)}</td>
                         <td>${f.modified.slice(0, 19).replace("T", " ")}</td>
-                        <td><a href="/view/local/${f.path}" target="_blank">View</a></td>
+                        <td><a href="#" onclick="showPreview('/view/local/${f.path}', '', '${f.path}'); return false;">View</a></td>
                     </tr>`;
                 });
                 html += "</tbody></table>";
@@ -535,9 +597,35 @@ HTML_TEMPLATE = '''
             const r = await fetch("/view/s3/" + encodeURIComponent(key));
             const data = await r.json();
             if (data.url) {
-                window.open(data.url, "_blank");
+                showPreview(data.url, '', key);
             }
         }
+        
+        function showPreview(url, mimetype, name) {
+            const modal = document.getElementById("preview-modal");
+            const container = document.getElementById("preview-container");
+            const info = document.getElementById("preview-info");
+            container.innerHTML = "";
+            info.textContent = name + (mimetype ? " (" + mimetype + ")" : "");
+            if (mimetype && mimetype.startsWith("image/")) {
+                container.innerHTML = `<img src="${url}" alt="${name}">`;
+            } else if (mimetype && mimetype.startsWith("video/")) {
+                container.innerHTML = `<video controls autoplay><source src="${url}" type="${mimetype}"></video>`;
+            } else if (mimetype && mimetype.startsWith("audio/")) {
+                container.innerHTML = `<audio controls autoplay src="${url}"></audio>`;
+            } else {
+                window.open(url, "_blank");
+                return;
+            }
+            modal.classList.add("active");
+        }
+        
+        document.getElementById("preview-modal").addEventListener("click", function(e) {
+            if (e.target === this || e.target.classList.contains("preview-close")) {
+                this.classList.remove("active");
+                document.getElementById("preview-container").innerHTML = "";
+            }
+        });
         
         loadStats();
         loadMediaDb();
