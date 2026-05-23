@@ -66,6 +66,13 @@ in {
           domain to matrix
         '';
       };
+      maxUploadSize = lib.mkOption {
+        type = lib.types.str;
+        default = "100M";
+        description = ''
+          Maximum file upload size accepted by Synapse and nginx.
+        '';
+      };
       users = lib.mkOption {
         type = lib.types.attrsOf (lib.types.submodule {
           options = {
@@ -99,10 +106,11 @@ in {
       ];
       settings = {
           server_name = cfg.matrixDomain;
-         public_baseurl = "https://${cfg.matrixDomain}";
-         experimental_features = {
-           msc3266_enabled = true;
-           msc4140_enabled = true;
+          public_baseurl = "https://${cfg.matrixDomain}";
+          max_upload_size = cfg.maxUploadSize;
+          experimental_features = {
+            msc3266_enabled = true;
+            msc4140_enabled = true;
            msc4143_enabled = true;
            msc4222_enabled = true;
          };
@@ -203,6 +211,9 @@ in {
         enableACME = true;
         locations."/" = {
           proxyPass = "http://127.0.0.1:8008";
+          extraConfig = ''
+            client_max_body_size ${cfg.maxUploadSize};
+          '';
         };
         locations."=/.well-known/matrix/server" = {
           extraConfig = ''
