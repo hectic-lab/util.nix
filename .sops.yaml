@@ -47,6 +47,17 @@ creation_rules:
         - *hectic-lab-server
         - *umbriel-bfs
 
+  - path_regex: sus/matrix-cluster.yaml$
+    key_groups:
+      - age:
+        - *nrv
+        - *yukkop
+        - *snuff
+        - *yukkop-alt
+        - *hectic-lab-server
+        - *bfs-pol-server
+        - *umbriel-bfs
+
   - path_regex: sus/sentinella-default.yaml$
     key_groups:
       - age:

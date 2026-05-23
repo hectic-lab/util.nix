@@ -23,6 +23,7 @@ let
 in {
   imports = [
     self.nixosModules.hectic
+    self.nixosModules.matrix-cluster
     inputs.sops-nix.nixosModules.sops
 
     self.nixosModules."shadowsocks-rust" # NOTE(nrv): impl
@@ -56,14 +57,15 @@ in {
       ipv6                   = "2a01:4f8:c2c:d54a";
     };
     services.matrix = {
-      enable         = true;
+      enable = false;
+    };
+
+    generic.matrix-cluster = {
+      enable        = true;
+      role          = "primary";
+      inherit matrixDomain;
+      signingKeyFile = config.sops.secrets."matrix/signing-key".path;
       secretsFile    = config.sops.secrets."matrix/secrets".path;
-      turnSecretFile = config.sops.secrets."matrix/turn-secret".path;
-      publicIp       = "128.140.75.58";
-      postgresql = {
-        port           = 5432;
-        initialEnvFile = config.sops.secrets."init-postgresql".path;
-      };
       users = {
         yukkop = {
           passwordFile = config.sops.secrets."matrix/users/yukkop/password".path;
@@ -80,13 +82,21 @@ in {
         };
       };
       objectStorage.s3 = {
-        enable = true;
         bucket = "matrix-hectic-lab";
         regionName = "hel1";
         endpointUrl = "https://hel1.your-objectstorage.com";
         credentialsFile = config.sops.secrets."matrix/object-storage/credentials".path;
       };
-      inherit matrixDomain;
+      replication = {
+        peerHost = "91.198.166.181";
+        passwordFile = config.sops.secrets."matrix/postgres-replication-password".path;
+        allowedSourceIPs = [ "91.198.166.181/32" ];
+      };
+      acme = {
+        enable = true;
+        porkbunApiKeyFile       = config.sops.secrets."matrix/porkbun-api-key".path;
+        porkbunSecretApiKeyFile = config.sops.secrets."matrix/porkbun-secret-api-key".path;
+      };
     };
 
     services.media-browser = {
@@ -172,12 +182,6 @@ in {
     key = "matrix/secrets";
     owner = "matrix-synapse";
   };
-  sops.secrets."matrix/turn-secret" = {
-    key   = "matrix/turn-secret";
-    owner = "turnserver";
-    group = "turnserver";
-    mode  = "0400";
-  };
   sops.secrets."matrix/users/yukkop/password" = {
     key = "matrix/users/yukkop/password";
     owner = "matrix-synapse";
@@ -198,6 +202,31 @@ in {
     key = "matrix/object-storage/credentials";
     owner = "matrix-synapse";
     mode = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+  };
+
+  # Shared cluster secrets (PL standby also reads from this file).
+  sops.secrets."matrix/signing-key" = {
+    key = "matrix/signing-key";
+    owner = "matrix-synapse";
+    mode = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+  };
+  sops.secrets."matrix/postgres-replication-password" = {
+    key = "matrix/postgres-replication-password";
+    owner = "postgres";
+    mode = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+  };
+  sops.secrets."matrix/porkbun-api-key" = {
+    key = "matrix/porkbun-api-key";
+    mode = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+  };
+  sops.secrets."matrix/porkbun-secret-api-key" = {
+    key = "matrix/porkbun-secret-api-key";
+    mode = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };
 
   services.mailserver = {
@@ -252,6 +281,10 @@ in {
       51820 # wg-bfs
       55228 # ss-bfs
     ];
+    # Postgres replication: only the PL standby peer may reach 5432.
+    extraInputRules = ''
+      ip saddr 91.198.166.181/32 tcp dport 5432 accept
+    '';
   };
 
   virtualisation.docker.enable = true;
