@@ -71,6 +71,9 @@ in {
         liquiz = {
           passwordFile = config.sops.secrets."matrix/users/liquiz/password".path;
         };
+        vismajor = {
+          passwordFile = config.sops.secrets."matrix/users/vismajor/password".path;
+        };
         lvgkcfjl = {
           passwordFile = config.sops.secrets."matrix/users/lvgkcfjl/password".path;
         };
@@ -180,6 +183,10 @@ in {
   };
   sops.secrets."matrix/users/liquiz/password" = {
     key = "matrix/users/liquiz/password";
+    owner = "matrix-synapse";
+  };
+  sops.secrets."matrix/users/vismajor/password" = {
+    key = "matrix/users/vismajor/password";
     owner = "matrix-synapse";
   };
   sops.secrets."matrix/users/lvgkcfjl/password" = {
