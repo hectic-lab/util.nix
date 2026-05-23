@@ -101,6 +101,19 @@ def api_local():
                     'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     'full_path': filepath
                 })
+        
+        media_ids = set()
+        for f in files:
+            mid = path_to_media_id(f['path'])
+            if mid:
+                media_ids.add(mid)
+        
+        media_types = get_media_types_map(media_ids)
+        for f in files:
+            mid = path_to_media_id(f['path'])
+            f['media_id'] = mid
+            f['media_type'] = media_types.get(mid, '')
+        
         return jsonify(files)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -116,12 +129,28 @@ def api_s3():
             list_kwargs['Prefix'] = S3_PREFIX + '/'
         for page in paginator.paginate(**list_kwargs):
             for obj in page.get('Contents', []):
+                key = obj['Key']
+                if S3_PREFIX and key.startswith(S3_PREFIX + '/'):
+                    key = key[len(S3_PREFIX) + 1:]
                 objects.append({
-                    'key': obj['Key'],
+                    'key': key,
                     'size': obj['Size'],
                     'modified': obj['LastModified'].isoformat(),
                     'etag': obj['ETag'].strip('"')
                 })
+        
+        media_ids = set()
+        for o in objects:
+            mid = path_to_media_id(o['key'])
+            if mid:
+                media_ids.add(mid)
+        
+        media_types = get_media_types_map(media_ids)
+        for o in objects:
+            mid = path_to_media_id(o['key'])
+            o['media_id'] = mid
+            o['media_type'] = media_types.get(mid, '')
+        
         return jsonify(objects)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -207,25 +236,50 @@ def api_sync_status():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def path_to_media_id(filepath):
+    parts = filepath.split('/')
+    if len(parts) >= 4 and parts[0] == 'local_content':
+        return parts[1] + parts[2] + parts[3]
+    return None
+
 def get_media_type_from_path(filepath):
+    media_id = path_to_media_id(filepath)
+    if not media_id:
+        return None
     try:
-        parts = filepath.split('/')
-        if len(parts) >= 4 and parts[0] == 'local_content':
-            media_id = parts[1] + parts[2] + parts[3]
-            conn = get_db_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT media_type FROM local_media_repository WHERE media_id = %s",
-                (media_id,)
-            )
-            row = cur.fetchone()
-            cur.close()
-            conn.close()
-            if row:
-                return row[0]
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT media_type FROM local_media_repository WHERE media_id = %s",
+            (media_id,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            return row[0]
     except Exception:
         pass
     return None
+
+def get_media_types_map(media_ids):
+    result = {}
+    if not media_ids:
+        return result
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT media_id, media_type FROM local_media_repository WHERE media_id = ANY(%s)",
+            (list(media_ids),)
+        )
+        for row in cur.fetchall():
+            result[row[0]] = row[1]
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
+    return result
 
 @app.route('/view/local/<path:filepath>')
 def view_local(filepath):
@@ -559,16 +613,17 @@ HTML_TEMPLATE = '''
                     html += `<h3>Local Only (${data.local_only_count} total, showing first 100)</h3>
                     <table><thead><tr><th>Path</th><th>Action</th></tr></thead><tbody>`;
                     data.local_only.forEach(path => {
-                        html += `<tr><td class="path">${path}</td><td><a href="/view/local/${path}" target="_blank">View</a></td></tr>`;
+                        const mid = path.split('/').slice(1, 4).join('');
+                        html += `<tr><td class="path">${path}</td><td><a href="#" onclick="viewMedia('${mid}', '', '${path}'); return false;">View</a></td></tr>`;
                     });
                     html += "</tbody></table>";
                 }
                 
                 if (data.s3_only.length > 0) {
                     html += `<h3>S3 Only (${data.s3_only_count} total, showing first 100)</h3>
-                    <table><thead><tr><th>Key</th></tr></thead><tbody>`;
+                    <table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody>`;
                     data.s3_only.forEach(key => {
-                        html += `<tr><td class="path">${key}</td></tr>`;
+                        html += `<tr><td class="path">${key}</td><td><a href="#" onclick="viewS3('${key}'); return false;">View</a></td></tr>`;
                     });
                     html += "</tbody></table>";
                 }
@@ -586,14 +641,15 @@ HTML_TEMPLATE = '''
                 window.localFilesLoaded = true;
                 
                 let html = `<table><thead><tr>
-                    <th>Path</th><th>Size</th><th>Modified</th><th>Action</th>
+                    <th>Path</th><th>Type</th><th>Size</th><th>Modified</th><th>Action</th>
                 </tr></thead><tbody>`;
                 files.forEach(f => {
                     html += `<tr>
                         <td class="path">${f.path}</td>
+                        <td>${f.media_type || "-"}</td>
                         <td class="size">${formatBytes(f.size)}</td>
                         <td>${f.modified.slice(0, 19).replace("T", " ")}</td>
-                        <td><a href="#" onclick="showPreview('/view/local/${f.path}', '', '${f.path}'); return false;">View</a></td>
+                        <td><a href="#" onclick="viewMedia('${f.media_id || ""}', '${f.media_type || ""}', '${f.path}'); return false;">View</a></td>
                     </tr>`;
                 });
                 html += "</tbody></table>";
@@ -610,15 +666,16 @@ HTML_TEMPLATE = '''
                 window.s3ObjectsLoaded = true;
                 
                 let html = `<table><thead><tr>
-                    <th>Key</th><th>Size</th><th>Modified</th><th>ETag</th><th>Action</th>
+                    <th>Key</th><th>Type</th><th>Size</th><th>Modified</th><th>ETag</th><th>Action</th>
                 </tr></thead><tbody>`;
                 objects.forEach(obj => {
                     html += `<tr>
                         <td class="path">${obj.key}</td>
+                        <td>${obj.media_type || "-"}</td>
                         <td class="size">${formatBytes(obj.size)}</td>
                         <td>${obj.modified.slice(0, 19).replace("T", " ")}</td>
                         <td>${obj.etag.slice(0, 8)}...</td>
-                        <td><a href="#" onclick="viewS3('${obj.key}'); return false;">View</a></td>
+                        <td><a href="#" onclick="viewMedia('${obj.media_id || ""}', '${obj.media_type || ""}', '${obj.key}'); return false;">View</a></td>
                     </tr>`;
                 });
                 html += "</tbody></table>";
