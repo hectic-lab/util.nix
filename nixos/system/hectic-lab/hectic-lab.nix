@@ -66,6 +66,8 @@ in {
       inherit matrixDomain;
       signingKeyFile = config.sops.secrets."matrix/signing-key".path;
       secretsFile    = config.sops.secrets."matrix/secrets".path;
+      turnSecretFile = config.sops.secrets."matrix/turn-secret".path;
+      publicIp       = "128.140.75.58";
       users = {
         yukkop = {
           passwordFile = config.sops.secrets."matrix/users/yukkop/password".path;
@@ -181,6 +183,12 @@ in {
   sops.secrets."matrix/secrets" = {
     key = "matrix/secrets";
     owner = "matrix-synapse";
+  };
+  sops.secrets."matrix/turn-secret" = {
+    key   = "matrix/turn-secret";
+    owner = "turnserver";
+    group = "turnserver";
+    mode  = "0400";
   };
   sops.secrets."matrix/users/yukkop/password" = {
     key = "matrix/users/yukkop/password";

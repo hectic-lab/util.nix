@@ -112,6 +112,24 @@ in {
       '';
     };
 
+    turnSecretFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        Shared secret file used by coturn for Matrix voice/video calls.
+        When set together with `publicIp`, the active Synapse node also enables
+        coturn and publishes TURN URIs to clients.
+      '';
+    };
+
+    publicIp = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Public IP address advertised to coturn for listening and relaying.
+      '';
+    };
+
     maxUploadSize = lib.mkOption {
       type = lib.types.str;
       default = "2G";
@@ -228,9 +246,8 @@ in {
       systemd.services.matrix-cluster-signing-key = {
         description = "Install Matrix Synapse signing key from secrets";
         wantedBy = [ "multi-user.target" ];
-        after = [ "sops-install-secrets.service" ];
-        requires = [ "sops-install-secrets.service" ];
         before = lib.optional synapseEnabled "matrix-synapse.service";
+        requiredBy = lib.optional synapseEnabled "matrix-synapse.service";
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
@@ -257,7 +274,30 @@ in {
           assertion = cfg.secretsFile != null;
           message = "hectic.generic.matrix-cluster.secretsFile must be set when Synapse runs on this node.";
         }
+        {
+          assertion = (cfg.turnSecretFile == null) == (cfg.publicIp == null);
+          message = "hectic.generic.matrix-cluster.turnSecretFile and publicIp must be set together.";
+        }
       ];
+
+      services.coturn = lib.mkIf (cfg.turnSecretFile != null) rec {
+        enable = true;
+        realm = cfg.matrixDomain;
+        use-auth-secret = true;
+        static-auth-secret-file = cfg.turnSecretFile;
+        cert = "${config.security.acme.certs.${realm}.directory}/full.pem";
+        pkey = "${config.security.acme.certs.${realm}.directory}/key.pem";
+        listening-ips = [ cfg.publicIp ];
+        no-tcp-relay = true;
+        relay-ips = [ cfg.publicIp ];
+        listening-port = 3478;
+        tls-listening-port = 5349;
+        no-cli = true;
+
+        extraConfig = ''
+          verbose
+        '';
+      };
 
       services.matrix-synapse = {
         enable = true;
@@ -278,6 +318,15 @@ in {
             msc4222_enabled = true;
           };
 
+          matrix_rtc = {
+            transports = [
+              {
+                type = "livekit";
+                livekit_service_url = "https://${cfg.matrixDomain}/livekit/jwt";
+              }
+            ];
+          };
+
           listeners = [
             {
               port = 8008;
@@ -295,6 +344,15 @@ in {
 
           enable_registration = cfg.enableRegistration;
           enable_registration_without_verification = cfg.enableRegistration;
+        } // lib.optionalAttrs (cfg.turnSecretFile != null) {
+          turn_uris = [
+            "turn:${cfg.matrixDomain}:3478?transport=udp"
+            "turn:${cfg.matrixDomain}:3478?transport=tcp"
+            "turns:${cfg.matrixDomain}:5349?transport=udp"
+            "turns:${cfg.matrixDomain}:5349?transport=tcp"
+          ];
+          turn_user_lifetime = 86400000;
+          turn_allow_guests = true;
         };
       };
 
@@ -302,8 +360,6 @@ in {
 
       systemd.services.matrix-synapse-s3-config = {
         description = "Generate Synapse S3 media storage config";
-        after = [ "sops-install-secrets.service" ];
-        requires = [ "sops-install-secrets.service" ];
         before = [ "matrix-synapse.service" ];
         requiredBy = [ "matrix-synapse.service" ];
         serviceConfig.Type = "oneshot";
@@ -331,6 +387,17 @@ in {
             return = "200 '{\"m.server\": \"${cfg.matrixDomain}:443\"}'";
           };
         };
+      };
+
+      networking.firewall = lib.mkIf (cfg.turnSecretFile != null) {
+        allowedUDPPorts = [ 3478 5349 ];
+        allowedTCPPorts = [ 3478 5349 ];
+        allowedUDPPortRanges = [
+          {
+            from = 49152;
+            to = 65535;
+          }
+        ];
       };
 
       systemd.services.matrix-synapse-users = lib.mkIf (matrixUsers != []) {
@@ -405,8 +472,8 @@ ${lib.concatStringsSep "\n" (map mkUserRegistration matrixUsers)}
       systemd.services.matrix-cluster-replication-password = {
         description = "Set Postgres replication role password from SOPS";
         wantedBy = [ "multi-user.target" ];
-        after = [ "postgresql.service" "sops-install-secrets.service" ];
-        requires = [ "postgresql.service" "sops-install-secrets.service" ];
+        after = [ "postgresql.service" ];
+        requires = [ "postgresql.service" ];
         serviceConfig = {
           Type = "oneshot";
           User = "postgres";
@@ -428,8 +495,6 @@ ${lib.concatStringsSep "\n" (map mkUserRegistration matrixUsers)}
       systemd.services.matrix-cluster-standby-bootstrap = {
         description = "Configure Matrix Postgres hot standby";
         wantedBy = [ "postgresql.service" ];
-        after = [ "sops-install-secrets.service" ];
-        requires = [ "sops-install-secrets.service" ];
         before = [ "postgresql.service" ];
         serviceConfig = {
           Type = "oneshot";
@@ -484,8 +549,6 @@ ${lib.concatStringsSep "\n" (map mkUserRegistration matrixUsers)}
       systemd.services.matrix-cluster-acme-env = {
         description = "Assemble Porkbun ACME environment file";
         wantedBy = [ "multi-user.target" ];
-        after = [ "sops-install-secrets.service" ];
-        requires = [ "sops-install-secrets.service" ];
         before = [ "acme-${cfg.matrixDomain}.service" ];
         requiredBy = [ "acme-${cfg.matrixDomain}.service" ];
         serviceConfig = {
