@@ -288,7 +288,6 @@ in {
         cert = "${config.security.acme.certs.${realm}.directory}/full.pem";
         pkey = "${config.security.acme.certs.${realm}.directory}/key.pem";
         listening-ips = [ cfg.publicIp ];
-        no-tcp-relay = true;
         relay-ips = [ cfg.publicIp ];
         listening-port = 3478;
         tls-listening-port = 5349;
@@ -392,6 +391,12 @@ in {
       networking.firewall = lib.mkIf (cfg.turnSecretFile != null) {
         allowedUDPPorts = [ 3478 5349 ];
         allowedTCPPorts = [ 3478 5349 ];
+        allowedTCPPortRanges = [
+          {
+            from = 49152;
+            to = 65535;
+          }
+        ];
         allowedUDPPortRanges = [
           {
             from = 49152;

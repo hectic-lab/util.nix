@@ -22,6 +22,8 @@ in {
       enableACME = true;
       forceSSL = true;
 
+      locations."= /config.element.${matrixDomain}.json".return = "302 /config.json";
+
       root = pkgs.element-web.override {
         conf = {
           default_server_config = {

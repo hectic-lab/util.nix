@@ -80,9 +80,28 @@ in {
           }' '';
         };
 
+        locations."= /livekit/jwt" = {
+          priority = 500;
+          proxyPass = "http://[::1]:${toString config.services.lk-jwt-service.port}/";
+        };
+
         locations."^~ /livekit/jwt/" = {
           priority = 400;
           proxyPass = "http://[::1]:${toString config.services.lk-jwt-service.port}/";
+        };
+
+        locations."= /livekit/sfu" = {
+          priority = 500;
+          proxyPass = "http://[::1]:${toString config.services.livekit.settings.port}/";
+          proxyWebsockets = true;
+          extraConfig = ''
+            proxy_send_timeout 120;
+            proxy_read_timeout 120;
+            proxy_buffering off;
+            proxy_set_header Accept-Encoding gzip;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+          '';
         };
 
         locations."^~ /livekit/sfu/" = {
