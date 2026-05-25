@@ -31,7 +31,7 @@ in {
 
   hectic.generic.matrix-cluster = {
     enable        = true;
-    role          = "standby";
+    role          = "primary";
     matrixDomain  = "accord.tube";
     signingKeyFile = config.sops.secrets."matrix/signing-key".path;
     secretsFile    = config.sops.secrets."matrix/secrets".path;
@@ -190,6 +190,8 @@ in {
   };
   sops.secrets."matrix/turn-secret" = {
     key      = "matrix/turn-secret";
+    owner    = "turnserver";
+    group    = "turnserver";
     mode     = "0400";
     sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };

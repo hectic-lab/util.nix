@@ -62,7 +62,8 @@ in {
 
     generic.matrix-cluster = {
       enable        = true;
-      role          = "primary";
+      overrideEnableSynapse = false;
+      role          = "standby";
       inherit matrixDomain;
       signingKeyFile = config.sops.secrets."matrix/signing-key".path;
       secretsFile    = config.sops.secrets."matrix/secrets".path;
@@ -95,7 +96,7 @@ in {
         allowedSourceIPs = [ "91.198.166.181/32" ];
       };
       acme = {
-        enable = true;
+        enable = false;
         porkbunApiKeyFile       = config.sops.secrets."matrix/porkbun-api-key".path;
         porkbunSecretApiKeyFile = config.sops.secrets."matrix/porkbun-secret-api-key".path;
       };
@@ -187,8 +188,8 @@ in {
   };
   sops.secrets."matrix/turn-secret" = {
     key   = "matrix/turn-secret";
-    owner = "turnserver";
-    group = "turnserver";
+    owner = "root";
+    group = "root";
     mode  = "0400";
     sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };

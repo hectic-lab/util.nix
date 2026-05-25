@@ -494,6 +494,10 @@ ${lib.concatStringsSep "\n" (map mkUserRegistration matrixUsers)}
     })
 
     (lib.mkIf (cfg.role == "standby") {
+      systemd.targets.postgresql.requires = lib.mkForce [
+        "postgresql.service"
+      ];
+
       # Hot-standby bootstrap: standby.signal + primary_conninfo with passfile.
       # pg_basebackup must be run manually (see runbook) before this activates
       # for the first time.
