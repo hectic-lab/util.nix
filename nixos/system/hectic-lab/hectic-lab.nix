@@ -183,12 +183,14 @@ in {
   sops.secrets."matrix/secrets" = {
     key = "matrix/secrets";
     owner = "matrix-synapse";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };
   sops.secrets."matrix/turn-secret" = {
     key   = "matrix/turn-secret";
     owner = "turnserver";
     group = "turnserver";
     mode  = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };
   sops.secrets."matrix/users/yukkop/password" = {
     key = "matrix/users/yukkop/password";

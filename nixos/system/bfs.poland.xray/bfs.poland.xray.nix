@@ -34,6 +34,9 @@ in {
     role          = "standby";
     matrixDomain  = "accord.tube";
     signingKeyFile = config.sops.secrets."matrix/signing-key".path;
+    secretsFile    = config.sops.secrets."matrix/secrets".path;
+    turnSecretFile = config.sops.secrets."matrix/turn-secret".path;
+    publicIp       = "91.198.166.181";
     objectStorage.s3 = {
       bucket          = "matrix-hectic-lab";
       regionName      = "hel1";
@@ -176,6 +179,17 @@ in {
   sops.secrets."matrix/object-storage/credentials" = {
     key      = "matrix/object-storage/credentials";
     owner    = "matrix-synapse";
+    mode     = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+  };
+  sops.secrets."matrix/secrets" = {
+    key      = "matrix/secrets";
+    owner    = "matrix-synapse";
+    mode     = "0400";
+    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+  };
+  sops.secrets."matrix/turn-secret" = {
+    key      = "matrix/turn-secret";
     mode     = "0400";
     sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };
