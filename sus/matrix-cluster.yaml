@@ -20,6 +20,8 @@ matrix:
             password: ENC[AES256_GCM,data:gM2BV4xD2lZ860c7VSYRlcgFIwyD,iv:pMb0dzCfYcsrx4ReeI4/4jsCoUj+BKucP9eOFag+vWI=,tag:dPVvXIWOqPi0yAxjmaPE8g==,type:str]
         MrAlex0O:
             password: ENC[AES256_GCM,data:aq6wYy1OxXPmHVdE926Q79pARzwaKX1ieE0=,iv:vNV0Gm2DlgLuZpEDm1q4+iltNJOtRechdaXUNfDrfpc=,tag:bECr7NWnOEv7DgZ7OIQMcg==,type:str]
+        Антоша:
+            password: ENC[AES256_GCM,data:oblXjZPkwUkFYQSbSlhhZDAv4sn4ly9auMuaUA==,iv:+uf2K4G9Dqblqy9yXzYFwnWPHnnd1tKPPZ+B9ysVZXc=,tag:DEP9rSGP1kYmLRLWTODzGw==,type:str]
 sops:
     age:
         - recipient: age1x04u7ftjgx8de2gq596e7frauze764cmn7jjwqnx8szthvfft5qq0tezx6
@@ -85,7 +87,7 @@ sops:
             cGtrUDRlUUliSVVjU1o4VUVMOE0ySFEKnjBAqifgYnaJ6LPWzDcopqQxUJ0d9vhe
             F2fIVq8LmO0Nuu7JMhJAvTJgkEyVUAQVTTAtrnhUf2RmILOb72BTKQ==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-05-27T12:39:42Z"
-    mac: ENC[AES256_GCM,data:CkFer6IhVGIER25iO/WYMBvmsjtsV0K5c0zT/iZKrkeMBY+k8mHdZe/5eMpvx11Wl1kIL+o1oxUf+/VDw1q+gkXCrDIAhqyAVe6szYVpU04X0sYmSiZvFVtiAGDblOw2SrCIP7XATwBYFsPqBULhpnajMOTnRAUnuWxPLAdRuxM=,iv:VY1AGatQ1TnbypEpw/lx/C3bQbpqRqzYG6NYQMSOYPE=,tag:3Iy/3RHoRegUhlHzrlcrVQ==,type:str]
+    lastmodified: "2026-05-27T12:45:32Z"
+    mac: ENC[AES256_GCM,data:a0Tr6uAP8tPma7ErK57L4pJUMp29e4+Q+HzsZjGVhIonpmlhAkBDUZz4Mny7kAb9HHW8TKUzsTkvp/PV/hi3EG7OAYQk00D976bDvbMo6bwm/IXFjS9G0ecrN8x+tR8huaApiQyZCseU2I8JtzyFVBIrOsDUFzwUIPbNtmE50h8=,iv:fSB0ATCYdR/Ldsh353OquCFE3IGW64g9qNW5EOXd/1w=,tag:W+6gVxon6xL/LtgYKF/Cxw==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2
