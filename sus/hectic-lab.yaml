@@ -14,22 +14,6 @@ mailserver:
     lvgkcfjl:
         hashedPassword: ENC[AES256_GCM,data:Nm1ijH8DU+HdeN5fOjAsf1Y0jEubiIbBq6NMJsxeMqFNBt6dU1IN9e99Y/7X6xh55JN2e8H1cUohgT7lWTywTOAtjAbOz5SHHQ==,iv:PVormkYkIIV39rjoODcZFtNBUWbO/yeiJWhwusGTnrE=,tag:96Xab0zoZtGkiIigq8Weyg==,type:str]
 init-postgresql: ENC[AES256_GCM,data:Iw8M2P1QoqPVaEdM8Zo0qlHrYgop0iknDY4NtgDo,iv:RWj9AFnh4/KWCm3UH4RoCdM2lzsXGY7A7qko8xCxjp8=,tag:l8acSq8+NBXB4L1rVzG6kw==,type:str]
-matrix:
-    object-storage:
-        credentials: ENC[AES256_GCM,data:n2sDhGMR8y0in9pdn4zNEQBC5dqk+4JwbuJgEeQxyjn8bL9GebFBaqeE+frvPAGXj/DgpU6lFlFPgaGTWaMZAEEVpXyFeOdODpgW049q83ug5e4j/mbZgFM36XoItw==,iv:MW9H0zASdrY7SX1XM/jfoBihBYX0Fmlew4f71AvvV6Y=,tag:cAiOKUtOeTnczudps8YgQw==,type:str]
-    secrets: ENC[AES256_GCM,data:ivXp2YSiMI4hgL6122Ex+fGW0lsZvGD6XmiRvNgFgvzLH5yDv9uLsYcGCTYfQSL3X5VyIMGvsdRF+4pbIjBZMuQKrjvXv74E7aFBLQ2Qk98N3IIrznUFR3KXbHR6xXy5ILd7Bmw5JI/ZHULbmITahXUBt2kEJvfh4eAtqShNA4vsJrabHX9A8Q+2Ddp16w0cWftV5++WXzlNpvIc2Py6BwvfroNAjpSaO+ILYDOIL7XjPvF83fTt64pxZ9nsi3hCzcDtBgGkqc8=,iv:wvt9V2uYQUwivSwEIYZwcHjXr5WwMw19lgFDIa1CcVw=,tag:/22UZvp7+1hLbt+kV+wokQ==,type:str]
-    users:
-        yukkop:
-            password: ENC[AES256_GCM,data:2JUc8U87HVrJIDc9j2InZKgTRQBP,iv:0tuM7TFENbiVi7aM0nTgvRJrK0vGLewsmWJz2MUi62g=,tag:RL61PCXzQFLObBwXthpk5Q==,type:str]
-        liquiz:
-            password: ENC[AES256_GCM,data:6y3eFrfAZ88=,iv:yEIr1Oq4x3jnWcymHwrLDioKqapzaiOfNPvkgiNIOiw=,tag:CJ3gWTRpQtEEaMkYUOb8Mg==,type:str]
-        lvgkcfjl:
-            password: ENC[AES256_GCM,data:heZSXKj9MCQcY7wH,iv:PdIo3PhXTiGt8JiwafxQA7ysjJ3MJ0hrgCMO+sCs4Oo=,tag:iQYP6r44F3J+xEkam7Zjiw==,type:str]
-        vismajor:
-            password: ENC[AES256_GCM,data:drD8JaqQ5tg=,iv:LnDMbaPRTxOBtqN7ZbWXd6FcSWJQ808Vv7Zxugozn8g=,tag:t6w4TPkYphF+wSbAKzHUIw==,type:str]
-        snuff:
-            password: ENC[AES256_GCM,data:DG+35VxkuCfmz4UxF70YI+E+TJTD,iv:1pdXLohOKVsmGrwLdg0p9wncCUnaJYQIPdGtJaG1Wsc=,tag:2Aa8zjSMiDfYW3Kh7/5Jrg==,type:str]
-    turn-secret: ENC[AES256_GCM,data:2RerKgYNFXEVM/YVmXt2l+t3BqduS+FlmjBWTA==,iv:6odb0HB9mntsceNaJtU2kwEVAiF0O88u47eDPLZVJbs=,tag:BJXAvK8abcnCLi96Kra5zA==,type:str]
 wg-bfs:
     private-key: ENC[AES256_GCM,data:/J02asiesrQcsO7Xbq66HQIQeSPmFEMkM2q/z+9Y42K8SYEQP0OYQz+8fXI=,iv:PdGhPWgGxhe0a7C6CaVM/ePKABT+y8HRFOAPzNwQk+c=,tag:9AI30JFh6uyaXXVjMBJ1zg==,type:str]
 ss-bfs:
@@ -91,7 +75,7 @@ sops:
             Yk43ZmlTc09aNFV1VjdjN2RWQlFWTDQKcYSvA2lHP8GS0lkYY19Tm8RXmFHQX5Ck
             qV2Fn22Fic4M5FVKDEMfaO6WmeXgki9a8dGeO9LlC+Phf16SOq7eLw==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-05-25T20:54:48Z"
-    mac: ENC[AES256_GCM,data:fb6JjwTKbXayFOmLF/QaKiYHK1gnYK7E6y7OGARzfpwh9nV28n/aydgQiJ1+aS+88QgRbXbHdGH8GGeqKzApA1TczomYnm/BRA+gUsLIKGDbsamArtY8BqTC9ZEwVXK/izcwURWbTabJYA9FsK+ggYskwNOJmrukh5mhtKVmeUo=,iv:INodLtYp54Bm4YdGhJbrqaXMb90CyAG/8aHs3iIFXzY=,tag:jKMl0a9ZdmIh/ayvEvLNsw==,type:str]
+    lastmodified: "2026-05-27T12:36:35Z"
+    mac: ENC[AES256_GCM,data:dqVqDqMRJFVhT78mO8q+X+Mf4TUqxY4ApOdkMAF9bvyvPAPW7kxbKEvn9H5LBDev9CNxfNF9siqaa7aEdATM6ylhrcWPdzPN04LorojdMNRQy/WFQ0rB1Lz1RrIvwltQD5K8RSPFCWWtF8rhqVTGdFafwCWpdmuKTx0HEPNXsPY=,iv:cWHx326j4aycz17N+q2NNqq0VwfeupmOiPdAtZRz7ws=,tag:LOKuvivMogAGQoVlSTu/vg==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2

@@ -25,6 +25,7 @@ in {
     self.nixosModules.hectic
     self.nixosModules.matrix-cluster
     inputs.sops-nix.nixosModules.sops
+    self.nixosModules.matrix-cluster-users
 
     self.nixosModules."shadowsocks-rust" # NOTE(nrv): impl
     self.nixosModules."shadowsocks"      # NOTE(nrv): usage/instance
@@ -69,21 +70,6 @@ in {
       secretsFile    = config.sops.secrets."matrix/secrets".path;
       turnSecretFile = config.sops.secrets."matrix/turn-secret".path;
       publicIp       = "128.140.75.58";
-      users = {
-        yukkop = {
-          passwordFile = config.sops.secrets."matrix/users/yukkop/password".path;
-          admin = true;
-        };
-        liquiz = {
-          passwordFile = config.sops.secrets."matrix/users/liquiz/password".path;
-        };
-        vismajor = {
-          passwordFile = config.sops.secrets."matrix/users/vismajor/password".path;
-        };
-        lvgkcfjl = {
-          passwordFile = config.sops.secrets."matrix/users/lvgkcfjl/password".path;
-        };
-      };
       objectStorage.s3 = {
         bucket = "matrix-hectic-lab";
         regionName = "hel1";
@@ -192,22 +178,6 @@ in {
     group = "root";
     mode  = "0400";
     sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-  sops.secrets."matrix/users/yukkop/password" = {
-    key = "matrix/users/yukkop/password";
-    owner = "matrix-synapse";
-  };
-  sops.secrets."matrix/users/liquiz/password" = {
-    key = "matrix/users/liquiz/password";
-    owner = "matrix-synapse";
-  };
-  sops.secrets."matrix/users/vismajor/password" = {
-    key = "matrix/users/vismajor/password";
-    owner = "matrix-synapse";
-  };
-  sops.secrets."matrix/users/lvgkcfjl/password" = {
-    key = "matrix/users/lvgkcfjl/password";
-    owner = "matrix-synapse";
   };
   sops.secrets."matrix/object-storage/credentials" = {
     key = "matrix/object-storage/credentials";

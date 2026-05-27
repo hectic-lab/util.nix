@@ -22,6 +22,7 @@ in {
   imports = [
     self.nixosModules.xray-system
     self.nixosModules.matrix-cluster
+    self.nixosModules.matrix-cluster-users
   ];
 
   hectic.generic.xray-system = {
