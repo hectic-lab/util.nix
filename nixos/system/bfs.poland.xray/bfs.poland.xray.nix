@@ -11,6 +11,7 @@
 }: let
   matrixBackend = "https://128.140.75.58";
   matrixHost = "accord.tube";
+  jitsiHost = "meet.bfs.band";
   elementEntryDomain = "element.bfs.band";
   polandEntryDomain = "bfs.band";
   backendProxyConfig = ''
@@ -53,6 +54,12 @@ in {
       porkbunApiKeyFile       = config.sops.secrets."matrix/porkbun-api-key".path;
       porkbunSecretApiKeyFile = config.sops.secrets."matrix/porkbun-secret-api-key".path;
     };
+    jitsi.preferredDomain = jitsiHost;
+  };
+
+  hectic.services.jitsi = {
+    enable = true;
+    hostName = jitsiHost;
   };
 
   security.acme = {
@@ -154,6 +161,10 @@ in {
             "m.homeserver".base_url = "https://${polandEntryDomain}";
             "m.homeserver".server_name = matrixHost;
             "m.identity_server".base_url = "https://vector.im";
+          };
+
+          jitsi = {
+            preferred_domain = jitsiHost;
           };
 
           room_directory.servers = [ matrixHost ];

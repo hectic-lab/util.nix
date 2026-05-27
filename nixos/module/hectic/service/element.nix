@@ -16,6 +16,10 @@
     && (if clusterCfg.overrideEnableSynapse != null then clusterCfg.overrideEnableSynapse else clusterCfg.role == "primary");
   enabled = legacyCfg.enable || clusterSynapseEnabled;
   matrixDomain = if legacyCfg.enable then legacyCfg.matrixDomain else clusterCfg.matrixDomain;
+  jitsiPreferredDomain =
+    if legacyCfg.enable && config.hectic.services.jitsi.enable
+    then config.hectic.services.jitsi.hostName
+    else clusterCfg.jitsi.preferredDomain;
 in {
   config = lib.mkIf enabled {
     services.nginx.virtualHosts."element.${matrixDomain}" = {
@@ -35,6 +39,10 @@ in {
           room_directory.servers = [
             matrixDomain
           ];
+
+          jitsi = lib.optionalAttrs (jitsiPreferredDomain != null) {
+            preferred_domain = jitsiPreferredDomain;
+          };
 
           default_theme = "dark";
           show_labs_settings = true;

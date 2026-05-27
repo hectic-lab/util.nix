@@ -231,6 +231,15 @@ in {
         description = "File containing PORKBUN_SECRET_API_KEY value.";
       };
     };
+
+    jitsi.preferredDomain = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Optional self-hosted Jitsi Meet domain to advertise to Matrix/Element
+        clients alongside the cluster-managed homeserver.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [

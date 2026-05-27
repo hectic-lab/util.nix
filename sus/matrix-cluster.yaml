@@ -17,7 +17,7 @@ matrix:
         vismajor:
             password: ENC[AES256_GCM,data:AOAxZgY6mmw=,iv:RCEqeI/jL1n9oGREFR3zUTcQRQuupqMsoTVxBWaMvf0=,tag:tYv4X1iXkol3I2Qr0oaY5g==,type:str]
         snuff:
-            password: ENC[AES256_GCM,data:gM2BV4xD2lZ860c7VSYRlcgFIwyD,iv:pMb0dzCfYcsrx4ReeI4/4jsCoUj+BKucP9eOFag+vWI=,tag:dPVvXIWOqPi0yAxjmaPE8g==,type:str]
+            password: ENC[AES256_GCM,data:vP7fc0DlhM559c38KIHQswd4WV2RGCtQk/I=,iv:FAsdJz85AklfAKL8K6SrBsZ1wMIFebj0mS7noB7HkfA=,tag:9z5edXIeCDz7mGTZG9Vx5A==,type:str]
         MrAlex0O:
             password: ENC[AES256_GCM,data:aq6wYy1OxXPmHVdE926Q79pARzwaKX1ieE0=,iv:vNV0Gm2DlgLuZpEDm1q4+iltNJOtRechdaXUNfDrfpc=,tag:bECr7NWnOEv7DgZ7OIQMcg==,type:str]
         Антоша:
@@ -87,7 +87,7 @@ sops:
             cGtrUDRlUUliSVVjU1o4VUVMOE0ySFEKnjBAqifgYnaJ6LPWzDcopqQxUJ0d9vhe
             F2fIVq8LmO0Nuu7JMhJAvTJgkEyVUAQVTTAtrnhUf2RmILOb72BTKQ==
             -----END AGE ENCRYPTED FILE-----
-    lastmodified: "2026-05-27T12:45:32Z"
-    mac: ENC[AES256_GCM,data:a0Tr6uAP8tPma7ErK57L4pJUMp29e4+Q+HzsZjGVhIonpmlhAkBDUZz4Mny7kAb9HHW8TKUzsTkvp/PV/hi3EG7OAYQk00D976bDvbMo6bwm/IXFjS9G0ecrN8x+tR8huaApiQyZCseU2I8JtzyFVBIrOsDUFzwUIPbNtmE50h8=,iv:fSB0ATCYdR/Ldsh353OquCFE3IGW64g9qNW5EOXd/1w=,tag:W+6gVxon6xL/LtgYKF/Cxw==,type:str]
+    lastmodified: "2026-05-27T18:49:35Z"
+    mac: ENC[AES256_GCM,data:HHjUJxE+iSwoM7YjwV4djlvFwtt9/xw/2kQ8otoCsoGieuUh+NFL5FUJsz3vYOhxsWcN3sC5y6PxEjH6/DuJvt15CLR3bjZ5ZBj8db3gBHApTBm87D31zPbpZFtyT5EBUcA+MwiFhMfE5TLRvx8g2eO2mOG2o7Ve63tVNoPvVYQ=,iv:VblCJjE4oDrekbDis8YITqnVD7DpjcowlvusxwXvf9E=,tag:dfXoMODelKDQN7uiPv1a9g==,type:str]
     unencrypted_suffix: _unencrypted
     version: 3.10.2

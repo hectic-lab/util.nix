@@ -82,8 +82,8 @@ in {
     security.acme = {
       acceptTerms = true;
       defaults = {
-        email          = "hectic.yukkop.it@gmail.com";
-        enableDebugLogs = true;
+        email           = lib.mkDefault "hectic.yukkop.it@gmail.com";
+        enableDebugLogs = lib.mkDefault true;
       };
     };
 
