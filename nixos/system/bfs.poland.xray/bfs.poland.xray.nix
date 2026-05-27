@@ -11,7 +11,7 @@
 }: let
   matrixBackend = "https://128.140.75.58";
   matrixHost = "accord.tube";
-  jitsiHost = "meet.bfs.band";
+  jitsiHost = "meet.accord.tube";
   elementEntryDomain = "element.bfs.band";
   polandEntryDomain = "bfs.band";
   backendProxyConfig = ''
