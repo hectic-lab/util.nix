@@ -25,7 +25,6 @@ in {
     self.nixosModules.hectic
     self.nixosModules.matrix-cluster
     inputs.sops-nix.nixosModules.sops
-    self.nixosModules.matrix-cluster-users
 
     self.nixosModules."shadowsocks-rust" # NOTE(nrv): impl
     self.nixosModules."shadowsocks"      # NOTE(nrv): usage/instance
@@ -59,42 +58,6 @@ in {
     };
     services.matrix = {
       enable = false;
-    };
-
-    generic.matrix-cluster = {
-      enable        = true;
-      overrideEnableSynapse = false;
-      role          = "standby";
-      inherit matrixDomain;
-      signingKeyFile = config.sops.secrets."matrix/signing-key".path;
-      secretsFile    = config.sops.secrets."matrix/secrets".path;
-      turnSecretFile = config.sops.secrets."matrix/turn-secret".path;
-      publicIp       = "128.140.75.58";
-      objectStorage.s3 = {
-        bucket = "matrix-hectic-lab";
-        regionName = "hel1";
-        endpointUrl = "https://hel1.your-objectstorage.com";
-        credentialsFile = config.sops.secrets."matrix/object-storage/credentials".path;
-      };
-      replication = {
-        peerHost = "91.198.166.181";
-        passwordFile = config.sops.secrets."matrix/postgres-replication-password".path;
-        allowedSourceIPs = [ "91.198.166.181/32" ];
-      };
-      acme = {
-        enable = false;
-        porkbunApiKeyFile       = config.sops.secrets."matrix/porkbun-api-key".path;
-        porkbunSecretApiKeyFile = config.sops.secrets."matrix/porkbun-secret-api-key".path;
-      };
-    };
-
-    services.media-browser = {
-      enable = true;
-      port = 3001;
-      s3Bucket = "matrix-hectic-lab";
-      s3Endpoint = "https://hel1.your-objectstorage.com";
-      s3Region = "hel1";
-      s3CredentialsFile = config.sops.secrets."matrix/object-storage/credentials".path;
     };
   };
 
@@ -166,48 +129,6 @@ in {
   sops.secrets."mailserver/lvgkcfjl/hashedPassword"      = {};
   sops.secrets."init-postgresql" = {
     key = "init-postgresql";
-  };
-  sops.secrets."matrix/secrets" = {
-    key = "matrix/secrets";
-    owner = "matrix-synapse";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-  sops.secrets."matrix/turn-secret" = {
-    key   = "matrix/turn-secret";
-    owner = "root";
-    group = "root";
-    mode  = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-  sops.secrets."matrix/object-storage/credentials" = {
-    key = "matrix/object-storage/credentials";
-    owner = "matrix-synapse";
-    mode = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-
-  # Shared cluster secrets (PL standby also reads from this file).
-  sops.secrets."matrix/signing-key" = {
-    key = "matrix/signing-key";
-    owner = "matrix-synapse";
-    mode = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-  sops.secrets."matrix/postgres-replication-password" = {
-    key = "matrix/postgres-replication-password";
-    owner = "postgres";
-    mode = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-  sops.secrets."matrix/porkbun-api-key" = {
-    key = "matrix/porkbun-api-key";
-    mode = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
-  };
-  sops.secrets."matrix/porkbun-secret-api-key" = {
-    key = "matrix/porkbun-secret-api-key";
-    mode = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
   };
 
   services.mailserver = {
@@ -319,7 +240,8 @@ in {
         '';
       };
     };
-    virtualHosts."gitea.${domain}" = sslOpts // {
+    virtualHosts."gitea.${domain}" = {
+      enableACME = true;
       forceSSL = true;
       locations."/" = {
         extraConfig = ''
@@ -333,31 +255,18 @@ in {
   services = {
     gitea = {
       enable = true;
+      settings.service.DISABLE_REGISTRATION = false;
       settings.server = {
         HTTP_PORT = 11011;
         SSH_PORT = 11012;
       };
       database = {
-        createDatabase = false;
+        createDatabase = true;
         type = "postgres";
         socket = "/run/postgresql";
         user = "gitea";
         name = "gitea";
       };
-    };
-
-    postgresql = {
-      enable = true;
-      ensureDatabases = [ "gitea" ];
-      ensureUsers = [
-        {
-          name = "gitea";
-          ensureDBOwnership = true;
-        }
-      ];
-      authentication = ''
-          local gitea gitea peer
-      '';
     };
   };
 

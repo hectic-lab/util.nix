@@ -14,6 +14,7 @@
     "lvgkcfjl"
     "MrAlex0O"
     "Антоша"
+    "snuff"
   ];
 
   adminNames = [ "yukkop" ];

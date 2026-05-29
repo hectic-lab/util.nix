@@ -57,6 +57,15 @@ in {
     jitsi.preferredDomain = jitsiHost;
   };
 
+  hectic.services.media-browser = {
+    enable = true;
+    port = 3001;
+    s3Bucket = "matrix-hectic-lab";
+    s3Endpoint = "https://hel1.your-objectstorage.com";
+    s3Region = "hel1";
+    s3CredentialsFile = config.sops.secrets."matrix/object-storage/credentials".path;
+  };
+
   hectic.services.jitsi = {
     enable = true;
     hostName = jitsiHost;
