@@ -340,7 +340,10 @@ in {
       database = {
         createDatabase = false;
         type = "postgres";
+
         user = "gitea";
+        name = "gitea";
+        socket = "/run/postgresql";
       };
     };
 
@@ -353,6 +356,9 @@ in {
           ensureDBOwnership = true;
         }
       ];
+      authentication = '''
+          local gitea gitea peer
+      ''';
     };
   };
 
