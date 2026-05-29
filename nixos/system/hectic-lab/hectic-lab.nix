@@ -255,6 +255,7 @@ in {
       80
       443
       3306  # mysql
+      11012 # gitea ssh
       25565
       55228 # ss-bfs
     ];
@@ -318,6 +319,24 @@ in {
         '';
       };
     };
+    virtualHosts."gitea.${domain}" = sslOpts // {
+      forceSSL = true;
+      locations."/" = {
+        extraConfig = ''
+          proxy_pass     http://127.0.0.1:11011/;
+          proxy_redirect off;
+        '';
+      };
+    };
+  };
+
+  services.gitea = {
+    enable = true;
+    settings.server = {
+      HTTP_PORT = 11011;
+      SSH_PORT = 11012;
+    };
+    database.type = "postgres";
   };
 
   # === WireGuard (disabled) ===
