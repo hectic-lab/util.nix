@@ -330,15 +330,29 @@ in {
     };
   };
 
-  services.gitea = {
-    enable = true;
-    settings.server = {
-      HTTP_PORT = 11011;
-      SSH_PORT = 11012;
+  services = {
+    gitea = {
+      enable = true;
+      settings.server = {
+        HTTP_PORT = 11011;
+        SSH_PORT = 11012;
+      };
+      database = {
+        createDatabase = false;
+        type = "postgres";
+        user = "gitea";
+      };
     };
-    database = {
-      type = "postgres";
-      user = "postgres";
+
+    postgres = {
+      enable = true;
+      ensureDatabases = [ "gitea" ];
+      ensureUsers = [
+        {
+          name = "gitea";
+          ensureDBOwnership = true;
+        }
+      ];
     };
   };
 
