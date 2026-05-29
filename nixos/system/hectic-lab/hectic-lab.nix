@@ -336,7 +336,10 @@ in {
       HTTP_PORT = 11011;
       SSH_PORT = 11012;
     };
-    database.type = "postgres";
+    database = {
+      type = "postgres";
+      user = "postgres";
+    };
   };
 
   # === WireGuard (disabled) ===
