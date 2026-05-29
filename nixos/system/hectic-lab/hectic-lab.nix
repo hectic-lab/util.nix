@@ -344,7 +344,7 @@ in {
       };
     };
 
-    postgres = {
+    postgresql = {
       enable = true;
       ensureDatabases = [ "gitea" ];
       ensureUsers = [
