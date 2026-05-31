@@ -10,12 +10,15 @@
   ...
 }: let
   legacyCfg = config.hectic.services.matrix;
-  clusterCfg = config.hectic.generic.matrix-cluster;
+  hasClusterCfg = config.hectic ? generic && config.hectic.generic ? matrix-cluster;
+  clusterCfg = if hasClusterCfg then config.hectic.generic.matrix-cluster else null;
   clusterSynapseEnabled =
-    clusterCfg.enable
-    && (if clusterCfg.overrideEnableSynapse != null then clusterCfg.overrideEnableSynapse else clusterCfg.role == "primary");
+    if hasClusterCfg
+    then clusterCfg.enable
+      && (if clusterCfg.overrideEnableSynapse != null then clusterCfg.overrideEnableSynapse else clusterCfg.role == "primary")
+    else false;
   enabled = legacyCfg.enable || clusterSynapseEnabled;
-  matrixDomain = if legacyCfg.enable then legacyCfg.matrixDomain else clusterCfg.matrixDomain;
+  matrixDomain = if legacyCfg.enable then legacyCfg.matrixDomain else if hasClusterCfg then clusterCfg.matrixDomain else "";
 in {
   config = lib.mkIf enabled (let
     keyFile = "/run/livekit.key";
