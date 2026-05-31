@@ -16,6 +16,26 @@ with lib;
 let
   domain = "hectic-lab.com";
   matrixDomain = "accord.tube";
+  mailUserNames = [
+    "security"
+    "founders"
+    "lvgkcfjl"
+    "yukkop"
+    "daniil-perlyk"
+    "iana-perlyk"
+    "snuff"
+    "antoshka"
+  ];
+  mkMailPasswordSecret = name: {
+    name  = "mailserver/${name}/hashedPassword";
+    value = {};
+  };
+  mkMailLoginAccount = name: {
+    inherit name;
+    value = {
+      hashedPasswordFile = config.sops.secrets."mailserver/${name}/hashedPassword".path;
+    };
+  };
   sslOpts = {
     sslCertificate    = config.sops.secrets."ssl/porkbun/${domain}/domain.cert.pem".path;
     sslCertificateKey = config.sops.secrets."ssl/porkbun/${domain}/private.key.pem".path;
@@ -91,6 +111,24 @@ in {
     gnupg.sshKeyPaths  = [ ];
     age.sshKeyPaths    = [ "/etc/ssh/ssh_host_ed25519_key" ];
     defaultSopsFile    = "${flake}/sus/hectic-lab.yaml";
+    secrets = builtins.listToAttrs (map mkMailPasswordSecret mailUserNames) // {
+      "init-postgresql" = {
+        key = "init-postgresql";
+      };
+      "ssl/porkbun/${domain}/domain.cert.pem" = {
+        group = "nginx";
+        mode  = "0440";
+      };
+      "ssl/porkbun/${domain}/private.key.pem" = {
+        group = "nginx";
+        mode  = "0440";
+      };
+      "ssl/porkbun/${domain}/public.key.pem" = {
+        group = "nginx";
+        mode  = "0440";
+      };
+      "wg-bfs/private-key" = {};
+    };
   };
 
   users.users.root.openssh.authorizedKeys.keys = [
@@ -120,43 +158,10 @@ in {
     ];
   };
 
-  sops.secrets."mailserver/security/hashedPassword"      = {};
-  sops.secrets."mailserver/yukkop/hashedPassword"        = {};
-  sops.secrets."mailserver/daniil-perlyk/hashedPassword" = {};
-  sops.secrets."mailserver/snuff/hashedPassword"         = {};
-  sops.secrets."mailserver/antoshka/hashedPassword"      = {};
-  sops.secrets."mailserver/founders/hashedPassword"      = {};
-  sops.secrets."mailserver/lvgkcfjl/hashedPassword"      = {};
-  sops.secrets."init-postgresql" = {
-    key = "init-postgresql";
-  };
-
   services.mailserver = {
     enable = true;
     domain = domain;
-    loginAccounts = {
-      "security" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/security/hashedPassword".path;
-      };
-      "founders" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/founders/hashedPassword".path;
-      };
-      "lvgkcfjl" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/lvgkcfjl/hashedPassword".path;
-      };
-      "yukkop" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/yukkop/hashedPassword".path;
-      };
-      "daniil-perlyk" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/daniil-perlyk/hashedPassword".path;
-      };
-      "snuff" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/snuff/hashedPassword".path;
-      };
-      "antoshka" = {
-        hashedPasswordFile = config.sops.secrets."mailserver/antoshka/hashedPassword".path;
-      };
-    };
+    loginAccounts = builtins.listToAttrs (map mkMailLoginAccount mailUserNames);
   };
 
   mailserver.stateVersion = 3;
@@ -195,10 +200,6 @@ in {
   systemd.tmpfiles.rules = [
     "d /var/www/store 0755 nginx nginx -"
   ];
-
-  sops.secrets."ssl/porkbun/${domain}/domain.cert.pem" = { group = "nginx"; mode = "0440"; };
-  sops.secrets."ssl/porkbun/${domain}/private.key.pem" = { group = "nginx"; mode = "0440"; };
-  sops.secrets."ssl/porkbun/${domain}/public.key.pem"  = { group = "nginx"; mode = "0440"; };
 
   services.nginx = {
     enable = true;
@@ -272,8 +273,6 @@ in {
   };
 
   # === WireGuard (disabled) ===
-
-  sops.secrets."wg-bfs/private-key" = {};
 
   # networking.wireguard.interfaces = let
   #   subnet            = "10.13.37";
