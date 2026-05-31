@@ -10,9 +10,21 @@
   ...
 }: let
   cfg = config.hectic.hardware.hetzner-cloud;
+  isNewer = cfg.generation == "newer";
 in {
   options.hectic.hardware.hetzner-cloud = {
     enable = lib.mkEnableOption "Enable hetzner-cloud hardware configurations";
+    generation = lib.mkOption {
+      type = lib.types.enum [ "classic" "newer" ];
+      default = "classic";
+      description = ''
+        Hetzner server generation profile.
+
+        `classic` keeps the historical `/dev/sda` assumption.
+        `newer` is for ccx/NVMe-era servers and defaults the disk device to
+        `/dev/nvme0n1`.
+      '';
+    };
     #bootParUuid = lib.mkOption {
     #  type = with lib.types; nullOr oneOf [
     #    (lib.types.strMatching "^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$")
@@ -41,12 +53,13 @@ in {
     };
     device = lib.mkOption {
       type = lib.types.str;
-      default = "/dev/sda";
+      default = if isNewer then "/dev/nvme0n1" else "/dev/sda";
       example = "/dev/disk/by-uuid/f184a16b-6eca-41cb-b48a-ff37cdce1d79";
       description = ''
         boot device uuid 
         if it is null then will use "/dev/sda" 
         /dev/sda - default hetzner cloud device
+        /dev/nvme0n1 - default for newer Hetzner generations
         !! But can changes on reboot if server have volumes
         !! So use IDs
       '';
