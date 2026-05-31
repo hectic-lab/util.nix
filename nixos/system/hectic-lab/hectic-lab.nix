@@ -256,6 +256,7 @@ in {
   services = {
     gitea = {
       enable = true;
+      package = pkgs.hectic.gitea-heatmap;
       settings.service.DISABLE_REGISTRATION = false;
       settings.server = {
         HTTP_PORT  = 11011;

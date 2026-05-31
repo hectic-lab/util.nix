@@ -140,6 +140,7 @@ in {
   c-hectic                     = pkgs.callPackage ./c/hectic/default.nix              {};
   watch                        = pkgs.callPackage ./c/watch/default.nix               {};
   support-bot                  = pkgs.callPackage ./support-bot                       {};
+  gitea-heatmap                = pkgs.callPackage ./gitea                             {};
   nix-derivation-hash          = pkgs.callPackage ./nix-derivation-hash               {};
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };
