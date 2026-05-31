@@ -9,10 +9,10 @@
   config,
   ...
 }: let
-  cfg = config.hectic.hardware.zombro;
+  cfg = config.hectic.hardware.zomro;
 in {
-  options.hectic.hardware.zombro = {
-    enable = lib.mkEnableOption "Enable zombro hardware configurations";
+  options.hectic.hardware.zomro = {
+    enable = lib.mkEnableOption "Enable zomro hardware configurations";
     device = lib.mkOption {
       type = lib.types.str;
       default = "/dev/vda";
@@ -20,7 +20,7 @@ in {
       description = ''
         boot device uuid 
         if it is null then will use "/dev/vda" 
-        /dev/vda - default zombro device
+        /dev/vda - default zomro device
         !! But can changes on reboot if server have volumes
         !! So use IDs
       '';

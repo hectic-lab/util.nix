@@ -52,11 +52,11 @@ in {
       '';
     };
     networkMatchConfigName = lib.mkOption {
-      type = lib.types.strMatching "^(enp1s0|ens3)$";
+      type = lib.types.strMatching "^(enp1s0|ens3|eth0)$";
       example = "enp1s0";
       description = ''
         type of network conection, 
-        on older hetzner servers may be `ens3`
+        on older hetzner servers may be `ens3` or else
         on newer probably `enp1s0`
 
         you can use `networkctl list` on server to know it
