@@ -257,8 +257,9 @@ in {
       enable = true;
       settings.service.DISABLE_REGISTRATION = false;
       settings.server = {
-        HTTP_PORT = 11011;
-        SSH_PORT = 11012;
+        HTTP_PORT  = 11011;
+        #SSH_PORT   = 11012;
+        SSH_DOMAIN = "hectic-lab.com";
       };
       database = {
         createDatabase = true;
