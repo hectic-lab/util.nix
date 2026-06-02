@@ -1178,6 +1178,7 @@ ___diff_dump_schema() {
   local port="$2"
   local output_file="$3"
   local tables="${4:-}"
+  local database_name="${PG_DATABASE:-testdb}"
 
   log info "dumping schema to $WHITE$output_file$NC"
 
@@ -1192,17 +1193,17 @@ ___diff_dump_schema() {
     IFS="$old_IFS"
 
     # shellcheck disable=SC2086
-    pg_dump -h "$socket_dir" -p "$port" testdb \
+    pg_dump -h "$socket_dir" -p "$port" "$database_name" \
       --schema-only --no-owner --no-privileges \
       $table_args > "$output_file" 2>/dev/null
 
     # shellcheck disable=SC2086
-    pg_dump -h "$socket_dir" -p "$port" testdb \
+    pg_dump -h "$socket_dir" -p "$port" "$database_name" \
       --data-only --no-owner --no-privileges \
       $table_args >> "$output_file" 2>/dev/null
   else
     # Schema only
-    pg_dump -h "$socket_dir" -p "$port" testdb \
+    pg_dump -h "$socket_dir" -p "$port" "$database_name" \
       --schema-only --no-owner --no-privileges \
       > "$output_file" 2>/dev/null
   fi
@@ -1211,7 +1212,8 @@ ___diff_dump_schema() {
 ___diff_immutable_tables() {
   local socket_dir="$1"
   local port="$2"
-  psql -h "$socket_dir" -p "$port" -d testdb -tAv ON_ERROR_STOP=1 -c "$(cat <<'SQL'
+  local database_name="${PG_DATABASE:-testdb}"
+  psql -h "$socket_dir" -p "$port" -d "$database_name" -tAv ON_ERROR_STOP=1 -c "$(cat <<'SQL'
 SELECT n.nspname || '.' || c.relname
 FROM pg_inherits i
 JOIN pg_class    c ON c.oid = i.inhrelid
@@ -1229,8 +1231,9 @@ ___diff_immutable_data() {
   local sock2="$3"
   local port2="$4"
   local out_file="$5"
+  local database_name="${PG_DATABASE:-testdb}"
 
-  if ! psql -h "$sock1" -p "$port1" -d testdb -tAc \
+  if ! psql -h "$sock1" -p "$port1" -d "$database_name" -tAc \
     "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='hectic' AND c.relname='immutable';" \
     >/dev/null 2>&1
   then
@@ -1259,10 +1262,10 @@ ___diff_immutable_data() {
     log info "  $tbl"
     : > "$data1"
     : > "$data2"
-    pg_dump -h "$sock1" -p "$port1" testdb \
+    pg_dump -h "$sock1" -p "$port1" "$database_name" \
       --data-only --no-owner --no-privileges --column-inserts -t "$tbl" \
       > "$data1" 2>/dev/null || :
-    pg_dump -h "$sock2" -p "$port2" testdb \
+    pg_dump -h "$sock2" -p "$port2" "$database_name" \
       --data-only --no-owner --no-privileges --column-inserts -t "$tbl" \
       > "$data2" 2>/dev/null || :
     {
@@ -1409,6 +1412,7 @@ subcommand_diff() {
   DIFF_NO_CRON=0 # TODO: useless option
   DIFF_BACKUP_PATH=""
   DIFF_IGNORE_MIGRATION_FAIL=0
+  DIFF_DATABASE="${PG_DATABASE:-testdb}"
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -1459,8 +1463,8 @@ subcommand_diff() {
   # TODO: suka, logi drugie
   DIFF_PGLOGFILE1="$DIFF_PGDATA1/logfile"
   DIFF_PGLOGFILE2="$DIFF_PGDATA2/logfile"
-  DIFF_PGURL1="postgresql://localhost:5432/testdb?host=$DIFF_PGDATA1/sock"
-  DIFF_PGURL2="postgresql://localhost:5432/testdb?host=$DIFF_PGDATA2/sock"
+  DIFF_PGURL1="postgresql://localhost:5432/$DIFF_DATABASE?host=$DIFF_PGDATA1/sock"
+  DIFF_PGURL2="postgresql://localhost:5432/$DIFF_DATABASE?host=$DIFF_PGDATA2/sock"
 
   if [ "${DIFF_LOG+x}" ]; then
     log_pager -O "$DIFF_PGLOGFILE1" "$DIFF_PGLOGFILE2"
@@ -1501,7 +1505,7 @@ subcommand_diff() {
 
   log info "initializing ${WHITE}DB2$NC with postgres-init"
   PG_WORKING_DIR="$DIFF_PGDATA2" \
-  PG_DATABASE="testdb" \
+  PG_DATABASE="$DIFF_DATABASE" \
   PG_DISABLE_LOGGING=1 \
     postgres-init || {
     log error "failed to initialize ${WHITE}DB2$NC"
