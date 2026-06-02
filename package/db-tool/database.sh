@@ -3,7 +3,7 @@
 
 : "${REMAINING_ARGS:=}"
 
-: "${DEFAULT_BACKUP_PATH:=${LOCAL_DIR:-$PWD}/focus/postgresql-backup/}"
+: "${DEFAULT_BACKUP_PATH:=${LOCAL_DIR:-$PWD}/focus/postgresql-backup}"
 
 : "${SCRIPT_NAME:=$(basename "$0")}"
 SCRIPT_NAME=${SCRIPT_NAME%%.sh}
