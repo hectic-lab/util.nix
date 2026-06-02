@@ -441,6 +441,8 @@ ${BGREEN}Arguments:
 ${BGREEN}Options:${NC}
   $BCYAN--tables${NC} ${CYAN}<list>${NC}     Comma-separated list of tables to diff
                       Example: --tables users,orders,products
+  $BCYAN--ignore-migration-fail${NC}
+                      Continue diff even if DB1 migrations fail
   $BCYAN-m${NC}, $BCYAN--mock${NC}          Mock external API calls when hydrating DB2
                       Replaces HTTP-calling functions with stubs/test data
   $BCYAN-h${NC}, $BCYAN--help${NC}          Show this help message
@@ -464,6 +466,7 @@ ${BGREEN}Examples:${NC}
   $SCRIPT_NAME diff                              Compare using default backup
   $SCRIPT_NAME diff /path/to/backup              Compare using specific backup
   $SCRIPT_NAME diff --tables users,orders        Compare specific tables
+  $SCRIPT_NAME diff --ignore-migration-fail      Continue despite DB1 migration failure
   $SCRIPT_NAME diff -m                           Compare with external APIs mocked
   $SCRIPT_NAME diff log                          Show logs from diff operation
 
@@ -1405,6 +1408,7 @@ subcommand_diff() {
   DIFF_TABLES="" # TODO: add cron table
   DIFF_NO_CRON=0 # TODO: useless option
   DIFF_BACKUP_PATH=""
+  DIFF_IGNORE_MIGRATION_FAIL=0
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -1418,6 +1422,10 @@ subcommand_diff() {
       ;;
       --no-cron)
         DIFF_NO_CRON=1
+        shift
+      ;;
+      --ignore-migration-fail)
+        DIFF_IGNORE_MIGRATION_FAIL=1
         shift
       ;;
       -m|--mock)
@@ -1481,7 +1489,12 @@ subcommand_diff() {
     --db-url \
       "$DIFF_PGURL1" \
     || {
-      log warn "migrations failed or none to apply"
+      if [ "$DIFF_IGNORE_MIGRATION_FAIL" = "1" ]; then
+        log warn "migrations failed; continuing because --ignore-migration-fail is set"
+      else
+        log error "migrations failed"
+        exit 1
+      fi
     }
 
   log notice "provisioning ${WHITE}DB2$NC (current sources)"
