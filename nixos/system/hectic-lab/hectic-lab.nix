@@ -260,7 +260,7 @@ in {
       settings.service.DISABLE_REGISTRATION = false;
       settings.server = {
         HTTP_PORT  = 11011;
-        #SSH_PORT   = 11012;
+        #SSH_PORT   = 22;
         SSH_DOMAIN = "hectic-lab.com";
       };
       database = {
@@ -272,36 +272,4 @@ in {
       };
     };
   };
-
-  # === WireGuard (disabled) ===
-
-  # networking.wireguard.interfaces = let
-  #   subnet            = "10.13.37";
-  #   externalInterface = "eth0";
-  # in {
-  #   wg-bfs = {
-  #     ips        = [ "${subnet}.1/24" ];
-  #     listenPort = 51820;
-  #     postSetup = ''
-  #       ${pkgs.iptables}/bin/iptables -t 'nat' -A 'POSTROUTING' -s '${subnet}.0/24' -o '${externalInterface}' -j 'MASQUERADE'
-  #     '';
-  #     postShutdown = ''
-  #       ${pkgs.iptables}/bin/iptables -t 'nat' -D 'POSTROUTING' -s '${subnet}.0/24' -o '${externalInterface}' -j 'MASQUERADE'
-  #     '';
-  #     privateKeyFile       = config.sops.secrets."wg-bfs/private-key".path;
-  #     generatePrivateKeyFile = false;
-  #     peers = with lib; with builtins; let
-  #       pubkeys = [
-  #         "3dVzf1jxnVVTkLAyxedW+kRQBexZDzYDwpaLIcTrLjc=" # nrv    (host: 2)
-  #         "Kk2d0ncj24rO0qbuKh4V4t1OLnmVYbeaYvuEnL2OPFM=" # lysmi  (host: 3)
-  #         "BkM/NEDbR/XQ6WYQ0Yt+nJrc2HFCVsoW4QxBmkqxHn8=" # yukkop (host: 4)
-  #       ];
-  #       hosts  = lists.range 2 254;
-  #       zipped = zipLists pubkeys hosts;
-  #     in flip map zipped ({ fst, snd }: {
-  #       publicKey  = "${fst}";
-  #       allowedIPs = [ "${subnet}.${toString snd}/32" ];
-  #     });
-  #   };
-  # };
 }
