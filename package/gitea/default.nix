@@ -1,6 +1,6 @@
 {
   lib,
-  buildGoModule,
+  buildGo126Module,
   makeWrapper,
   git,
   bash,
@@ -10,7 +10,7 @@
   openssh,
   fetchPnpmDeps,
   pnpmConfigHook,
-  pnpm,
+  pnpm_10,
   stdenv,
   sqliteSupport ? true,
   nixosTests,
@@ -18,8 +18,9 @@
 
 let
   pname = "gitea";
-  version = "1.25.4";
+  version = "1.26.2";
   src = ./source;
+  pnpm = pnpm_10;
 
   frontend = stdenv.mkDerivation {
     pname = "gitea-frontend";
@@ -28,8 +29,9 @@ let
     pnpmDeps = fetchPnpmDeps {
       pname = "gitea-frontend";
       inherit version src;
-      fetcherVersion = 2;
-      hash = "sha256-0p7P68BvO3hv0utUbnPpHSpGLlV7F9HHmOITvJAb/ww=";
+      inherit pnpm;
+      fetcherVersion = 3;
+      hash = "sha256-Qo0DLuZv+2GVLsBfCv/6CC9E/qhSE4HwV4StQL4HX4Y=";
     };
 
     nativeBuildInputs = [
@@ -48,11 +50,11 @@ let
     '';
   };
 in
-buildGoModule rec {
+buildGo126Module rec {
   inherit pname version src;
 
   proxyVendor = true;
-  vendorHash = "sha256-y7HurJg+/V1cn8iKDXepk/ie/iNgiJXsQbDi1dhgark=";
+  vendorHash = "sha256-7+M1n8RSgB3gZ/2na4RF9kYOf90H0bnsJZMDKpgAy64=";
 
   outputs = [
     "out"
@@ -61,10 +63,17 @@ buildGoModule rec {
 
   patches = [ ./static-root-path.patch ];
 
-  overrideModAttrs = _: { postPatch = null; };
+  overrideModAttrs = _: {
+    postPatch = ''
+      substituteInPlace go.mod \
+        --replace-fail "go 1.26.3" "go 1.26"
+    '';
+  };
 
   postPatch = ''
     substituteInPlace modules/setting/server.go --subst-var data
+    substituteInPlace go.mod \
+      --replace-fail "go 1.26.3" "go 1.26"
   '';
 
   subPackages = [ "." ];

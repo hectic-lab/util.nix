@@ -18,10 +18,10 @@ import (
 	"code.gitea.io/gitea/modules/util"
 )
 
-func GetFeedsForDashboard(ctx context.Context, opts activities_model.GetFeedsOptions) (activities_model.ActionList, int, error) {
+func GetFeedsForDashboard(ctx context.Context, opts activities_model.GetFeedsOptions) (activities_model.ActionList, int64, error) {
 	opts.DontCount = opts.RequestedTeam == nil && opts.Date == ""
 	results, cnt, err := activities_model.GetFeeds(ctx, opts)
-	return results, util.Iif(opts.DontCount, -1, int(cnt)), err
+	return results, util.Iif(opts.DontCount, -1, cnt), err
 }
 
 // GetFeeds returns actions according to the provided options
@@ -39,12 +39,8 @@ func notifyWatchers(ctx context.Context, act *activities_model.Action, watchers 
 	// Sometimes the content is "field1|field2|field3", sometimes the content is JSON (ActionMirrorSyncPush, ActionCommitRepo, ActionPushTag, etc...)
 	if left, right := util.EllipsisDisplayStringX(act.Content, 65535); right != "" {
 		if strings.HasPrefix(act.Content, `{"`) && strings.HasSuffix(act.Content, `}`) {
-			// NOTE(yukkop): PostgreSQL can preserve full push payloads, which lets the
-			// heatmap bucket imported commits by their original author timestamps.
-			if setting.Database.Type.IsMySQL() {
-				// FIXME: at the moment we can do nothing if the content is JSON and it is too long
-				act.Content = "{}"
-			}
+			// FIXME: at the moment we can do nothing if the content is JSON and it is too long
+			act.Content = "{}"
 		} else {
 			act.Content = left
 		}
@@ -136,7 +132,7 @@ func NotifyWatchers(ctx context.Context, acts ...*activities_model.Action) error
 				permPR[i] = false
 				continue
 			}
-			perm, err := access_model.GetUserRepoPermission(ctx, repo, user)
+			perm, err := access_model.GetIndividualUserRepoPermission(ctx, repo, user)
 			if err != nil {
 				permCode[i] = false
 				permIssue[i] = false

@@ -5,9 +5,6 @@ package activities
 
 import (
 	"context"
-	"encoding/json"
-	"sort"
-	"time"
 
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/organization"
@@ -22,27 +19,14 @@ type UserHeatmapData struct {
 	Contributions int64              `json:"contributions"`
 }
 
-type heatmapPushAction struct {
-	Content     string             `xorm:"content"`
-	CreatedUnix timeutil.TimeStamp `xorm:"created_unix"`
-}
-
-type heatmapPushActionContent struct {
-	Commits []*heatmapPushCommit `json:"Commits"`
-}
-
-type heatmapPushCommit struct {
-	Timestamp time.Time `json:"Timestamp"`
-}
-
-// GetUserHeatmapDataByUser returns an array of UserHeatmapData
+// GetUserHeatmapDataByUser returns an array of UserHeatmapData, it checks whether doer can access user's activity
 func GetUserHeatmapDataByUser(ctx context.Context, user, doer *user_model.User) ([]*UserHeatmapData, error) {
 	return getUserHeatmapData(ctx, user, nil, doer)
 }
 
-// GetUserHeatmapDataByUserTeam returns an array of UserHeatmapData
-func GetUserHeatmapDataByUserTeam(ctx context.Context, user *user_model.User, team *organization.Team, doer *user_model.User) ([]*UserHeatmapData, error) {
-	return getUserHeatmapData(ctx, user, team, doer)
+// GetUserHeatmapDataByOrgTeam returns an array of UserHeatmapData, it checks whether doer can access org's activity
+func GetUserHeatmapDataByOrgTeam(ctx context.Context, org *organization.Organization, team *organization.Team, doer *user_model.User) ([]*UserHeatmapData, error) {
+	return getUserHeatmapData(ctx, org.AsUser(), team, doer)
 }
 
 func getUserHeatmapData(ctx context.Context, user *user_model.User, team *organization.Team, doer *user_model.User) ([]*UserHeatmapData, error) {
@@ -78,84 +62,12 @@ func getUserHeatmapData(ctx context.Context, user *user_model.User, team *organi
 		return nil, err
 	}
 
-	cutoff := timeutil.TimeStampNow() - (366+7)*86400
-	engine := db.GetEngine(ctx)
-
-	if err := engine.
+	return hdata, db.GetEngine(ctx).
 		Select(groupBy+" AS timestamp, count(user_id) as contributions").
 		Table("action").
 		Where(cond).
-		And("created_unix > ?", cutoff). // (366+7) days to include the first week for the heatmap
-		And("op_type != ?", ActionCommitRepo).
-		And("op_type != ?", ActionMirrorSyncPush).
+		And("created_unix > ?", timeutil.TimeStampNow()-(366+7)*86400). // (366+7) days to include the first week for the heatmap
 		GroupBy(groupByName).
 		OrderBy("timestamp").
-		Find(&hdata); err != nil {
-		return nil, err
-	}
-
-	pushActions := make([]*heatmapPushAction, 0)
-	if err := engine.
-		Table("action").
-		Where(cond).
-		And("created_unix > ?", cutoff).
-		And("(op_type = ? OR op_type = ?)", ActionCommitRepo, ActionMirrorSyncPush).
-		Cols("content", "created_unix").
-		Find(&pushActions); err != nil {
-		return nil, err
-	}
-
-	byTimestamp := make(map[timeutil.TimeStamp]*UserHeatmapData, len(hdata))
-	for _, item := range hdata {
-		byTimestamp[item.Timestamp] = item
-	}
-
-	for _, action := range pushActions {
-		payload := new(heatmapPushActionContent)
-		if err := json.Unmarshal([]byte(action.Content), payload); err != nil || len(payload.Commits) == 0 {
-			entry := heatmapEntryForTimestamp(byTimestamp, &hdata, action.CreatedUnix/900*900)
-			entry.Contributions++
-			continue
-		}
-
-		for _, commit := range payload.Commits {
-			if commit == nil {
-				continue
-			}
-
-			commitUnix := timeutil.TimeStamp(commit.Timestamp.Unix())
-			if commitUnix <= cutoff {
-				continue
-			}
-
-			entry := heatmapEntryForTimestamp(byTimestamp, &hdata, commitUnix/900*900)
-			entry.Contributions++
-		}
-	}
-
-	sort.Slice(hdata, func(i, j int) bool {
-		return hdata[i].Timestamp < hdata[j].Timestamp
-	})
-
-	return hdata, nil
-}
-
-func heatmapEntryForTimestamp(byTimestamp map[timeutil.TimeStamp]*UserHeatmapData, hdata *[]*UserHeatmapData, timestamp timeutil.TimeStamp) *UserHeatmapData {
-	if entry, ok := byTimestamp[timestamp]; ok {
-		return entry
-	}
-
-	entry := &UserHeatmapData{Timestamp: timestamp}
-	byTimestamp[timestamp] = entry
-	*hdata = append(*hdata, entry)
-	return entry
-}
-
-// GetTotalContributionsInHeatmap returns the total number of contributions in a heatmap
-func GetTotalContributionsInHeatmap(hdata []*UserHeatmapData) int64 {
-	var total int64
-	for _, v := range hdata {
-		total += v.Contributions
-	}
-	return total
+		Find(&hdata)
 }
