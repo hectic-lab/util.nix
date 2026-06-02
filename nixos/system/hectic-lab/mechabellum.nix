@@ -29,7 +29,8 @@ in {
     enable = true;
   };
 
-  services.nginx.virtualHosts."${mechDomain}" = sslOpts // {
+  services.nginx.virtualHosts."${mechDomain}" = {
+    enableACME = true;
     forceSSL = true;
     root = inputs.mechabellum-replay-analysis.packages.${system}.frontend;
 
