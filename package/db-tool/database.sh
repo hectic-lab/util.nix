@@ -912,8 +912,9 @@ subcommand_normalize_backup() {
   NORMALIZE_OUTPUT_PATH="$DEFAULT_NORMALIZED_BACKUP_PATH"
   NORMALIZE_ROLE="$(id -un)"
   NORMALIZE_DATABASE="${PG_DATABASE:-testdb}"
-  NORMALIZE_ADMIN_ROLE="${URI_USER:-postgres}"
+  NORMALIZE_ADMIN_ROLE="postgres"
   NORMALIZE_PORT="${PG_PORT:-5432}"
+  NORMALIZE_PRELOAD_LIBRARIES="${PG_SHARED_PRELOAD_LIBRARIES:-pg_cron}"
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -1022,18 +1023,29 @@ subcommand_normalize_backup() {
 
   ___normalize_backup_remove_leftovers "$NORMALIZE_PGDATA"
 
-  cat > "$NORMALIZE_PGDATA/postgresql.conf" <<EOF
+  if [ ! -f "$NORMALIZE_PGDATA/postgresql.conf" ]; then
+    cat > "$NORMALIZE_PGDATA/postgresql.conf" <<EOF
 listen_addresses = ''
 port = $NORMALIZE_PORT
 unix_socket_directories = '$NORMALIZE_SOCKDIR'
 logging_collector = off
-shared_preload_libraries = ''
+shared_preload_libraries = '$NORMALIZE_PRELOAD_LIBRARIES'
+cron.database_name = '$NORMALIZE_DATABASE'
+cron.host = '$NORMALIZE_SOCKDIR'
 EOF
+  fi
   cat > "$NORMALIZE_PGDATA/pg_hba.conf" <<EOF
 local all all trust
 EOF
+  : > "$NORMALIZE_PGDATA/pg_ident.conf"
   cat > "$NORMALIZE_PGDATA/postgresql.auto.conf" <<EOF
-# Local-dev normalized backup. Runtime ALTER SYSTEM settings intentionally cleared.
+# Local-dev normalized backup overrides.
+listen_addresses = ''
+port = '$NORMALIZE_PORT'
+unix_socket_directories = '$NORMALIZE_SOCKDIR'
+logging_collector = 'off'
+hba_file = '$NORMALIZE_PGDATA/pg_hba.conf'
+ident_file = '$NORMALIZE_PGDATA/pg_ident.conf'
 EOF
 
   log notice "starting temporary local cluster"
