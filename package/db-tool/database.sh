@@ -1456,7 +1456,7 @@ ___diff_dump_schema() {
   local port="$2"
   local output_file="$3"
   local tables="${4:-}"
-  local database_name="${PG_DATABASE:-testdb}"
+  local database_name="${5:-${PG_DATABASE:-testdb}}"
 
   log info "dumping schema to $WHITE$output_file$NC"
 
@@ -1490,7 +1490,7 @@ ___diff_dump_schema() {
 ___diff_immutable_tables() {
   local socket_dir="$1"
   local port="$2"
-  local database_name="${PG_DATABASE:-testdb}"
+  local database_name="${3:-${PG_DATABASE:-testdb}}"
   psql -h "$socket_dir" -p "$port" -d "$database_name" -tAv ON_ERROR_STOP=1 -c "$(cat <<'SQL'
 SELECT n.nspname || '.' || c.relname
 FROM pg_inherits i
@@ -1509,7 +1509,7 @@ ___diff_immutable_data() {
   local sock2="$3"
   local port2="$4"
   local out_file="$5"
-  local database_name="${PG_DATABASE:-testdb}"
+  local database_name="${6:-${PG_DATABASE:-testdb}}"
 
   if ! psql -h "$sock1" -p "$port1" -d "$database_name" -tAc \
     "SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='hectic' AND c.relname='immutable';" \
@@ -1815,8 +1815,8 @@ subcommand_diff() {
   DIFF_DUMP1="$DIFF_TMPDIR/target.sql"
   DIFF_DUMP2="$DIFF_TMPDIR/source.sql"
 
-  ___diff_dump_schema "$DIFF_PGDATA1/sock" "5432" "$DIFF_DUMP1" "$DIFF_TABLES"
-  ___diff_dump_schema "$DIFF_PGDATA2/sock" "5432" "$DIFF_DUMP2" "$DIFF_TABLES"
+  ___diff_dump_schema "$DIFF_PGDATA1/sock" "5432" "$DIFF_DUMP1" "$DIFF_TABLES" "$DIFF_DATABASE"
+  ___diff_dump_schema "$DIFF_PGDATA2/sock" "5432" "$DIFF_DUMP2" "$DIFF_TABLES" "$DIFF_DATABASE"
 
   # Optional: filter out cron tables
   if [ "$DIFF_NO_CRON" = "1" ]; then
@@ -1842,7 +1842,8 @@ subcommand_diff() {
   ___diff_immutable_data \
     "$DIFF_PGDATA1/sock" "5432" \
     "$DIFF_PGDATA2/sock" "5432" \
-    "$DIFF_TMPDIR/diff"
+    "$DIFF_TMPDIR/diff" \
+    "$DIFF_DATABASE"
   data_status=$?
 
   if [ "$schema_differs" = 0 ] && [ "$data_status" = 0 ]; then
