@@ -4,6 +4,7 @@
 : "${REMAINING_ARGS:=}"
 
 : "${DEFAULT_BACKUP_PATH:=${LOCAL_DIR:-$PWD}/focus/postgresql-backup}"
+: "${DEFAULT_NORMALIZED_BACKUP_PATH:=${LOCAL_DIR:-$PWD}/focus/postgresql-backup-normalized}"
 
 : "${SCRIPT_NAME:=$(basename "$0")}"
 SCRIPT_NAME=${SCRIPT_NAME%%.sh}
@@ -186,6 +187,9 @@ ${BGREEN}Database Subcommands:${NC}
 
   ${BCYAN}restore${NC} ${CYAN}[PATH]$NC           Restore database from backup
 
+  ${BCYAN}normalize-backup${NC} ${CYAN}[OPTIONS] [PATH]$NC
+                            Normalize a raw physical backup for local restore/diff
+
   ${BCYAN}backup${NC}                   Create database backup
                            Creates compressed backup at $BBLACK$DEFAULT_BACKUP_PATH$NC
 
@@ -246,6 +250,7 @@ ${BGREEN}Examples:${NC}
   $SCRIPT_NAME init                       Initialize PostgreSQL only
   $SCRIPT_NAME restore                    Restore from default backup
   $SCRIPT_NAME restore /path/to/backup    Restore from specific path
+  $SCRIPT_NAME normalize-backup /path/to/raw-backup
   $SCRIPT_NAME backup                     Create backup
   $SCRIPT_NAME log                        Show database logs
   $SCRIPT_NAME log list                   List available log files
@@ -416,6 +421,43 @@ ${BGREEN}Warnings:${NC}
   - Database will be stopped during restore process
   - All current data will be lost
   - ${BRED}Only development usage for now$NC
+
+EOF
+)" | "$PAGER_OR_CAT"
+}
+
+help_normalize_backup() {
+  # shellcheck disable=SC2059
+  printf "$(cat <<EOF
+${BGREEN}Usage:${NC} $SCRIPT_NAME normalize-backup [OPTIONS] [path]
+
+Normalize a raw PostgreSQL physical backup for local development.
+
+This command leaves the input backup untouched. It extracts $BBLACK\`base.tar.gz\`$NC
+and optional $BBLACK\`pg_wal.tar.gz\`$NC into temporary PGDATA, writes local
+$BBLACK\`postgresql.conf\`$NC and $BBLACK\`pg_hba.conf\`$NC files, removes standby,
+recovery, and runtime leftovers, starts the cluster locally, ensures a login role
+and database exist, stops cleanly, then repacks a normalized backup directory.
+
+${BGREEN}Arguments:${NC}
+  ${BCYAN}path$NC                  Input backup directory (optional)
+                        Defaults to $BBLACK$DEFAULT_BACKUP_PATH$NC
+
+${BGREEN}Options:${NC}
+  $BCYAN-o$NC, $BCYAN--output$NC ${CYAN}<path>$NC      Output backup directory
+                        Defaults to $BBLACK$DEFAULT_NORMALIZED_BACKUP_PATH$NC
+  $BCYAN--role$NC ${CYAN}<name>$NC          Login role to ensure (default $BBLACK\$(id -un)$NC)
+  $BCYAN--database$NC ${CYAN}<name>$NC      Database to ensure (default $BBLACK\${PG_DATABASE:-testdb}$NC)
+  $BCYAN--admin-role$NC ${CYAN}<name>$NC    Role used for local maintenance
+                        Defaults to $BBLACK\${URI_USER:-postgres}$NC
+  $BCYAN-h$NC, $BCYAN--help$NC            Show this help message
+
+${BGREEN}Files Created:${NC}
+  - ${BBLACK}\`base.tar.gz\`$NC:      Normalized database cluster backup
+
+${BGREEN}Examples:${NC}
+  $SCRIPT_NAME normalize-backup /path/to/raw-backup
+  $SCRIPT_NAME normalize-backup --output focus/postgresql-backup-normalized
 
 EOF
 )" | "$PAGER_OR_CAT"
@@ -823,6 +865,195 @@ subcommand_restore() {
   env PG_REUSE= postgres-init
 
   rm -f "${data}/standby.signal" "${data}/recovery.signal"
+  restore_namespace
+}
+
+___sql_literal() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/''/g")"
+}
+
+___normalize_backup_remove_leftovers() {
+  local pgdata="$1"
+  rm -f \
+    "$pgdata/postmaster.pid" \
+    "$pgdata/postmaster.opts" \
+    "$pgdata/recovery.signal" \
+    "$pgdata/standby.signal" \
+    "$pgdata/backup_label.old"
+  rm -f "$pgdata/pg_wal/archive_status"/*.ready 2>/dev/null || :
+}
+
+___normalize_backup_cleanup() {
+  local tmpdir="$1"
+  local pgdata="$2"
+  if [ -n "$pgdata" ] && [ -d "$pgdata" ]; then
+    pg_ctl -D "$pgdata" -m fast -w stop >/dev/null 2>&1 || :
+  fi
+  if [ -n "$tmpdir" ]; then
+    rm -rf "$tmpdir"
+  fi
+}
+
+subcommand_normalize_backup() {
+  change_namespace 'db normalize-backup'
+
+  NORMALIZE_INPUT_PATH=""
+  NORMALIZE_OUTPUT_PATH="$DEFAULT_NORMALIZED_BACKUP_PATH"
+  NORMALIZE_ROLE="$(id -un)"
+  NORMALIZE_DATABASE="${PG_DATABASE:-testdb}"
+  NORMALIZE_ADMIN_ROLE="${URI_USER:-postgres}"
+  NORMALIZE_PORT="${PG_PORT:-5432}"
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -h|--help)
+        help_normalize_backup
+        exit 0
+      ;;
+      -o|--output)
+        if [ $# -lt 2 ]; then
+          log error "normalize-backup: --output requires a path"
+          exit 3
+        fi
+        NORMALIZE_OUTPUT_PATH="$2"
+        shift 2
+      ;;
+      --role)
+        if [ $# -lt 2 ]; then
+          log error "normalize-backup: --role requires a name"
+          exit 3
+        fi
+        NORMALIZE_ROLE="$2"
+        shift 2
+      ;;
+      --database)
+        if [ $# -lt 2 ]; then
+          log error "normalize-backup: --database requires a name"
+          exit 3
+        fi
+        NORMALIZE_DATABASE="$2"
+        shift 2
+      ;;
+      --admin-role)
+        if [ $# -lt 2 ]; then
+          log error "normalize-backup: --admin-role requires a name"
+          exit 3
+        fi
+        NORMALIZE_ADMIN_ROLE="$2"
+        shift 2
+      ;;
+      --*|-*)
+        log error "normalize-backup argument $1 does not exist"
+        exit 9
+      ;;
+      *)
+        if [ -n "$NORMALIZE_INPUT_PATH" ]; then
+          log error "normalize-backup: unexpected argument $1"
+          exit 9
+        fi
+        NORMALIZE_INPUT_PATH="$1"
+        shift
+      ;;
+    esac
+  done
+
+  if [ -z "$NORMALIZE_INPUT_PATH" ]; then
+    NORMALIZE_INPUT_PATH="$DEFAULT_BACKUP_PATH"
+  fi
+  if [ -z "$NORMALIZE_ROLE" ] || [ -z "$NORMALIZE_DATABASE" ] || [ -z "$NORMALIZE_ADMIN_ROLE" ]; then
+    log error "normalize-backup: role, database, and admin role must be non-empty"
+    exit 3
+  fi
+  if [ ! -d "$NORMALIZE_INPUT_PATH" ]; then
+    log error "normalize-backup: input backup directory not found: $NORMALIZE_INPUT_PATH"
+    exit 3
+  fi
+  if [ ! -f "$NORMALIZE_INPUT_PATH/base.tar.gz" ]; then
+    log error "normalize-backup: missing $NORMALIZE_INPUT_PATH/base.tar.gz"
+    exit 3
+  fi
+
+  NORMALIZE_INPUT_ABS=$(realpath "$NORMALIZE_INPUT_PATH")
+  NORMALIZE_OUTPUT_ABS=$(realpath -m "$NORMALIZE_OUTPUT_PATH")
+
+  if [ "$NORMALIZE_INPUT_ABS" = "$NORMALIZE_OUTPUT_ABS" ]; then
+    log error "normalize-backup: input and output paths must differ"
+    exit 1
+  fi
+  case "$NORMALIZE_OUTPUT_ABS/" in
+    "$NORMALIZE_INPUT_ABS"/*)
+      log error "normalize-backup: output path must not be inside input backup"
+      exit 1
+    ;;
+  esac
+  case "$NORMALIZE_INPUT_ABS/" in
+    "$NORMALIZE_OUTPUT_ABS"/*)
+      log error "normalize-backup: input backup must not be inside output path"
+      exit 1
+    ;;
+  esac
+  mkdir -p "$(dirname "$NORMALIZE_OUTPUT_ABS")"
+
+  NORMALIZE_TMPDIR=$(mktemp -d)
+  NORMALIZE_PGDATA="$NORMALIZE_TMPDIR/data"
+  NORMALIZE_SOCKDIR="$NORMALIZE_TMPDIR/sock"
+  NORMALIZE_LOG="$NORMALIZE_TMPDIR/postgres.log"
+  trap '___normalize_backup_cleanup "$NORMALIZE_TMPDIR" "$NORMALIZE_PGDATA"' EXIT INT HUP
+
+  mkdir -m 700 "$NORMALIZE_PGDATA"
+  mkdir -p "$NORMALIZE_SOCKDIR" "$NORMALIZE_PGDATA/pg_wal"
+
+  log notice "extracting backup into temporary PGDATA"
+  tar -xzf "$NORMALIZE_INPUT_ABS/base.tar.gz" -C "$NORMALIZE_PGDATA"
+  if [ -f "$NORMALIZE_INPUT_ABS/pg_wal.tar.gz" ]; then
+    tar -xzf "$NORMALIZE_INPUT_ABS/pg_wal.tar.gz" -C "$NORMALIZE_PGDATA/pg_wal"
+  fi
+
+  ___normalize_backup_remove_leftovers "$NORMALIZE_PGDATA"
+
+  cat > "$NORMALIZE_PGDATA/postgresql.conf" <<EOF
+listen_addresses = ''
+port = $NORMALIZE_PORT
+unix_socket_directories = '$NORMALIZE_SOCKDIR'
+logging_collector = off
+shared_preload_libraries = ''
+EOF
+  cat > "$NORMALIZE_PGDATA/pg_hba.conf" <<EOF
+local all all trust
+EOF
+  cat > "$NORMALIZE_PGDATA/postgresql.auto.conf" <<EOF
+# Local-dev normalized backup. Runtime ALTER SYSTEM settings intentionally cleared.
+EOF
+
+  log notice "starting temporary local cluster"
+  with_closed_fds pg_ctl -D "$NORMALIZE_PGDATA" -o "-F" -w start > "$NORMALIZE_LOG" 2>&1 || {
+    log error "normalize-backup: failed to start temporary cluster; see $NORMALIZE_LOG"
+    exit 1
+  }
+
+  NORMALIZE_ROLE_SQL=$(___sql_literal "$NORMALIZE_ROLE")
+  psql -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" -d postgres \
+    -v ON_ERROR_STOP=1 -c "DO \$\$ DECLARE v_role text := $NORMALIZE_ROLE_SQL; BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role) THEN EXECUTE format('CREATE ROLE %I LOGIN', v_role); END IF; END \$\$;"
+
+  NORMALIZE_DATABASE_SQL=$(___sql_literal "$NORMALIZE_DATABASE")
+  NORMALIZE_DATABASE_EXISTS=$(psql -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" -d postgres \
+    -tAc "SELECT 1 FROM pg_database WHERE datname = $NORMALIZE_DATABASE_SQL" 2>/dev/null || true)
+  if [ "$NORMALIZE_DATABASE_EXISTS" != "1" ]; then
+    createdb -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" \
+      -O "$NORMALIZE_ROLE" "$NORMALIZE_DATABASE"
+  fi
+
+  log notice "stopping temporary local cluster"
+  pg_ctl -D "$NORMALIZE_PGDATA" -m fast -w stop >> "$NORMALIZE_LOG" 2>&1
+  ___normalize_backup_remove_leftovers "$NORMALIZE_PGDATA"
+
+  log notice "writing normalized backup to $WHITE$NORMALIZE_OUTPUT_ABS$NC"
+  rm -rf "$NORMALIZE_OUTPUT_ABS"
+  mkdir -p "$NORMALIZE_OUTPUT_ABS"
+  tar -czf "$NORMALIZE_OUTPUT_ABS/base.tar.gz" -C "$NORMALIZE_PGDATA" .
+
+  ___normalize_backup_cleanup "$NORMALIZE_TMPDIR" ""
+  trap - EXIT INT HUP
   restore_namespace
 }
 
@@ -1589,6 +1820,14 @@ if ! [ "${AS_LIBRARY+x}" ]; then
         PGURL=$2
         DB_URL=$2
         shift 2
+      ;;
+      normalize-backup)
+        if [ "${SUBCOMMAND+x}" ]; then
+          REMAINING_ARGS="$REMAINING_ARGS $(quote "$1")"
+        else
+          SUBCOMMAND="normalize_backup"
+        fi
+        shift
       ;;
       deploy|replay|restore|patch|hydrate|backup|log|migrator|diff|pull_staging|test|check|cleanup|init)
         if [ "${SUBCOMMAND+x}" ]; then

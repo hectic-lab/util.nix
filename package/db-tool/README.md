@@ -66,6 +66,28 @@ The `pull_staging` subcommand allows importing data from a remote staging enviro
 
 If any of these variables are missing when `pull_staging` is invoked, the tool will exit with code 3 and print the name of the missing variable to stderr.
 
+## normalize-backup Contract
+
+The `normalize-backup` subcommand converts a physical PostgreSQL backup into a
+local-development restore artifact without modifying the input backup:
+
+```sh
+database normalize-backup [OPTIONS] [path]
+```
+
+The input `path` defaults to `${LOCAL_DIR}/focus/postgresql-backup` and must be a
+backup directory compatible with `database restore`, containing `base.tar.gz`
+and optionally `pg_wal.tar.gz`. The output defaults to a normalized backup path
+and can be overridden with `--output <path>`. The output directory must not be
+the same path as the input and must not be inside the input directory.
+
+Normalization extracts the physical backup into temporary PGDATA, replaces
+production PostgreSQL access/configuration with local restore-safe
+`postgresql.conf` and `pg_hba.conf` files, removes standby/recovery/runtime
+leftovers, starts the cluster locally, ensures the requested `--role` and
+`--database` exist, stops cleanly, and repacks a backup directory that can be
+used by `database restore`.
+
 ## Subcommands
 
 - `deploy`: Execute the full deployment flow (hydrate + patch). Supports `--cleanup` to teardown after success.
@@ -73,6 +95,7 @@ If any of these variables are missing when `pull_staging` is invoked, the tool w
 - `test`: Execute database tests located in `${DATABASE_DIR}/test/test.sql`.
 - `check`: Run a deployment validation in an isolated, temporary PostgreSQL cluster.
 - `cleanup`: Stop the local database cluster and remove the `PG_WORKING_DIR`.
+- `normalize-backup`: Rewrite a physical backup artifact for local restore use.
 - `pull_staging`: Import data from the staging environment based on the env contract.
 - `init`: Wrapper around `postgres-init` to start the cluster.
 - `migrator`: Directly invoke the migration tool with the correct environment context.
