@@ -850,6 +850,11 @@ subcommand_restore() {
     RESTORE_BACKUP_PATH="$DEFAULT_BACKUP_PATH"
   fi
 
+  local restore_database="${PG_DATABASE:-}"
+  if [ -f "${RESTORE_BACKUP_PATH:?}/database_name" ]; then
+    restore_database=$(tr -d '\n' < "${RESTORE_BACKUP_PATH:?}/database_name")
+  fi
+
   postgres-cleanup
 
   local data="${PG_WORKING_DIR:?}/data"
@@ -862,7 +867,7 @@ subcommand_restore() {
     tar -xzf "${RESTORE_BACKUP_PATH:?}/pg_wal.tar.gz" -C "${data}/pg_wal"
   fi
 
-  env PG_REUSE= postgres-init
+  env PG_REUSE= PG_DATABASE="$restore_database" postgres-init
 
   rm -f "${data}/standby.signal" "${data}/recovery.signal"
   restore_namespace
@@ -915,6 +920,7 @@ subcommand_normalize_backup() {
   NORMALIZE_ADMIN_ROLE="postgres"
   NORMALIZE_PORT="${PG_PORT:-5432}"
   NORMALIZE_PRELOAD_LIBRARIES="${PG_SHARED_PRELOAD_LIBRARIES:-pg_cron}"
+  NORMALIZE_DATABASE_EXPLICIT=0
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -944,6 +950,7 @@ subcommand_normalize_backup() {
           exit 3
         fi
         NORMALIZE_DATABASE="$2"
+        NORMALIZE_DATABASE_EXPLICIT=1
         shift 2
       ;;
       --admin-role)
@@ -1061,6 +1068,14 @@ EOF
   ___normalize_backup_refresh_collation "$NORMALIZE_SOCKDIR" "$NORMALIZE_PORT" "$NORMALIZE_ADMIN_ROLE" template1
   ___normalize_backup_refresh_collation "$NORMALIZE_SOCKDIR" "$NORMALIZE_PORT" "$NORMALIZE_ADMIN_ROLE" template0
 
+  if [ "$NORMALIZE_DATABASE_EXPLICIT" -eq 0 ]; then
+    detected_database=$(psql -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" -d postgres \
+      -tAc "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate AND datname <> 'postgres' ORDER BY oid LIMIT 1" 2>/dev/null | sed '/^$/d' | head -n 1)
+    if [ -n "$detected_database" ]; then
+      NORMALIZE_DATABASE="$detected_database"
+    fi
+  fi
+
   NORMALIZE_ROLE_SQL=$(___sql_literal "$NORMALIZE_ROLE")
   psql -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" -d postgres \
     -v ON_ERROR_STOP=1 -c "DO \$\$ DECLARE v_role text := $NORMALIZE_ROLE_SQL; BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role) THEN EXECUTE format('CREATE ROLE %I LOGIN SUPERUSER', v_role); ELSE EXECUTE format('ALTER ROLE %I LOGIN SUPERUSER', v_role); END IF; END \$\$;"
@@ -1082,6 +1097,7 @@ EOF
   rm -rf "$NORMALIZE_OUTPUT_ABS"
   mkdir -p "$NORMALIZE_OUTPUT_ABS"
   tar -czf "$NORMALIZE_OUTPUT_ABS/base.tar.gz" -C "$NORMALIZE_PGDATA" .
+  printf '%s\n' "$NORMALIZE_DATABASE" > "$NORMALIZE_OUTPUT_ABS/database_name"
 
   ___normalize_backup_cleanup "$NORMALIZE_TMPDIR" ""
   trap - EXIT INT HUP
@@ -1720,6 +1736,9 @@ subcommand_diff() {
 
   if [ -z "$DIFF_BACKUP_PATH" ]; then
     DIFF_BACKUP_PATH="$DEFAULT_BACKUP_PATH"
+  fi
+  if [ -f "$DIFF_BACKUP_PATH/database_name" ]; then
+    DIFF_DATABASE=$(tr -d '\n' < "$DIFF_BACKUP_PATH/database_name")
   fi
 
   DIFF_TMPDIR="${LOCAL_DIR}/focus/database-diff-operation"
