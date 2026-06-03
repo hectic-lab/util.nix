@@ -1676,9 +1676,8 @@ subcommand_diff() {
         exit 9
       ;;
       *)
-        # NOTE: yes, RESTORE, not DIFF prefix
-        if [ -z "$RESTORE_BACKUP_PATH" ]; then
-          RESTORE_BACKUP_PATH="$1"
+        if [ -z "$DIFF_BACKUP_PATH" ]; then
+          DIFF_BACKUP_PATH="$1"
           shift
         else
           log error "diff: unexpected argument $1"
@@ -1687,6 +1686,10 @@ subcommand_diff() {
       ;;
     esac
   done
+
+  if [ -z "$DIFF_BACKUP_PATH" ]; then
+    DIFF_BACKUP_PATH="$DEFAULT_BACKUP_PATH"
+  fi
 
   DIFF_TMPDIR="${LOCAL_DIR}/focus/database-diff-operation"
   DIFF_PGDATA1="$DIFF_TMPDIR/pgdata1"
@@ -1717,7 +1720,7 @@ subcommand_diff() {
 
   log notice "provisioning ${WHITE}DB1$NC (backup + migrations)"
 
-  PG_WORKING_DIR="$DIFF_PGDATA1" PG_LOG_PATH="$DIFF_PGDATA1" subcommand_restore
+  PG_WORKING_DIR="$DIFF_PGDATA1" PG_LOG_PATH="$DIFF_PGDATA1" subcommand_restore "$DIFF_BACKUP_PATH"
 
   log info "applying migrations to ${WHITE}DB1$NC"
   subcommand_migrator migrate up all \
