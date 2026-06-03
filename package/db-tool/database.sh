@@ -1818,6 +1818,9 @@ subcommand_diff() {
   ___diff_dump_schema "$DIFF_PGDATA1/sock" "5432" "$DIFF_DUMP1" "$DIFF_TABLES" "$DIFF_DATABASE"
   ___diff_dump_schema "$DIFF_PGDATA2/sock" "5432" "$DIFF_DUMP2" "$DIFF_TABLES" "$DIFF_DATABASE"
 
+  sed -i '/^\\restrict /d;/^\\unrestrict /d' "$DIFF_DUMP1" || exit 1
+  sed -i '/^\\restrict /d;/^\\unrestrict /d' "$DIFF_DUMP2" || exit 1
+
   # Optional: filter out cron tables
   if [ "$DIFF_NO_CRON" = "1" ]; then
     log info "filtering cron tables"
