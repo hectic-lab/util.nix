@@ -1046,6 +1046,9 @@ unix_socket_directories = '$NORMALIZE_SOCKDIR'
 logging_collector = 'off'
 hba_file = '$NORMALIZE_PGDATA/pg_hba.conf'
 ident_file = '$NORMALIZE_PGDATA/pg_ident.conf'
+shared_preload_libraries = '$NORMALIZE_PRELOAD_LIBRARIES'
+cron.database_name = '$NORMALIZE_DATABASE'
+cron.host = '$NORMALIZE_SOCKDIR'
 EOF
 
   log notice "starting temporary local cluster"
