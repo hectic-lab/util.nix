@@ -894,6 +894,17 @@ ___normalize_backup_cleanup() {
   fi
 }
 
+___normalize_backup_refresh_collation() {
+  local sockdir="$1"
+  local port="$2"
+  local admin_role="$3"
+  local database_name="$4"
+
+  psql -h "$sockdir" -p "$port" -U "$admin_role" -d postgres \
+    -v ON_ERROR_STOP=1 -c "ALTER DATABASE \"$database_name\" REFRESH COLLATION VERSION;" \
+    >/dev/null 2>&1 || :
+}
+
 subcommand_normalize_backup() {
   change_namespace 'db normalize-backup'
 
@@ -1031,6 +1042,10 @@ EOF
     exit 1
   }
 
+  ___normalize_backup_refresh_collation "$NORMALIZE_SOCKDIR" "$NORMALIZE_PORT" "$NORMALIZE_ADMIN_ROLE" postgres
+  ___normalize_backup_refresh_collation "$NORMALIZE_SOCKDIR" "$NORMALIZE_PORT" "$NORMALIZE_ADMIN_ROLE" template1
+  ___normalize_backup_refresh_collation "$NORMALIZE_SOCKDIR" "$NORMALIZE_PORT" "$NORMALIZE_ADMIN_ROLE" template0
+
   NORMALIZE_ROLE_SQL=$(___sql_literal "$NORMALIZE_ROLE")
   psql -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" -d postgres \
     -v ON_ERROR_STOP=1 -c "DO \$\$ DECLARE v_role text := $NORMALIZE_ROLE_SQL; BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = v_role) THEN EXECUTE format('CREATE ROLE %I LOGIN', v_role); END IF; END \$\$;"
@@ -1042,6 +1057,7 @@ EOF
     createdb -h "$NORMALIZE_SOCKDIR" -p "$NORMALIZE_PORT" -U "$NORMALIZE_ADMIN_ROLE" \
       -O "$NORMALIZE_ROLE" "$NORMALIZE_DATABASE"
   fi
+  ___normalize_backup_refresh_collation "$NORMALIZE_SOCKDIR" "$NORMALIZE_PORT" "$NORMALIZE_ADMIN_ROLE" "$NORMALIZE_DATABASE"
 
   log notice "stopping temporary local cluster"
   pg_ctl -D "$NORMALIZE_PGDATA" -m fast -w stop >> "$NORMALIZE_LOG" 2>&1
