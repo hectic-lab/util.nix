@@ -25,6 +25,7 @@ let
     "iana-perlyk"
     "snuff"
     "antoshka"
+    "evgenii-kazakov"
   ];
   mkMailPasswordSecret = name: {
     name  = "mailserver/${name}/hashedPassword";
