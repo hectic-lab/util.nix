@@ -52,9 +52,10 @@ in {
 
     inputs.hectic-landing.nixosModules.hectic-landing
 
+    (import ./attic.nix              { inherit flake self inputs domain; })
     (import ./containers.nix          { inherit flake self inputs; })
-    (import ./mechabellum.nix         { inherit flake self inputs domain sslOpts; })
-    (import (./. + "/sentinèlla.nix") { inherit flake self inputs domain sslOpts; })
+    (import ./mechabellum.nix         { inherit flake self inputs domain; })
+    (import (./. + "/sentinèlla.nix") { inherit flake self inputs domain; })
   ];
 
   services.hectic-landing = {
@@ -205,8 +206,8 @@ in {
   services.nginx = {
     enable = true;
     # NOTE(yukkop): virtualHosts.${domain} is owned by the hectic-landing module
-    # (ACME-managed). See services.hectic-landing above.
-    virtualHosts."store.${domain}" = sslOpts // {
+    virtualHosts."store.${domain}" = {
+      enableACME = true;
       forceSSL = true;
       root = "/var/www/store";
       locations."/" = {
@@ -215,7 +216,8 @@ in {
         '';
       };
     };
-    virtualHosts."snuff.${domain}" = sslOpts // {
+    virtualHosts."snuff.${domain}" = {
+      enableACME = true;
       forceSSL = true;
       locations."/" = {
         extraConfig = ''
@@ -224,7 +226,8 @@ in {
         '';
       };
     };
-    virtualHosts."nrv.${domain}" = sslOpts // {
+    virtualHosts."nrv.${domain}" = {
+      enableACME = true;
       forceSSL = true;
       locations."/" = {
         extraConfig = ''
@@ -233,7 +236,8 @@ in {
         '';
       };
     };
-    virtualHosts."yukkop.${domain}" = sslOpts // {
+    virtualHosts."yukkop.${domain}" = {
+      enableACME = true;
       forceSSL = true;
       locations."/" = {
         extraConfig = ''

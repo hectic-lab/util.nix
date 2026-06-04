@@ -1,7 +1,6 @@
 {
   inputs,
   domain,
-  sslOpts,
   ...
 }: {
   pkgs,

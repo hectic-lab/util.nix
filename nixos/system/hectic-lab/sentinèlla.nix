@@ -3,7 +3,6 @@
   flake,
   self,
   domain,
-  sslOpts,
   ...
 }: { ... }: {
   hectic.services."sentinèlla" = {
@@ -17,7 +16,8 @@
   };
 
   services.nginx = {
-    virtualHosts."probe.${domain}" = sslOpts // {
+    virtualHosts."probe.${domain}" = {
+      enableACME = true;
       forceSSL = true;
       locations."/" = {
         proxyPass = "http://127.0.0.1:5988";
