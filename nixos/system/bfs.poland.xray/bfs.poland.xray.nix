@@ -76,6 +76,18 @@ in {
     defaults.email = "security@bfs.band";
   };
 
+  # NOTE(yukkop): this host gets an IPv6 route via RA, but object storage
+  # fetches to hel1.your-objectstorage.com currently stall over IPv6 while
+  # IPv4 works. Synapse's S3 media backend uses getaddrinfo ordering, so
+  # prefer IPv4 here to keep Element media downloads responsive.
+  environment.etc."gai.conf".text = ''
+    precedence ::ffff:0:0/96  100
+  '';
+
+  systemd.services.matrix-synapse.restartTriggers = [
+    config.environment.etc."gai.conf".source
+  ];
+
   services.nginx = {
     enable = true;
 

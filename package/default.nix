@@ -123,6 +123,7 @@ in {
   py3-swifter                  = pkgs.callPackage ./py3-swifter.nix                   {};
   py3-aiogram-newsletter       = pkgs.callPackage ./py3-aiogram-newsletter.nix        {};
   py3-openai-shap-e            = pkgs.callPackage ./py3-openai-shap-e.nix             {};
+  hiddify-core                 = pkgs.callPackage ./hiddify-core                      {};
   nvim-alias                   = pkgs.callPackage ./nvim-alias.nix                    {};
   bolt-unpack                  = pkgs.callPackage ./bolt-unpack.nix                   {};
   merge-archive                = pkgs.callPackage ./merge-archive                     {};

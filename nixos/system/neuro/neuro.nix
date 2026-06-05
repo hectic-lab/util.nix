@@ -263,6 +263,7 @@ in {
   in [
     #python-ai
     git
+    hectic.hiddify-core
     neovim
     wget
     ethtool
