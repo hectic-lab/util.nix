@@ -145,6 +145,7 @@ in {
   nix-derivation-hash          = pkgs.callPackage ./nix-derivation-hash               {};
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };
+  element-web                  = pkgs.callPackage ./element-web                       {};
   shellplot                    = pkgs.callPackage ./shellplot                         {};
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   migrator                     = pkgs.callPackage ./migrator                          { inherit self; };

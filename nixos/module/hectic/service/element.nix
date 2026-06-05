@@ -31,7 +31,7 @@ in {
 
       locations."= /config.element.${matrixDomain}.json".return = "302 /config.json";
 
-      root = pkgs.element-web.override {
+      root = pkgs.hectic.element-web.override {
         conf = {
           default_server_config = {
             "m.homeserver".base_url = "https://${matrixDomain}";
