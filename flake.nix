@@ -1,5 +1,16 @@
 {
   description = "yukkop's nix utilities";
+
+  nixConfig = {
+    extra-substituters = [
+      "https://cache.nixos.org"
+      "https://cache.hectic-lab.com/hectic"
+    ];
+    extra-trusted-public-keys = [
+      "hectic:KMQsKow4SoA9K2vOJlOljmx7/Zpf91Yy+5qEtxDDCzA="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     nixpkgs-fixed.url = "github:NixOS/nixpkgs/nixos-25.11";

@@ -37,10 +37,6 @@ let
       hashedPasswordFile = config.sops.secrets."mailserver/${name}/hashedPassword".path;
     };
   };
-  sslOpts = {
-    sslCertificate    = config.sops.secrets."ssl/porkbun/${domain}/domain.cert.pem".path;
-    sslCertificateKey = config.sops.secrets."ssl/porkbun/${domain}/private.key.pem".path;
-  };
 in {
   imports = [
     self.nixosModules.hectic
@@ -118,18 +114,6 @@ in {
         key = "init-postgresql";
       };
       "atticd/environment" = {};
-      "ssl/porkbun/${domain}/domain.cert.pem" = {
-        group = "nginx";
-        mode  = "0440";
-      };
-      "ssl/porkbun/${domain}/private.key.pem" = {
-        group = "nginx";
-        mode  = "0440";
-      };
-      "ssl/porkbun/${domain}/public.key.pem" = {
-        group = "nginx";
-        mode  = "0440";
-      };
       "wg-bfs/private-key" = {};
     };
   };
