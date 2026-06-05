@@ -13,7 +13,6 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-    nixpkgs-fixed.url = "github:NixOS/nixpkgs/nixos-25.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs = {
@@ -30,7 +29,7 @@
     };
     nixvim = {
       url = "github:nix-community/nixvim/nixos-25.11";
-      inputs.nixpkgs.follows = "nixpkgs-fixed";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     disko = {
       url = "github:nix-community/disko";
@@ -41,7 +40,7 @@
     };
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
-      inputs.nixpkgs.follows = "nixpkgs-fixed";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     nixos-wsl = {
       url = "github:nix-community/NixOS-WSL";
@@ -67,13 +66,13 @@
       # NOTE(yukkop): private repo - SSH access required.
       # Only evaluated when nixosConfigurations."hectic-lab|x86_64-linux" is built.
       url = "git+ssh://git@github.com/liquizz/hectic-landing.git";
-      inputs.nixpkgs.follows = "nixpkgs-fixed";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     mechabellum-replay-analysis = {
       # NOTE(yukkop): private repo - SSH access required.
       # Only evaluated when nixosConfigurations."hectic-lab|x86_64-linux" is built.
       url = "git+ssh://git@github.com/LysmiMx/mechabellum-replay-analysis.git";
-      inputs.nixpkgs.follows = "nixpkgs-fixed";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
