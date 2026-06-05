@@ -1,10 +1,19 @@
 {
   domain,
   ...
-}: { ... }: {
+}: {
+  config,
+  ...
+}: {
   hectic.services.attic = {
-    enable   = true;
-    hostName = "cache.${domain}";
+    enable          = true;
+    hostName        = "cache.${domain}";
+    environmentFile = config.sops.secrets."atticd/environment".path;
+    storage = {
+      bucket   = "cache-hectic-lab";
+      endpoint = "https://hel1.your-objectstorage.com";
+      region   = "hel1";
+    };
   };
 
   services.nginx.virtualHosts."cache.${domain}" = {

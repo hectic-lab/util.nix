@@ -117,6 +117,7 @@ in {
       "init-postgresql" = {
         key = "init-postgresql";
       };
+      "atticd/environment" = {};
       "ssl/porkbun/${domain}/domain.cert.pem" = {
         group = "nginx";
         mode  = "0440";
