@@ -187,19 +187,27 @@ in {
   readModulesRecursive' = path: extraArgs:
     with lib;
     with builtins; let
-      paths = pipe "${path}" [
-        (filesystem.listFilesRecursive)
-        (filter (hasSuffix ".nix"))
-      ];
+      collectPaths = dir: prefix:
+        concatLists (mapAttrsToList (name: type: let
+          path' = dir + "/${name}";
+          name' = if prefix == "" then name else "${prefix}/${name}";
+        in
+          if type == "directory"
+          then collectPaths path' name'
+          else [{
+            inherit path';
+            name = name';
+          }]
+        ) (readDir dir));
+      paths = filter (path': hasSuffix ".nix" path'.name) (collectPaths path "");
       pathToName = flip pipe [
-        (removePrefix "${path}/")
         (replaceStrings ["/" ".nix"] ["." ""])
         (removeSuffix ".nix")
       ];
       attrList =
         map (path': {
-          name = pathToName (unsafeDiscardStringContext path');
-          value = import path' extraArgs;
+          name = pathToName path'.name;
+          value = import path'.path' extraArgs;
         })
         paths;
     in

@@ -9,11 +9,11 @@ with self.lib;
 let
   # Combine hectic modules into one
   hectic.imports = attrValues (
-    readModulesRecursive' ./hectic { inherit flake self inputs; }
+    readModulesRecursive' (flake + "/nixos/module/hectic") { inherit flake self inputs; }
   );
   # Read generic modules separately
   generic = readModulesRecursive'
-    ./generic
+    (flake + "/nixos/module/generic")
     { inherit flake self inputs; };
 in generic // {
   inherit hectic;

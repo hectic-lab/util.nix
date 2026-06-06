@@ -18,6 +18,7 @@
   ];
 
   adminNames = [ "yukkop" ];
+  matrixClusterSopsFile = flake + "/sus/matrix-cluster.yaml";
 
   cfg = config.hectic.generic.matrix-cluster;
 in {
@@ -39,7 +40,7 @@ in {
         value = {
           key      = "matrix/users/${name}/password";
           owner    = "matrix-synapse";
-          sopsFile = "${flake}/sus/matrix-cluster.yaml";
+          sopsFile = matrixClusterSopsFile;
         };
       }) userNames
     );

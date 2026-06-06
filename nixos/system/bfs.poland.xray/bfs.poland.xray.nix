@@ -14,6 +14,7 @@
   jitsiHost = "meet.accord.tube";
   elementEntryDomain = "element.bfs.band";
   polandEntryDomain = "bfs.band";
+  matrixClusterSopsFile = flake + "/sus/matrix-cluster.yaml";
   backendProxyConfig = ''
     proxy_ssl_server_name on;
     proxy_ssl_name ${matrixHost};
@@ -203,41 +204,41 @@ in {
     key      = "matrix/signing-key";
     owner    = "matrix-synapse";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
   sops.secrets."matrix/postgres-replication-password" = {
     key      = "matrix/postgres-replication-password";
     owner    = "postgres";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
   sops.secrets."matrix/object-storage/credentials" = {
     key      = "matrix/object-storage/credentials";
     owner    = "matrix-synapse";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
   sops.secrets."matrix/secrets" = {
     key      = "matrix/secrets";
     owner    = "matrix-synapse";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
   sops.secrets."matrix/turn-secret" = {
     key      = "matrix/turn-secret";
     owner    = "turnserver";
     group    = "turnserver";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
   sops.secrets."matrix/porkbun-api-key" = {
     key      = "matrix/porkbun-api-key";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
   sops.secrets."matrix/porkbun-secret-api-key" = {
     key      = "matrix/porkbun-secret-api-key";
     mode     = "0400";
-    sopsFile = "${flake}/sus/matrix-cluster.yaml";
+    sopsFile = matrixClusterSopsFile;
   };
 }

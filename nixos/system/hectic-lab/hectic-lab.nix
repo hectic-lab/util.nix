@@ -116,7 +116,7 @@ in {
   sops = {
     gnupg.sshKeyPaths  = [ ];
     age.sshKeyPaths    = [ "/etc/ssh/ssh_host_ed25519_key" ];
-    defaultSopsFile    = "${flake}/sus/hectic-lab.yaml";
+    defaultSopsFile    = flake + "/sus/hectic-lab.yaml";
     secrets = builtins.listToAttrs (map mkMailPasswordSecret mailUserNames) // {
       "init-postgresql" = {
         key = "init-postgresql";

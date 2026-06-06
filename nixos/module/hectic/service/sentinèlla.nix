@@ -147,7 +147,7 @@ in {
 
     (lib.mkIf cfg.watcher.enable {
       sops.secrets."sentinèlla/watcher/environment" = lib.mkDefault {
-        sopsFile = "${flake}/sus/sentinella-default.yaml";
+        sopsFile = flake + "/sus/sentinella-default.yaml";
       };
 
       systemd.services."sentinella-watcher" = {
