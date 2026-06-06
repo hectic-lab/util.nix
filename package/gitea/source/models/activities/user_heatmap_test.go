@@ -12,9 +12,11 @@ import (
 	activities_model "code.gitea.io/gitea/models/activities"
 	"code.gitea.io/gitea/models/db"
 	"code.gitea.io/gitea/models/organization"
+	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/json"
+	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -33,7 +35,11 @@ func TestGetUserHeatmapDataByUser(t *testing.T) {
 	insertHeatmapContribution(t, 2, 1, "user2-public-author-date", 1603009800)
 	insertHeatmapContribution(t, 2, 1, "user2-public-same-bucket", 1603009850)
 	insertHeatmapContribution(t, 2, 2, "user2-private-hidden", 1603010700)
+	insertHeatmapContribution(t, 2, 4, "user2-hidden-owner-hidden", 1603010700)
+	insertHeatmapContribution(t, 2, 1, "user2-future-hidden", timeutil.TimeStampNow()+900)
+	insertHeatmapContribution(t, 2, 999999, "user2-deleted-repo-hidden", 1603011600)
 	insertHeatmapContribution(t, 3, 1, "other-author-ignored", 1603010700)
+	setUserVisibility(t, 5, structs.VisibleTypePrivate)
 
 	testCases := []struct {
 		desc        string
@@ -83,6 +89,38 @@ func TestGetUserHeatmapDataByUser(t *testing.T) {
 			assert.JSONEq(t, tc.JSONResult, string(jsonData))
 		})
 	}
+}
+
+func TestGetUserHeatmapDataByUserUsesCurrentRepoVisibility(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	require.NoError(t, db.TruncateBeans(t.Context(), &activities_model.HeatmapContribution{}))
+	require.NoError(t, user_model.SetIncludePrivateContributions(t.Context(), 2, false))
+
+	timeutil.MockSet(time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
+	defer timeutil.MockUnset()
+
+	insertHeatmapContribution(t, 2, 1, "user2-visibility-flip", 1603009800)
+
+	target := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	heatmap, err := activities_model.GetUserHeatmapDataByUser(t.Context(), target, nil)
+	require.NoError(t, err)
+	assertHeatmapJSON(t, heatmap, `[{
+		"timestamp": 1603009800,
+		"contributions": 1
+	}]`)
+
+	setRepoPrivate(t, 1, true)
+	heatmap, err = activities_model.GetUserHeatmapDataByUser(t.Context(), target, nil)
+	require.NoError(t, err)
+	assert.Empty(t, heatmap)
+
+	require.NoError(t, user_model.SetIncludePrivateContributions(t.Context(), 2, true))
+	heatmap, err = activities_model.GetUserHeatmapDataByUser(t.Context(), target, nil)
+	require.NoError(t, err)
+	assertHeatmapJSON(t, heatmap, `[{
+		"timestamp": 1603009800,
+		"contributions": 1
+	}]`)
 }
 
 func TestGetUserHeatmapDataByOrgTeam(t *testing.T) {
@@ -136,9 +174,7 @@ func TestUserHeatmapPrivateContributionsOptIn(t *testing.T) {
 	require.NoError(t, user_model.SetIncludePrivateContributions(t.Context(), 16, true))
 	heatmap, err := activities_model.GetUserHeatmapDataByUser(t.Context(), target, nil)
 	require.NoError(t, err)
-	jsonData, err := json.Marshal(heatmap)
-	require.NoError(t, err)
-	assert.JSONEq(t, `[{"timestamp":1603009800,"contributions":2},{"timestamp":1603010700,"contributions":1}]`, string(jsonData))
+	assertHeatmapJSON(t, heatmap, `[{"timestamp":1603009800,"contributions":2},{"timestamp":1603010700,"contributions":1}]`)
 
 	target.KeepActivityPrivate = true
 	_, err = db.GetEngine(t.Context()).ID(target.ID).Cols("keep_activity_private").Update(target)
@@ -170,6 +206,41 @@ func insertHeatmapContribution(t *testing.T, userID, repoID int64, commitSHA str
 		AuthorEmail: fmt.Sprintf("user%d@example.com", userID),
 		AuthorUnix:  authorUnix,
 	}))
+}
+
+func setRepoPrivate(t *testing.T, repoID int64, isPrivate bool) {
+	t.Helper()
+	repo := &repo_model.Repository{ID: repoID, IsPrivate: isPrivate}
+	_, err := db.GetEngine(t.Context()).ID(repoID).Cols("is_private").Update(repo)
+	require.NoError(t, err)
+}
+
+func setUserVisibility(t *testing.T, userID int64, visibility structs.VisibleType) {
+	t.Helper()
+	user := &user_model.User{ID: userID, Visibility: visibility}
+	_, err := db.GetEngine(t.Context()).ID(userID).Cols("visibility").Update(user)
+	require.NoError(t, err)
+}
+
+func assertHeatmapJSON(t *testing.T, heatmap []*activities_model.UserHeatmapData, expected string) {
+	t.Helper()
+	jsonData, err := json.Marshal(heatmap)
+	require.NoError(t, err)
+	assert.JSONEq(t, expected, string(jsonData))
+
+	var decoded []map[string]any
+	require.NoError(t, json.Unmarshal(jsonData, &decoded))
+	for _, entry := range decoded {
+		assert.ElementsMatch(t, []string{"timestamp", "contributions"}, mapKeys(entry))
+	}
+}
+
+func mapKeys[K comparable, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func countHeatmapContributions(heatmap []*activities_model.UserHeatmapData) int {
