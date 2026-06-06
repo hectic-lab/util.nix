@@ -15,6 +15,10 @@
 
 let
   pnpm = pnpm_10;
+  patchDir = ./patches;
+  patches = if builtins.pathExists patchDir then map (name: patchDir + "/${name}") (
+    builtins.filter (name: lib.hasSuffix ".patch" name) (builtins.attrNames (builtins.readDir patchDir))
+  ) else [ ];
   noPhoningHome = {
     disable_guests = true;
   };
@@ -31,6 +35,8 @@ let
       tag = "v${finalAttrs.version}";
       hash = "sha256-pbzuPgKJ0DmrDSTO7ZTDArX+Xr9k/ndAGZvQg2kMTMQ=";
     };
+
+    inherit patches;
 
     pnpmDeps = fetchPnpmDeps {
       pname = "element";

@@ -1,0 +1,201 @@
+diff --git a/apps/web/src/components/views/rooms/MessageComposer.tsx b/apps/web/src/components/views/rooms/MessageComposer.tsx
+index eea76b7..3483c28 100644
+--- a/apps/web/src/components/views/rooms/MessageComposer.tsx
++++ b/apps/web/src/components/views/rooms/MessageComposer.tsx
+@@ -629,6 +629,9 @@ export class MessageComposer extends React.Component<IProps, IState> {
+                     key="controls_video_record"
+                     ref={this.videoRecordingButton}
+                     onRecordingStateChange={this.onVideoRecordingStateChange}
++                    relation={this.props.relation}
++                    replyToEvent={this.props.replyToEvent}
++                    room={this.props.room}
+                 />,
+             );
+         } else if (this.context.tombstone) {
+diff --git a/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx b/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
+index c5f0adc..851c64e 100644
+--- a/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
++++ b/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
+@@ -6,22 +6,39 @@ Please see LICENSE files in the repository root for full details.
+ */
+ 
+ import React, { type ReactNode } from "react";
++import { type IEventRelation, type MatrixEvent, type Room } from "matrix-js-sdk/src/matrix";
+ import { logger } from "matrix-js-sdk/src/logger";
+ import { DeleteIcon, SendSolidIcon, StopSolidIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
+ 
+ import { _t } from "../../../languageHandler";
++import { MatrixClientPeg } from "../../../MatrixClientPeg";
++import ContentMessages from "../../../ContentMessages";
+ import AccessibleButton from "../elements/AccessibleButton";
+ 
+ interface IProps {
+     onRecordingStateChange: (haveVideoRecording: boolean) => void;
++    relation?: IEventRelation;
++    replyToEvent?: MatrixEvent;
++    room: Room;
+ }
+ 
+ interface IState {
+     error?: string;
+     isRecording: boolean;
++    isSending: boolean;
+     previewUrl?: string;
+ }
+ 
++const PREFERRED_VIDEO_MIME_TYPES = ["video/webm;codecs=vp8,opus", "video/webm"];
++
++function preferredVideoMimeType(): string | undefined {
++    for (const mimeType of PREFERRED_VIDEO_MIME_TYPES) {
++        if (MediaRecorder.isTypeSupported(mimeType)) {
++            return mimeType;
++        }
++    }
++}
++
+ export function isVideoMessageRecorderSupported(): boolean {
+     return (
+         typeof window !== "undefined" &&
+@@ -37,6 +54,7 @@ export function isVideoMessageRecorderSupported(): boolean {
+ export default class VideoRecordComposerTile extends React.PureComponent<IProps, IState> {
+     private chunks: Blob[] = [];
+     private mediaRecorder?: MediaRecorder;
++    private recordedFile?: File;
+     private stream?: MediaStream;
+     private isRequestingMedia = false;
+     private isUnmounted = false;
+@@ -47,6 +65,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+ 
+         this.state = {
+             isRecording: false,
++            isSending: false,
+         };
+     }
+ 
+@@ -78,6 +97,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+         this.isRequestingMedia = true;
+         this.shouldDiscardRecording = false;
+         this.revokePreviewUrl();
++        this.recordedFile = undefined;
+         this.chunks = [];
+ 
+         try {
+@@ -88,7 +108,8 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+             }
+ 
+             this.stream = stream;
+-            const mediaRecorder = new MediaRecorder(stream);
++            const mimeType = preferredVideoMimeType();
++            const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+ 
+             mediaRecorder.ondataavailable = (ev: BlobEvent): void => {
+                 if (ev.data.size > 0) {
+@@ -104,13 +125,18 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+             this.mediaRecorder = mediaRecorder;
+             mediaRecorder.start();
+ 
+-            this.setState({ error: undefined, isRecording: true, previewUrl: undefined });
++            this.setState({ error: undefined, isRecording: true, isSending: false, previewUrl: undefined });
+             this.props.onRecordingStateChange(true);
+         } catch (e) {
+             logger.error("Error starting video message recording:", e);
+             this.stopStream();
+             if (!this.isUnmounted) {
+-                this.setState({ error: _t("composer|video_message_error"), isRecording: false, previewUrl: undefined });
++                this.setState({
++                    error: _t("composer|video_message_error"),
++                    isRecording: false,
++                    isSending: false,
++                    previewUrl: undefined,
++                });
+                 this.props.onRecordingStateChange(false);
+             }
+         } finally {
+@@ -129,6 +155,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+     };
+ 
+     private onRecorderStop = (): void => {
++        const mimeType = this.mediaRecorder?.mimeType;
+         const shouldDiscardRecording = this.shouldDiscardRecording;
+         const hasRecording = this.chunks.length > 0 && !shouldDiscardRecording;
+ 
+@@ -142,29 +169,63 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+ 
+         if (!hasRecording) {
+             this.chunks = [];
+-            this.setState({ isRecording: false, previewUrl: undefined });
++            this.recordedFile = undefined;
++            this.setState({ isRecording: false, isSending: false, previewUrl: undefined });
+             this.props.onRecordingStateChange(false);
+             return;
+         }
+ 
+-        const blob = new Blob(this.chunks, { type: this.chunks[0]?.type || "video/webm" });
+-        const previewUrl = URL.createObjectURL(blob);
++        const blob = new Blob(this.chunks, { type: mimeType || this.chunks[0]?.type || "video/webm" });
++        const file = new File([blob], `video-message-${Date.now()}.webm`, { type: blob.type || "video/webm" });
++        const previewUrl = URL.createObjectURL(file);
+ 
+         this.chunks = [];
++        this.recordedFile = file;
+         this.revokePreviewUrl();
+-        this.setState({ isRecording: false, previewUrl });
++        this.setState({ isRecording: false, isSending: false, previewUrl });
+         this.props.onRecordingStateChange(true);
+     };
+ 
++    private onSend = async (): Promise<void> => {
++        if (!this.recordedFile || this.state.isSending) return;
++
++        this.setState({ isSending: true });
++
++        try {
++            await ContentMessages.sharedInstance().sendContentToRoom(
++                this.recordedFile,
++                this.props.room.roomId,
++                this.props.relation,
++                MatrixClientPeg.safeGet(),
++                this.props.replyToEvent,
++            );
++            this.clearRecording();
++            this.props.onRecordingStateChange(false);
++        } catch (e) {
++            logger.error("Error sending video message recording:", e);
++            if (!this.isUnmounted) {
++                this.setState({ error: _t("composer|video_message_error"), isSending: false });
++            }
++        }
++    };
++
+     private onCancel = (): void => {
+         this.shouldDiscardRecording = true;
+         this.disposeRecording();
+-        this.setState({ error: undefined, isRecording: false, previewUrl: undefined });
++        this.setState({ error: undefined, isRecording: false, isSending: false, previewUrl: undefined });
+         this.props.onRecordingStateChange(false);
+     };
+ 
++    private clearRecording(): void {
++        this.chunks = [];
++        this.recordedFile = undefined;
++        this.revokePreviewUrl();
++        this.setState({ error: undefined, isRecording: false, isSending: false, previewUrl: undefined });
++    }
++
+     private disposeRecording(): void {
+         this.chunks = [];
++        this.recordedFile = undefined;
+         this.stopStream();
+         this.revokePreviewUrl();
+ 
+@@ -209,8 +270,8 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+             <AccessibleButton
+                 className="mx_VoiceRecordComposerTile_stop"
+                 data-testid="video-message-send-button"
+-                disabled={true}
+-                onClick={null}
++                disabled={!this.recordedFile || this.state.isSending}
++                onClick={this.onSend}
+                 title={_t("composer|send_video_message")}
+             >
+                 <SendSolidIcon />

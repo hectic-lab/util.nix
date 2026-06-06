@@ -1,0 +1,481 @@
+diff --git a/apps/web/src/IConfigOptions.ts b/apps/web/src/IConfigOptions.ts
+index a3a6a32..c61c24f 100644
+--- a/apps/web/src/IConfigOptions.ts
++++ b/apps/web/src/IConfigOptions.ts
+@@ -105,6 +105,15 @@ export interface IConfigOptions {
+     show_labs_settings: boolean;
+     features?: Record<string, boolean>; // <FeatureName, EnabledBool>
+ 
++    hectic?: {
++        // This local package config intentionally uses the documented camelCase path
++        // `hectic.videoMessages.enabled`.
++        // eslint-disable-next-line @typescript-eslint/naming-convention
++        videoMessages?: {
++            enabled?: boolean;
++        };
++    };
++
+     /**
+      * Bug report endpoint URL. "local" means the logs should not be uploaded.
+      */
+diff --git a/apps/web/src/SdkConfig.ts b/apps/web/src/SdkConfig.ts
+index 4be6464..9f48743 100644
+--- a/apps/web/src/SdkConfig.ts
++++ b/apps/web/src/SdkConfig.ts
+@@ -28,6 +28,12 @@ export const DEFAULTS: DeepReadonly<IConfigOptions> = {
+     integrations_ui_url: "https://scalar.vector.im/",
+     integrations_rest_url: "https://scalar.vector.im/api",
+     show_labs_settings: false,
++    hectic: {
++        // eslint-disable-next-line @typescript-eslint/naming-convention
++        videoMessages: {
++            enabled: false,
++        },
++    },
+     force_verification: false,
+ 
+     jitsi: {
+diff --git a/apps/web/src/components/views/rooms/MessageComposer.tsx b/apps/web/src/components/views/rooms/MessageComposer.tsx
+index 06c843f..eea76b7 100644
+--- a/apps/web/src/components/views/rooms/MessageComposer.tsx
++++ b/apps/web/src/components/views/rooms/MessageComposer.tsx
+@@ -33,6 +33,7 @@ import ReplyPreview from "./ReplyPreview";
+ import { UserIdentityWarning } from "./UserIdentityWarning";
+ import { UPDATE_EVENT } from "../../../stores/AsyncStore";
+ import VoiceRecordComposerTile from "./VoiceRecordComposerTile";
++import VideoRecordComposerTile from "./VideoRecordComposerTile";
+ import { VoiceRecordingStore } from "../../../stores/VoiceRecordingStore";
+ import { RecordingState } from "../../../audio/VoiceRecording";
+ import type ResizeNotifier from "../../../utils/ResizeNotifier";
+@@ -92,6 +93,7 @@ interface IState {
+     composerContent: string;
+     isComposerEmpty: boolean;
+     haveRecording: boolean;
++    haveVideoRecording: boolean;
+     recordingTimeLeftSeconds?: number;
+     me?: RoomMember;
+     isMenuOpen: boolean;
+@@ -113,6 +115,7 @@ export class MessageComposer extends React.Component<IProps, IState> {
+     private dispatcherRef?: string;
+     private messageComposerInput = createRef<SendMessageComposerClass>();
+     private voiceRecordingButton = createRef<VoiceRecordComposerTile>();
++    private videoRecordingButton = createRef<VideoRecordComposerTile>();
+     private ref = createRef<HTMLDivElement>();
+     private instanceId: number;
+ 
+@@ -144,6 +147,7 @@ export class MessageComposer extends React.Component<IProps, IState> {
+             isComposerEmpty: initialComposerContent?.length === 0,
+             composerContent: initialComposerContent,
+             haveRecording: false,
++            haveVideoRecording: false,
+             recordingTimeLeftSeconds: undefined, // when set to a number, shows a toast
+             isMenuOpen: false,
+             isStickerPickerOpen: false,
+@@ -526,6 +530,18 @@ export class MessageComposer extends React.Component<IProps, IState> {
+         }
+     };
+ 
++    private onVideoRecordStartClick = (): void => {
++        this.videoRecordingButton.current?.onRecordStartEndClick();
++
++        if (this.context.narrow) {
++            this.toggleButtonMenu();
++        }
++    };
++
++    private onVideoRecordingStateChange = (haveVideoRecording: boolean): void => {
++        this.setState({ haveVideoRecording });
++    };
++
+     public render(): React.ReactNode {
+         let leftIcon: false | JSX.Element = false;
+         if (!this.state.isWysiwygLabEnabled) {
+@@ -561,13 +577,14 @@ export class MessageComposer extends React.Component<IProps, IState> {
+         const menuPosition = this.getMenuPosition();
+ 
+         const canSendMessages = this.context.canSendMessages && !this.context.tombstone;
++        const hasActiveRecording = this.state.haveRecording || this.state.haveVideoRecording;
+         let composer: ReactNode;
+         if (canSendMessages) {
+             if (this.state.isWysiwygLabEnabled && menuPosition) {
+                 composer = (
+                     <SendWysiwygComposer
+                         key="controls_input"
+-                        disabled={this.state.haveRecording}
++                        disabled={hasActiveRecording}
+                         onChange={this.onWysiwygChange}
+                         onSend={this.sendMessage}
+                         isRichTextEnabled={this.state.isRichTextEnabled}
+@@ -588,7 +605,7 @@ export class MessageComposer extends React.Component<IProps, IState> {
+                         relation={this.props.relation}
+                         replyToEvent={this.props.replyToEvent}
+                         onChange={this.onChange}
+-                        disabled={this.state.haveRecording}
++                        disabled={hasActiveRecording}
+                         toggleStickerPickerOpen={this.toggleStickerPickerOpen}
+                     />
+                 );
+@@ -608,6 +625,11 @@ export class MessageComposer extends React.Component<IProps, IState> {
+                         replyToEvent={this.props.replyToEvent}
+                     />
+                 </Tooltip>,
++                <VideoRecordComposerTile
++                    key="controls_video_record"
++                    ref={this.videoRecordingButton}
++                    onRecordingStateChange={this.onVideoRecordingStateChange}
++                />,
+             );
+         } else if (this.context.tombstone) {
+             const replacementRoomId = this.context.tombstone.getContent()["replacement_room"];
+@@ -688,12 +710,13 @@ export class MessageComposer extends React.Component<IProps, IState> {
+                             {canSendMessages && (
+                                 <MessageComposerButtons
+                                     addEmoji={this.addEmoji}
+-                                    haveRecording={this.state.haveRecording}
++                                    haveRecording={hasActiveRecording}
+                                     isMenuOpen={this.state.isMenuOpen}
+                                     isStickerPickerOpen={this.state.isStickerPickerOpen}
+                                     menuPosition={menuPosition}
+                                     relation={this.props.relation}
+                                     onRecordStartEndClick={this.onRecordStartEndClick}
++                                    onVideoRecordStartClick={this.onVideoRecordStartClick}
+                                     setStickerPickerOpen={this.setStickerPickerOpen}
+                                     showLocationButton={
+                                         !window.electron && SettingsStore.getValue(UIFeature.LocationSharing)
+diff --git a/apps/web/src/components/views/rooms/MessageComposerButtons.tsx b/apps/web/src/components/views/rooms/MessageComposerButtons.tsx
+index 6f4f5d1..0c1b7ff 100644
+--- a/apps/web/src/components/views/rooms/MessageComposerButtons.tsx
++++ b/apps/web/src/components/views/rooms/MessageComposerButtons.tsx
+@@ -44,6 +44,8 @@ import { useSettingValue } from "../../../hooks/useSettings";
+ import AccessibleButton, { type ButtonEvent } from "../elements/AccessibleButton";
+ import { useScopedRoomContext } from "../../../contexts/ScopedRoomContext.tsx";
+ import { useRoomUploadViewModel } from "../../../viewmodels/room/RoomUploadViewModel.tsx";
++import SdkConfig from "../../../SdkConfig";
++import { isVideoMessageRecorderSupported } from "./VideoRecordComposerTile";
+ 
+ interface IProps {
+     addEmoji: (emoji: string) => boolean;
+@@ -52,6 +54,7 @@ interface IProps {
+     isStickerPickerOpen: boolean;
+     menuPosition?: MenuProps;
+     onRecordStartEndClick: () => void;
++    onVideoRecordStartClick: () => void;
+     relation?: IEventRelation;
+     setStickerPickerOpen: (isStickerPickerOpen: boolean) => void;
+     showLocationButton: boolean;
+@@ -103,6 +106,7 @@ const MessageComposerButtons: React.FC<IProps> = (props: IProps) => {
+             )),
+             showStickersButton(props),
+             voiceRecordingButton(props, narrow),
++            videoRecordingButton(props, narrow),
+             props.showPollsButton ? pollButton(room, props.relation) : null,
+             showLocationButton(props, room, matrixClient),
+         ];
+@@ -122,6 +126,7 @@ const MessageComposerButtons: React.FC<IProps> = (props: IProps) => {
+         moreButtons = [
+             showStickersButton(props),
+             voiceRecordingButton(props, narrow),
++            videoRecordingButton(props, narrow),
+             props.showPollsButton ? pollButton(room, props.relation) : null,
+             showLocationButton(props, room, matrixClient),
+         ];
+@@ -203,6 +208,25 @@ function voiceRecordingButton(props: IProps, narrow: boolean): ReactElement | nu
+     );
+ }
+ 
++function videoRecordingButton(props: IProps, narrow: boolean): ReactElement | null {
++    // The current recorder skeleton follows the voice recorder and stays out of narrow mode.
++    if (narrow || SdkConfig.get("hectic")?.videoMessages?.enabled !== true || !isVideoMessageRecorderSupported()) {
++        return null;
++    }
++
++    return (
++        <CollapsibleButton
++            key="video_message_send"
++            className="mx_MessageComposer_button"
++            data-testid="video-message-button"
++            onClick={props.onVideoRecordStartClick}
++            title={_t("composer|video_message_button")}
++        >
++            <span aria-hidden="true">●</span>
++        </CollapsibleButton>
++    );
++}
++
+ function pollButton(room: Room, relation?: IEventRelation): ReactElement {
+     return <PollButton key="polls" room={room} relation={relation} />;
+ }
+diff --git a/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx b/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
+new file mode 100644
+index 0000000..c5f0adc
+--- /dev/null
++++ b/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
+@@ -0,0 +1,249 @@
++/*
++Copyright 2026 Element Creations Ltd.
++
++SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
++Please see LICENSE files in the repository root for full details.
++*/
++
++import React, { type ReactNode } from "react";
++import { logger } from "matrix-js-sdk/src/logger";
++import { DeleteIcon, SendSolidIcon, StopSolidIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
++
++import { _t } from "../../../languageHandler";
++import AccessibleButton from "../elements/AccessibleButton";
++
++interface IProps {
++    onRecordingStateChange: (haveVideoRecording: boolean) => void;
++}
++
++interface IState {
++    error?: string;
++    isRecording: boolean;
++    previewUrl?: string;
++}
++
++export function isVideoMessageRecorderSupported(): boolean {
++    return (
++        typeof window !== "undefined" &&
++        typeof MediaRecorder !== "undefined" &&
++        typeof navigator !== "undefined" &&
++        !!navigator.mediaDevices?.getUserMedia
++    );
++}
++
++/**
++ * Container tile for rendering the config-gated video message recorder skeleton in the composer.
++ */
++export default class VideoRecordComposerTile extends React.PureComponent<IProps, IState> {
++    private chunks: Blob[] = [];
++    private mediaRecorder?: MediaRecorder;
++    private stream?: MediaStream;
++    private isRequestingMedia = false;
++    private isUnmounted = false;
++    private shouldDiscardRecording = false;
++
++    public constructor(props: IProps) {
++        super(props);
++
++        this.state = {
++            isRecording: false,
++        };
++    }
++
++    public componentWillUnmount(): void {
++        this.isUnmounted = true;
++        this.disposeRecording();
++    }
++
++    public onRecordStartEndClick = async (): Promise<void> => {
++        if (this.state.isRecording) {
++            this.stopRecording();
++            return;
++        }
++
++        await this.startRecording();
++    };
++
++    private startRecording = async (): Promise<void> => {
++        if (this.isRequestingMedia || this.mediaRecorder) return;
++
++        if (!isVideoMessageRecorderSupported()) {
++            if (!this.isUnmounted) {
++                this.setState({ error: _t("composer|video_message_error") });
++                this.props.onRecordingStateChange(false);
++            }
++            return;
++        }
++
++        this.isRequestingMedia = true;
++        this.shouldDiscardRecording = false;
++        this.revokePreviewUrl();
++        this.chunks = [];
++
++        try {
++            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
++            if (this.isUnmounted) {
++                stream.getTracks().forEach((track) => track.stop());
++                return;
++            }
++
++            this.stream = stream;
++            const mediaRecorder = new MediaRecorder(stream);
++
++            mediaRecorder.ondataavailable = (ev: BlobEvent): void => {
++                if (ev.data.size > 0) {
++                    this.chunks.push(ev.data);
++                }
++            };
++            mediaRecorder.onerror = (ev: Event): void => {
++                logger.error("Error recording video message:", ev);
++                this.setState({ error: _t("composer|video_message_error") });
++            };
++            mediaRecorder.onstop = this.onRecorderStop;
++
++            this.mediaRecorder = mediaRecorder;
++            mediaRecorder.start();
++
++            this.setState({ error: undefined, isRecording: true, previewUrl: undefined });
++            this.props.onRecordingStateChange(true);
++        } catch (e) {
++            logger.error("Error starting video message recording:", e);
++            this.stopStream();
++            if (!this.isUnmounted) {
++                this.setState({ error: _t("composer|video_message_error"), isRecording: false, previewUrl: undefined });
++                this.props.onRecordingStateChange(false);
++            }
++        } finally {
++            this.isRequestingMedia = false;
++        }
++    };
++
++    private stopRecording = (): void => {
++        if (!this.mediaRecorder) return;
++
++        if (this.mediaRecorder.state === "inactive") {
++            this.onRecorderStop();
++        } else {
++            this.mediaRecorder.stop();
++        }
++    };
++
++    private onRecorderStop = (): void => {
++        const shouldDiscardRecording = this.shouldDiscardRecording;
++        const hasRecording = this.chunks.length > 0 && !shouldDiscardRecording;
++
++        this.mediaRecorder = undefined;
++        this.stopStream();
++
++        if (this.isUnmounted) {
++            this.chunks = [];
++            return;
++        }
++
++        if (!hasRecording) {
++            this.chunks = [];
++            this.setState({ isRecording: false, previewUrl: undefined });
++            this.props.onRecordingStateChange(false);
++            return;
++        }
++
++        const blob = new Blob(this.chunks, { type: this.chunks[0]?.type || "video/webm" });
++        const previewUrl = URL.createObjectURL(blob);
++
++        this.chunks = [];
++        this.revokePreviewUrl();
++        this.setState({ isRecording: false, previewUrl });
++        this.props.onRecordingStateChange(true);
++    };
++
++    private onCancel = (): void => {
++        this.shouldDiscardRecording = true;
++        this.disposeRecording();
++        this.setState({ error: undefined, isRecording: false, previewUrl: undefined });
++        this.props.onRecordingStateChange(false);
++    };
++
++    private disposeRecording(): void {
++        this.chunks = [];
++        this.stopStream();
++        this.revokePreviewUrl();
++
++        if (this.mediaRecorder) {
++            this.mediaRecorder.ondataavailable = null;
++            this.mediaRecorder.onerror = null;
++            this.mediaRecorder.onstop = null;
++
++            if (this.mediaRecorder.state !== "inactive") {
++                this.mediaRecorder.stop();
++            }
++            this.mediaRecorder = undefined;
++        }
++    }
++
++    private stopStream(): void {
++        this.stream?.getTracks().forEach((track) => track.stop());
++        this.stream = undefined;
++    }
++
++    private revokePreviewUrl(): void {
++        if (this.state.previewUrl) {
++            URL.revokeObjectURL(this.state.previewUrl);
++        }
++    }
++
++    public render(): ReactNode {
++        if (!this.state.isRecording && !this.state.previewUrl && !this.state.error) return null;
++
++        const stopButton = this.state.isRecording ? (
++            <AccessibleButton
++                className="mx_VoiceRecordComposerTile_stop"
++                data-testid="video-message-stop-button"
++                onClick={this.onRecordStartEndClick}
++                title={_t("composer|stop_video_message")}
++            >
++                <StopSolidIcon />
++            </AccessibleButton>
++        ) : null;
++
++        const sendButton = this.state.previewUrl ? (
++            <AccessibleButton
++                className="mx_VoiceRecordComposerTile_stop"
++                data-testid="video-message-send-button"
++                disabled={true}
++                onClick={null}
++                title={_t("composer|send_video_message")}
++            >
++                <SendSolidIcon />
++            </AccessibleButton>
++        ) : null;
++
++        return (
++            <>
++                {this.state.error && (
++                    <span className="mx_VoiceRecordComposerTile_failedState" data-testid="video-message-error">
++                        {this.state.error}
++                    </span>
++                )}
++                <AccessibleButton
++                    className="mx_VoiceRecordComposerTile_delete"
++                    data-testid="video-message-cancel-button"
++                    onClick={this.onCancel}
++                    title={_t("composer|video_message_cancel")}
++                >
++                    <DeleteIcon />
++                </AccessibleButton>
++                {stopButton}
++                {sendButton}
++                {this.state.previewUrl && (
++                    <video
++                        aria-label={_t("composer|video_message_preview")}
++                        className="mx_VoiceMessagePrimaryContainer"
++                        controls={true}
++                        data-testid="video-message-preview"
++                        src={this.state.previewUrl}
++                    />
++                )}
++            </>
++        );
++    }
++}
+diff --git a/apps/web/src/i18n/strings/en_EN.json b/apps/web/src/i18n/strings/en_EN.json
+index 4ed51db..e11fe90 100644
+--- a/apps/web/src/i18n/strings/en_EN.json
++++ b/apps/web/src/i18n/strings/en_EN.json
+@@ -641,8 +641,14 @@
+         "room_upgraded_notice": "This room has been replaced and is no longer active.",
+         "send_button_title": "Send message",
+         "send_button_voice_message": "Send voice message",
++        "send_video_message": "Send video message",
+         "send_voice_message": "Send voice message",
++        "stop_video_message": "Stop video recording",
+         "stop_voice_message": "Stop recording",
++        "video_message_button": "Record video message",
++        "video_message_cancel": "Cancel video message",
++        "video_message_error": "Unable to record video message",
++        "video_message_preview": "Video message preview",
+         "voice_message_button": "Voice Message"
+     },
+     "console_dev_note": "If you know what you're doing, Element is open-source, be sure to check out our GitHub (https://github.com/vector-im/element-web/) and contribute!",

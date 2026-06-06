@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Element Web video recorder harness</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 2rem;
+      }
+
+      main {
+        max-width: 42rem;
+      }
+
+      button,
+      textarea {
+        margin: 0.25rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Element Web video recorder harness</h1>
+      <label for="composer">Message composer</label>
+      <textarea id="composer" aria-label="Message composer" rows="3"></textarea>
+      <div id="buttons" aria-label="Composer actions"></div>
+      <div id="tile" aria-live="polite"></div>
+    </main>
+    <script>
+      (() => {
+        const params = new URLSearchParams(window.location.search);
+        const config = window.__videoHarnessConfig || {};
+        const scenario = config.scenario || params.get("scenario") || "enabled";
+        const enabled = config.enabled ?? params.get("enabled") === "true";
+
+        const state = {
+          chunks: [],
+          mediaRecorder: undefined,
+          previewUrl: undefined,
+          recordedFile: undefined,
+          stream: undefined,
+        };
+
+        window.__videoHarness = {
+          acquiredTrackCount: 0,
+          contentMessagesBoundary: "ContentMessages.sharedInstance().sendContentToRoom",
+          fallbackChunkUsed: false,
+          getUserMediaConstraints: [],
+          mediaSource: undefined,
+          sendCalls: [],
+          stoppedTrackCount: 0,
+        };
+
+        function createSyntheticStream() {
+          const canvas = document.createElement("canvas");
+          canvas.width = 32;
+          canvas.height = 32;
+          const context = canvas.getContext("2d");
+          context.fillStyle = "#4361ee";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          window.__videoHarness.mediaSource = "synthetic-canvas";
+          return canvas.captureStream(10);
+        }
+
+        if (scenario !== "unsupported" && !navigator.mediaDevices) {
+          Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {} });
+        }
+
+        if (scenario !== "unsupported" && typeof MediaRecorder === "undefined") {
+          class HarnessMediaRecorder extends EventTarget {
+            static isTypeSupported(mimeType) {
+              return mimeType.startsWith("video/");
+            }
+
+            constructor(_stream, options = {}) {
+              super();
+              this.mimeType = options.mimeType || "video/webm";
+              this.ondataavailable = null;
+              this.onerror = null;
+              this.onstop = null;
+              this.state = "inactive";
+            }
+
+            start() {
+              this.state = "recording";
+            }
+
+            requestData() {
+              if (this.state === "inactive") return;
+              const event = new BlobEvent("dataavailable", {
+                data: new Blob(["video-recorder-harness-mediarecorder"], { type: this.mimeType }),
+              });
+              this.ondataavailable?.(event);
+              this.dispatchEvent(event);
+            }
+
+            stop() {
+              if (this.state === "inactive") return;
+              this.requestData();
+              this.state = "inactive";
+              const event = new Event("stop");
+              this.onstop?.(event);
+              this.dispatchEvent(event);
+            }
+          }
+
+          Object.defineProperty(window, "MediaRecorder", { configurable: true, value: HarnessMediaRecorder });
+        }
+
+        if (scenario === "unsupported") {
+          Object.defineProperty(window, "MediaRecorder", { configurable: true, value: undefined });
+          Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+        } else if (scenario === "permission-denied") {
+          navigator.mediaDevices.getUserMedia = async (constraints) => {
+            window.__videoHarness.getUserMediaConstraints.push(constraints);
+            throw new DOMException("Camera permission denied", "NotAllowedError");
+          };
+        } else {
+          navigator.mediaDevices.getUserMedia = async (constraints) => {
+            window.__videoHarness.getUserMediaConstraints.push(constraints);
+            const stream = createSyntheticStream();
+            stream.getTracks().forEach((track) => {
+              window.__videoHarness.acquiredTrackCount += 1;
+              const originalStop = track.stop.bind(track);
+              track.stop = () => {
+                if (track.__videoHarnessStopped !== true) {
+                  track.__videoHarnessStopped = true;
+                  window.__videoHarness.stoppedTrackCount += 1;
+                }
+                originalStop();
+              };
+            });
+            return stream;
+          };
+        }
+
+        function isVideoMessageRecorderSupported() {
+          return (
+            typeof window !== "undefined" &&
+            typeof MediaRecorder !== "undefined" &&
+            typeof navigator !== "undefined" &&
+            !!navigator.mediaDevices?.getUserMedia
+          );
+        }
+
+        function setComposerDisabled(disabled) {
+          document.querySelector("#composer").disabled = disabled;
+        }
+
+        function revokePreviewUrl() {
+          if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+          state.previewUrl = undefined;
+        }
+
+        function stopStream() {
+          state.stream?.getTracks().forEach((track) => track.stop());
+          state.stream = undefined;
+        }
+
+        function renderTile({ error, isRecording } = {}) {
+          const tile = document.querySelector("#tile");
+          tile.textContent = "";
+
+          if (!error && !isRecording && !state.previewUrl) {
+            setComposerDisabled(false);
+            return;
+          }
+
+          setComposerDisabled(Boolean(isRecording || state.previewUrl));
+
+          if (error) {
+            const span = document.createElement("span");
+            span.dataset.testid = "video-message-error";
+            span.textContent = error;
+            tile.append(span);
+          }
+
+          const cancelButton = document.createElement("button");
+          cancelButton.dataset.testid = "video-message-cancel-button";
+          cancelButton.type = "button";
+          cancelButton.textContent = "Cancel video message";
+          cancelButton.addEventListener("click", cancelRecording);
+          tile.append(cancelButton);
+
+          if (isRecording) {
+            const stopButton = document.createElement("button");
+            stopButton.dataset.testid = "video-message-stop-button";
+            stopButton.type = "button";
+            stopButton.textContent = "Stop video recording";
+            stopButton.addEventListener("click", stopRecording);
+            tile.append(stopButton);
+          }
+
+          if (state.previewUrl) {
+            const sendButton = document.createElement("button");
+            sendButton.dataset.testid = "video-message-send-button";
+            sendButton.type = "button";
+            sendButton.textContent = "Send video message";
+            sendButton.addEventListener("click", sendRecording);
+            tile.append(sendButton);
+
+            const preview = document.createElement("video");
+            preview.controls = true;
+            preview.dataset.testid = "video-message-preview";
+            preview.setAttribute("aria-label", "Video message preview");
+            preview.src = state.previewUrl;
+            tile.append(preview);
+          }
+        }
+
+        async function startRecording() {
+          if (!isVideoMessageRecorderSupported()) {
+            renderTile();
+            return;
+          }
+
+          revokePreviewUrl();
+          state.chunks = [];
+          state.recordedFile = undefined;
+
+          try {
+            state.stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const mediaRecorder = new MediaRecorder(state.stream, { mimeType: "video/webm" });
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) state.chunks.push(event.data);
+            };
+            mediaRecorder.onstop = onRecorderStop;
+            state.mediaRecorder = mediaRecorder;
+            mediaRecorder.start(100);
+            renderTile({ isRecording: true });
+          } catch (error) {
+            stopStream();
+            const denied = error instanceof DOMException && ["NotAllowedError", "PermissionDeniedError"].includes(error.name);
+            renderTile({ error: denied ? "Camera permission denied" : "Unable to record video message" });
+          }
+        }
+
+        function stopRecording() {
+          if (!state.mediaRecorder) return;
+          if (state.mediaRecorder.state === "inactive") {
+            onRecorderStop();
+          } else {
+            state.mediaRecorder.requestData?.();
+            state.mediaRecorder.stop();
+          }
+        }
+
+        function onRecorderStop() {
+          const mimeType = state.mediaRecorder?.mimeType || state.chunks[0]?.type || "video/webm";
+          state.mediaRecorder = undefined;
+          stopStream();
+
+          if (state.chunks.length === 0) {
+            window.__videoHarness.fallbackChunkUsed = true;
+            state.chunks.push(new Blob(["video-recorder-harness-fallback"], { type: "video/webm" }));
+          }
+
+          const blob = new Blob(state.chunks, { type: mimeType });
+          state.recordedFile = new File([blob], `video-message-${Date.now()}.webm`, { type: blob.type || "video/webm" });
+          state.chunks = [];
+          revokePreviewUrl();
+          state.previewUrl = URL.createObjectURL(state.recordedFile);
+          renderTile();
+        }
+
+        function cancelRecording() {
+          state.chunks = [];
+          state.recordedFile = undefined;
+          if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") state.mediaRecorder.stop();
+          state.mediaRecorder = undefined;
+          stopStream();
+          revokePreviewUrl();
+          renderTile();
+        }
+
+        async function sendContentToRoom(file, roomId) {
+          const content = {
+            body: file.name,
+            info: {
+              mimetype: file.type,
+              size: file.size,
+            },
+            msgtype: file.type.startsWith("video/") ? "m.video" : "m.file",
+          };
+          window.__videoHarness.sendCalls.push({ content, fileName: file.name, roomId });
+        }
+
+        async function sendRecording() {
+          if (!state.recordedFile) return;
+          await sendContentToRoom(state.recordedFile, "!video-recorder-harness:example.org");
+          state.recordedFile = undefined;
+          revokePreviewUrl();
+          renderTile();
+        }
+
+        function renderButtons() {
+          const buttons = document.querySelector("#buttons");
+          buttons.textContent = "";
+          if (!enabled || !isVideoMessageRecorderSupported()) return;
+
+          const button = document.createElement("button");
+          button.dataset.testid = "video-message-button";
+          button.type = "button";
+          button.setAttribute("aria-label", "Record video message");
+          button.textContent = "●";
+          button.addEventListener("click", startRecording);
+          buttons.append(button);
+        }
+
+        renderButtons();
+      })();
+    </script>
+  </body>
+</html>

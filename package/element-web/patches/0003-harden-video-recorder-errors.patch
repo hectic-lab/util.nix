@@ -1,0 +1,195 @@
+diff --git a/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx b/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
+index 851c64e..4285c72 100644
+--- a/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
++++ b/apps/web/src/components/views/rooms/VideoRecordComposerTile.tsx
+@@ -30,6 +30,7 @@ interface IState {
+ }
+ 
+ const PREFERRED_VIDEO_MIME_TYPES = ["video/webm;codecs=vp8,opus", "video/webm"];
++const MAX_VIDEO_RECORDING_MS = 120000;
+ 
+ function preferredVideoMimeType(): string | undefined {
+     for (const mimeType of PREFERRED_VIDEO_MIME_TYPES) {
+@@ -39,6 +40,18 @@ function preferredVideoMimeType(): string | undefined {
+     }
+ }
+ 
++function isPermissionDeniedError(error: unknown): boolean {
++    if (error instanceof DOMException) {
++        return error.name === "NotAllowedError" || error.name === "PermissionDeniedError";
++    }
++
++    if (error instanceof Error) {
++        return /permission denied|not allowed|denied permission/i.test(error.message);
++    }
++
++    return false;
++}
++
+ export function isVideoMessageRecorderSupported(): boolean {
+     return (
+         typeof window !== "undefined" &&
+@@ -56,6 +69,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+     private mediaRecorder?: MediaRecorder;
+     private recordedFile?: File;
+     private stream?: MediaStream;
++    private durationCapTimer?: number;
+     private isRequestingMedia = false;
+     private isUnmounted = false;
+     private shouldDiscardRecording = false;
+@@ -72,6 +86,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+     public componentWillUnmount(): void {
+         this.isUnmounted = true;
+         this.disposeRecording();
++        this.props.onRecordingStateChange(false);
+     }
+ 
+     public onRecordStartEndClick = async (): Promise<void> => {
+@@ -96,6 +111,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+ 
+         this.isRequestingMedia = true;
+         this.shouldDiscardRecording = false;
++        this.clearDurationCapTimer();
+         this.revokePreviewUrl();
+         this.recordedFile = undefined;
+         this.chunks = [];
+@@ -108,6 +124,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+             }
+ 
+             this.stream = stream;
++            this.bindStreamEndedHandlers(stream);
+             const mimeType = preferredVideoMimeType();
+             const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+ 
+@@ -118,12 +135,13 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+             };
+             mediaRecorder.onerror = (ev: Event): void => {
+                 logger.error("Error recording video message:", ev);
+-                this.setState({ error: _t("composer|video_message_error") });
++                this.failRecording(_t("composer|video_message_error"));
+             };
+             mediaRecorder.onstop = this.onRecorderStop;
+ 
+             this.mediaRecorder = mediaRecorder;
+             mediaRecorder.start();
++            this.durationCapTimer = window.setTimeout(this.onDurationCap, MAX_VIDEO_RECORDING_MS);
+ 
+             this.setState({ error: undefined, isRecording: true, isSending: false, previewUrl: undefined });
+             this.props.onRecordingStateChange(true);
+@@ -132,7 +150,9 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+             this.stopStream();
+             if (!this.isUnmounted) {
+                 this.setState({
+-                    error: _t("composer|video_message_error"),
++                    error: isPermissionDeniedError(e)
++                        ? _t("composer|video_message_permission_denied")
++                        : _t("composer|video_message_error"),
+                     isRecording: false,
+                     isSending: false,
+                     previewUrl: undefined,
+@@ -144,6 +164,21 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+         }
+     };
+ 
++    private onDurationCap = (): void => {
++        this.durationCapTimer = undefined;
++
++        if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") return;
++
++        this.stopRecording();
++    };
++
++    private onStreamTrackEnded = (): void => {
++        if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") return;
++
++        logger.warn("Video message media stream ended before recording stopped");
++        this.failRecording(_t("composer|video_message_error"));
++    };
++
+     private stopRecording = (): void => {
+         if (!this.mediaRecorder) return;
+ 
+@@ -160,6 +195,7 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+         const hasRecording = this.chunks.length > 0 && !shouldDiscardRecording;
+ 
+         this.mediaRecorder = undefined;
++        this.clearDurationCapTimer();
+         this.stopStream();
+ 
+         if (this.isUnmounted) {
+@@ -200,7 +236,9 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+                 this.props.replyToEvent,
+             );
+             this.clearRecording();
+-            this.props.onRecordingStateChange(false);
++            if (!this.isUnmounted) {
++                this.props.onRecordingStateChange(false);
++            }
+         } catch (e) {
+             logger.error("Error sending video message recording:", e);
+             if (!this.isUnmounted) {
+@@ -219,13 +257,18 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+     private clearRecording(): void {
+         this.chunks = [];
+         this.recordedFile = undefined;
++        this.clearDurationCapTimer();
++        this.stopStream();
+         this.revokePreviewUrl();
++        if (this.isUnmounted) return;
++
+         this.setState({ error: undefined, isRecording: false, isSending: false, previewUrl: undefined });
+     }
+ 
+     private disposeRecording(): void {
+         this.chunks = [];
+         this.recordedFile = undefined;
++        this.clearDurationCapTimer();
+         this.stopStream();
+         this.revokePreviewUrl();
+ 
+@@ -241,8 +284,32 @@ export default class VideoRecordComposerTile extends React.PureComponent<IProps,
+         }
+     }
+ 
++    private failRecording(error: string): void {
++        this.shouldDiscardRecording = true;
++        this.disposeRecording();
++
++        if (this.isUnmounted) return;
++
++        this.setState({ error, isRecording: false, isSending: false, previewUrl: undefined });
++        this.props.onRecordingStateChange(false);
++    }
++
++    private clearDurationCapTimer(): void {
++        if (this.durationCapTimer !== undefined) {
++            window.clearTimeout(this.durationCapTimer);
++            this.durationCapTimer = undefined;
++        }
++    }
++
++    private bindStreamEndedHandlers(stream: MediaStream): void {
++        stream.getTracks().forEach((track) => track.addEventListener("ended", this.onStreamTrackEnded));
++    }
++
+     private stopStream(): void {
+-        this.stream?.getTracks().forEach((track) => track.stop());
++        this.stream?.getTracks().forEach((track) => {
++            track.removeEventListener("ended", this.onStreamTrackEnded);
++            track.stop();
++        });
+         this.stream = undefined;
+     }
+ 
+diff --git a/apps/web/src/i18n/strings/en_EN.json b/apps/web/src/i18n/strings/en_EN.json
+index e11fe90..83b7c21 100644
+--- a/apps/web/src/i18n/strings/en_EN.json
++++ b/apps/web/src/i18n/strings/en_EN.json
+@@ -648,6 +648,7 @@
+         "video_message_button": "Record video message",
+         "video_message_cancel": "Cancel video message",
+         "video_message_error": "Unable to record video message",
++        "video_message_permission_denied": "Camera permission denied",
+         "video_message_preview": "Video message preview",
+         "voice_message_button": "Voice Message"
+     },
