@@ -24,6 +24,13 @@ type HeatmapContribution struct {
 	UpdatedUnix timeutil.TimeStamp `xorm:"updated"`
 }
 
+// HeatmapContributionIdentity identifies the counted contribution row that remains valid after reindexing.
+type HeatmapContributionIdentity struct {
+	RepoID    int64
+	CommitSHA string
+	UserID    int64
+}
+
 func init() {
 	db.RegisterModel(new(HeatmapContribution))
 }
@@ -70,4 +77,45 @@ func UpsertHeatmapContribution(ctx context.Context, contribution *HeatmapContrib
 // CountHeatmapContributions returns counted heatmap contribution rows for a user.
 func CountHeatmapContributions(ctx context.Context, userID int64) (int64, error) {
 	return db.GetEngine(ctx).Where("user_id=?", userID).Count(new(HeatmapContribution))
+}
+
+// DeleteStaleHeatmapContributions removes indexed rows not found in the current eligible contribution identities.
+func DeleteStaleHeatmapContributions(ctx context.Context, repoID int64, identities []HeatmapContributionIdentity) error {
+	if len(identities) == 0 {
+		_, err := db.GetEngine(ctx).Where("repo_id=?", repoID).Delete(new(HeatmapContribution))
+		return err
+	}
+
+	current := make(map[HeatmapContributionIdentity]struct{}, len(identities))
+	for _, identity := range identities {
+		current[identity] = struct{}{}
+	}
+
+	contributions, err := FindHeatmapContributionsByRepo(ctx, repoID)
+	if err != nil {
+		return err
+	}
+	for _, contribution := range contributions {
+		identity := HeatmapContributionIdentity{
+			RepoID:    contribution.RepoID,
+			CommitSHA: contribution.CommitSHA,
+			UserID:    contribution.UserID,
+		}
+		if _, ok := current[identity]; ok {
+			continue
+		}
+		if _, err := db.GetEngine(ctx).ID(contribution.ID).Delete(new(HeatmapContribution)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// FindHeatmapContributionsByRepo returns indexed contribution rows for a repository.
+func FindHeatmapContributionsByRepo(ctx context.Context, repoID int64) ([]*HeatmapContribution, error) {
+	contributions := make([]*HeatmapContribution, 0)
+	return contributions, db.GetEngine(ctx).
+		Where("repo_id=?", repoID).
+		OrderBy("author_unix ASC, commit_sha ASC, user_id ASC").
+		Find(&contributions)
 }
