@@ -7,17 +7,12 @@
 #
 # Idempotent: each SQL file uses IF NOT EXISTS / CREATE OR REPLACE.
 #
-# Required env (caller injects from Nix):
-#   HECTIC_VERSION_SQL      - path to hectic-version.sql (substituted)
-#   HECTIC_SECRET_SQL       - path to hectic-secret.sql
-#   HECTIC_MIGRATION_SQL    - path to hectic-migration.sql
-#   HECTIC_INHERITANCE_SQL  - path to hectic-inheritance.sql
-#
 # Usage:
 #   apply_hectic_bundle <PGURL> [<DOTENV_CONTENT>]
 #
 # If DOTENV_CONTENT is non-empty, it is loaded into hectic.secret via
 # hectic.load_secrets_from_env() after the bundle is applied.
+# SQL file paths are substituted by Nix evaluation time.
 
 apply_hectic_bundle() {
   pgurl="${1:-}"
@@ -28,22 +23,22 @@ apply_hectic_bundle() {
     return 3
   fi
 
-  for var in HECTIC_VERSION_SQL HECTIC_SECRET_SQL HECTIC_MIGRATION_SQL HECTIC_INHERITANCE_SQL; do
-    eval "val=\${$var:-}"
-    if [ -z "$val" ]; then
-      printf '%s\n' "apply-hectic-bundle: $var not set" >&2
-      return 3
-    fi
-    if [ ! -r "$val" ]; then
-      printf '%s\n' "apply-hectic-bundle: $var not readable: $val" >&2
+  set -- \
+    "@HECTIC_VERSION_SQL@" \
+    "@HECTIC_SECRET_SQL@" \
+    "@HECTIC_MIGRATION_SQL@" \
+    "@HECTIC_INHERITANCE_SQL@"
+
+  for sql_path do
+    if [ ! -r "$sql_path" ]; then
+      printf '%s\n' "apply-hectic-bundle: SQL file not readable: $sql_path" >&2
       return 1
     fi
   done
 
-  psql "$pgurl" -v ON_ERROR_STOP=1 -f "$HECTIC_VERSION_SQL"     || return 1
-  psql "$pgurl" -v ON_ERROR_STOP=1 -f "$HECTIC_SECRET_SQL"      || return 1
-  psql "$pgurl" -v ON_ERROR_STOP=1 -f "$HECTIC_MIGRATION_SQL"   || return 1
-  psql "$pgurl" -v ON_ERROR_STOP=1 -f "$HECTIC_INHERITANCE_SQL" || return 1
+  for sql_path do
+    psql "$pgurl" -v ON_ERROR_STOP=1 -f "$sql_path" || return 1
+  done
 
   if [ -n "$env_content" ]; then
     # Dollar-quote with $ps_env$ tag to preserve all content verbatim.

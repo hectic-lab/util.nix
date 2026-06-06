@@ -210,14 +210,12 @@ directly against the paths exposed by `self.lib.hectic.*.path`:
 
 ```nix
 services.postgresql.initialScript = pkgs.writeText "hectic-init.sql" ''
+  \i ${self.lib.hectic.version.path}
   \i ${self.lib.hectic.secret.path}
   \i ${self.lib.hectic.migration.path}
   \i ${self.lib.hectic.inheritance.path}
 '';
 ```
-
-The version file (`self.lib.hectic.version`) is templated and only exposes
-`.sql` (a string). Materialize it with `pkgs.writeText` if a path is needed.
 
 ## Exit Codes
 

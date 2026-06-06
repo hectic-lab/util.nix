@@ -115,19 +115,42 @@ in {
   hectic = let
     versionString = lib.fileContents ./hook/sql/HECTIC_VERSION;
     static = path: { inherit path; sql = builtins.readFile path; };
-    templated = path: {
+    templated = path: let
       sql = builtins.replaceStrings
         [ "@HECTIC_VERSION@" ]
         [ versionString ]
         (builtins.readFile path);
+    in {
+      inherit sql;
+      path = builtins.toFile (builtins.baseNameOf (toString path)) sql;
     };
-  in {
+  in rec {
     inherit versionString;
     version     = templated ./hook/sql/hectic-version.sql;
     secret      = static    ./hook/sql/hectic-secret.sql;
     migration   = static    ./hook/sql/hectic-migration.sql;
     inheritance = static    ./hook/sql/hectic-inheritance.sql;
-    applyBundleScript = ./hook/apply-hectic-bundle.sh;
+    bundleFiles = [
+      version.path
+      secret.path
+      migration.path
+      inheritance.path
+    ];
+    applyBundleScript =
+      builtins.replaceStrings
+        [
+          "@HECTIC_VERSION_SQL@"
+          "@HECTIC_SECRET_SQL@"
+          "@HECTIC_MIGRATION_SQL@"
+          "@HECTIC_INHERITANCE_SQL@"
+        ]
+        [
+          "${version.path}"
+          "${secret.path}"
+          "${migration.path}"
+          "${inheritance.path}"
+        ]
+        (builtins.readFile ./hook/apply-hectic-bundle.sh);
   };
 
   # Back-compat alias. Prefer `self.lib.hectic.inheritance`.

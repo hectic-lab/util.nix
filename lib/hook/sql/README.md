@@ -42,23 +42,26 @@ that already matches.
 ```nix
 self.lib.hectic = {
   versionString;          # e.g. "0.1.0"
-  version     = { sql; };           # templated
+  version     = { sql; path; };     # templated
   secret      = { sql; path; };
   migration   = { sql; path; };
   inheritance = { sql; path; };
-  applyBundleScript;                # ./hook/apply-hectic-bundle.sh
+  bundleFiles;                      # ordered bundle file paths
+  applyBundleScript;                # generated helper shell source with paths embedded
 };
 ```
 
 `.sql` is the file contents as a string. `.path` is the Nix store path of the
-verbatim source (only available on non-templated entries; consumers needing a
-materialized version of `version.sql` must do
-`pkgs.runCommand "hectic-version.sql" { text = self.lib.hectic.version.sql; passAsFile = ["text"]; } ''cp "$textPath" "$out"''`).
+materialized file to pass to `psql -f`. `version.path` is generated at Nix
+evaluation time from the templated SQL; the other `*.path` entries point at the
+verbatim source files in the store.
 
 ## Shell helper (`apply-hectic-bundle.sh`)
 
-`lib/hook/apply-hectic-bundle.sh` is a dash-compatible helper sourced by both
-`migrator` and `db-tool`. Public entry point:
+`lib/hook/apply-hectic-bundle.sh` is a dash-compatible helper template.
+`self.lib.hectic.applyBundleScript` is the generated shell source with concrete
+SQL paths embedded at Nix evaluation time. `migrator` and `db-tool` splice that
+shell source directly into their generated scripts. Public entry point:
 
 ```sh
 apply_hectic_bundle <PGURL> [<DOTENV_CONTENT>]
@@ -70,25 +73,19 @@ apply_hectic_bundle <PGURL> [<DOTENV_CONTENT>]
   dollar-quoted (`$ps_env$`) string so secret values cannot terminate the
   literal.
 
-Required environment (paths to the SQL files):
-
-- `HECTIC_VERSION_SQL`
-- `HECTIC_SECRET_SQL`
-- `HECTIC_MIGRATION_SQL`
-- `HECTIC_INHERITANCE_SQL`
-
-`migrator` and `db-tool` set these via Nix at build time. External consumers
-typically invoke `psql -f` against the paths directly instead of sourcing the
-helper.
+The SQL file paths are embedded into the helper at Nix evaluation time, so
+callers only need to source the generated script and call the function.
+External consumers that do not want to source the helper can still invoke
+`psql -f` against `self.lib.hectic.bundleFiles` or the individual
+`self.lib.hectic.*.path` entries directly.
 
 ## Adding a new SQL file
 
 1. Add `lib/hook/sql/hectic-<name>.sql`.
 2. Wire it into `lib/default.nix` under `lib.hectic.<name>`.
-3. Inject `HECTIC_<NAME>_SQL` in both `package/migrator/default.nix` and
-   `package/db-tool/default.nix`.
-4. Append a `psql -f "$HECTIC_<NAME>_SQL"` step to
-   `lib/hook/apply-hectic-bundle.sh` in the correct order.
+3. Add its `.path` to `lib.hectic.bundleFiles` in the correct order.
+4. Add a matching placeholder/replacement in `lib.hectic.applyBundleScript` and
+   update `lib/hook/apply-hectic-bundle.sh` to apply the file.
 5. Bump `HECTIC_VERSION` if the new content changes existing semantics.
 6. Update tests in `test/package/migrator/test/postgresql/init-hectic-bundle/`
    and `test/package/db-tool/test/postgresql/hydrate-hook/`.

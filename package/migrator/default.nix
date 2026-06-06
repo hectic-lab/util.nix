@@ -1,4 +1,4 @@
-{ dash, hectic, sqlite, postgresql_17, gawk, runCommand, self }:
+{ dash, hectic, sqlite, postgresql_17, gawk, self }:
 let
   shell = "${dash}/bin/dash";
   bashOptions = [
@@ -6,20 +6,7 @@ let
     "nounset"
   ];
 
-  hecticVersionSqlFile = runCommand "hectic-version.sql" {
-    text = self.lib.hectic.version.sql;
-    passAsFile = [ "text" ];
-  } ''cp "$textPath" "$out"'';
-
-  hecticEnv = ''
-    HECTIC_VERSION_SQL=${hecticVersionSqlFile}
-    HECTIC_SECRET_SQL=${self.lib.hectic.secret.path}
-    HECTIC_MIGRATION_SQL=${self.lib.hectic.migration.path}
-    HECTIC_INHERITANCE_SQL=${self.lib.hectic.inheritance.path}
-    export HECTIC_VERSION_SQL HECTIC_SECRET_SQL HECTIC_MIGRATION_SQL HECTIC_INHERITANCE_SQL
-  '';
-
-  applyBundle = builtins.readFile self.lib.hectic.applyBundleScript;
+  applyBundle = self.lib.hectic.applyBundleScript;
 
   migrator = hectic.writeShellApplication {
     inherit shell bashOptions;
@@ -28,7 +15,6 @@ let
 
     text = ''
       ${builtins.readFile hectic.helpers.posix-shell.log}
-      ${hecticEnv}
       ${applyBundle}
       ${builtins.readFile ./migrator.sh}
     '';
