@@ -56,8 +56,18 @@ in {
       certificateScheme = "acme-nginx";
     };
 
-    # NOTE(yukkop): avoid Gmail rejection due to missing IPv6 PTR records
-    services.postfix.settings.main.inet_protocols = lib.mkDefault "ipv4";
+    services.postfix.settings.main = {
+      # NOTE(yukkop): avoid Gmail rejection due to missing IPv6 PTR records.
+      inet_protocols = lib.mkDefault "ipv4";
+
+      # NOTE(yukkop): nixos-mailserver enables DANE by default. Some large MXes
+      # currently fail certificate verification under this policy, which leaves
+      # otherwise valid transactional mail deferred in the queue. Keep STARTTLS
+      # opportunistic for outbound delivery rather than blocking mail entirely.
+      smtp_tls_security_level = lib.mkForce "may";
+      smtp_dns_support_level  = lib.mkForce "enabled";
+      smtp_tls_policy_maps    = lib.mkForce "";
+    };
 
     security.acme.acceptTerms       = true;
     security.acme.defaults.email    = "security@" + cfg.domain;
