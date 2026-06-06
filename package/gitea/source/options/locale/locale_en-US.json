@@ -708,6 +708,8 @@
   "settings.privacy": "Privacy",
   "settings.keep_activity_private": "Hide Activity from profile page",
   "settings.keep_activity_private_popup": "Makes the activity visible only for you and the admins",
+  "settings.include_private_contributions": "Show private contributions on profile heatmap",
+  "settings.include_private_contributions_popup": "Publicly reveals only contribution dates and counts from non-public repositories, never repository or commit details.",
   "settings.lookup_avatar_by_mail": "Look Up Avatar by Email Address",
   "settings.federated_avatar_lookup": "Federated Avatar Lookup",
   "settings.enable_custom_avatar": "Use Custom Avatar",

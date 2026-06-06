@@ -17,6 +17,7 @@ import (
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -54,6 +55,26 @@ func testPrivateActivityHelperEnablePrivateActivity(t *testing.T) {
 		"keep_activity_private": "1",
 	})
 	session.MakeRequest(t, req, http.StatusSeeOther)
+}
+
+func testPrivateActivityHelperSetIncludePrivateContributionsViaWeb(t *testing.T, session *TestSession, username string, include bool) {
+	values := map[string]string{
+		"name":     username,
+		"email":    username + "@example.com",
+		"language": "en-US",
+	}
+	if include {
+		values["include_private_contributions"] = "1"
+	}
+	req := NewRequestWithValues(t, "POST", "/user/settings", values)
+	session.MakeRequest(t, req, http.StatusSeeOther)
+}
+
+func testPrivateActivityHelperAssertIncludePrivateContributions(t *testing.T, username string, expected bool) {
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: username})
+	includePrivateContributions, err := user_model.GetIncludePrivateContributions(t.Context(), user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, expected, includePrivateContributions)
 }
 
 func testPrivateActivityHelperHasVisibleActivitiesInHTMLDoc(htmlDoc *HTMLDoc) bool {
@@ -134,6 +155,80 @@ func testPrivateActivityHelperHasHeatmapContentFromSession(t *testing.T, session
 	DecodeJSON(t, resp, &items)
 
 	return len(items) != 0
+}
+
+// check private contribution opt-in settings persistence and ownership
+
+func TestPrivateActivityIncludePrivateContributionsWebSettingsPersistence(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := loginUser(t, privateActivityTestUser)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
+
+	testPrivateActivityHelperSetIncludePrivateContributionsViaWeb(t, session, privateActivityTestUser, true)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, true)
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: privateActivityTestUser})
+	assert.False(t, user.KeepActivityPrivate, "private contribution opt-in must not hide the whole activity heatmap")
+
+	req := NewRequest(t, "GET", "/user/settings")
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+	assert.Equal(t, 1, htmlDoc.doc.Find("#include-private-contributions input[name='include_private_contributions']:checked").Length())
+
+	testPrivateActivityHelperSetIncludePrivateContributionsViaWeb(t, session, privateActivityTestUser, false)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
+}
+
+func TestPrivateActivityIncludePrivateContributionsAPISettingsPersistence(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := loginUser(t, privateActivityTestUser)
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadUser, auth_model.AccessTokenScopeWriteUser)
+
+	includePrivateContributions := true
+	req := NewRequestWithJSON(t, "PATCH", "/api/v1/user/settings", &api.UserSettingsOptions{
+		IncludePrivateContributions: &includePrivateContributions,
+	}).AddTokenAuth(token)
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	settings := DecodeJSON(t, resp, &api.UserSettings{})
+	assert.True(t, settings.IncludePrivateContributions)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, true)
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: privateActivityTestUser})
+	assert.False(t, user.KeepActivityPrivate, "API opt-in must not set KeepActivityPrivate")
+
+	req = NewRequest(t, "GET", "/api/v1/user/settings").AddTokenAuth(token)
+	resp = session.MakeRequest(t, req, http.StatusOK)
+	settings = DecodeJSON(t, resp, &api.UserSettings{})
+	assert.True(t, settings.IncludePrivateContributions)
+
+	includePrivateContributions = false
+	req = NewRequestWithJSON(t, "PATCH", "/api/v1/user/settings", &api.UserSettingsOptions{
+		IncludePrivateContributions: &includePrivateContributions,
+	}).AddTokenAuth(token)
+	resp = session.MakeRequest(t, req, http.StatusOK)
+	settings = DecodeJSON(t, resp, &api.UserSettings{})
+	assert.False(t, settings.IncludePrivateContributions)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
+}
+
+func TestPrivateActivityIncludePrivateContributionsWebSettingsAuthBoundary(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
+
+	otherSession := loginUser(t, privateActivityTestOtherUser)
+	testPrivateActivityHelperSetIncludePrivateContributionsViaWeb(t, otherSession, privateActivityTestOtherUser, true)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestOtherUser, true)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
+
+	req := NewRequestWithValues(t, "POST", "/user/settings", map[string]string{
+		"name":                          privateActivityTestUser,
+		"email":                         privateActivityTestUser + "@example.com",
+		"language":                      "en-US",
+		"include_private_contributions": "1",
+	})
+	MakeRequest(t, req, http.StatusSeeOther)
+	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
 }
 
 // check activity visibility if the visibility is enabled

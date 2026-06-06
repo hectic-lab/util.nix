@@ -48,8 +48,21 @@ func Profile(ctx *context.Context) {
 	ctx.Data["PageIsSettingsProfile"] = true
 	ctx.Data["AllowedUserVisibilityModes"] = setting.Service.AllowedUserVisibilityModesSlice.ToVisibleTypeSlice()
 	ctx.Data["DisableGravatar"] = setting.Config().Picture.DisableGravatar.Value(ctx)
+	if !loadProfilePrivateContributionSetting(ctx) {
+		return
+	}
 
 	ctx.HTML(http.StatusOK, tplSettingsProfile)
+}
+
+func loadProfilePrivateContributionSetting(ctx *context.Context) bool {
+	includePrivateContributions, err := user_model.GetIncludePrivateContributions(ctx, ctx.Doer.ID)
+	if err != nil {
+		ctx.ServerError("GetIncludePrivateContributions", err)
+		return false
+	}
+	ctx.Data["IncludePrivateContributions"] = includePrivateContributions
+	return true
 }
 
 // ProfilePost response for change user's profile
@@ -58,6 +71,9 @@ func ProfilePost(ctx *context.Context) {
 	ctx.Data["PageIsSettingsProfile"] = true
 	ctx.Data["AllowedUserVisibilityModes"] = setting.Service.AllowedUserVisibilityModesSlice.ToVisibleTypeSlice()
 	ctx.Data["DisableGravatar"] = setting.Config().Picture.DisableGravatar.Value(ctx)
+	if !loadProfilePrivateContributionSetting(ctx) {
+		return
+	}
 
 	if ctx.HasError() {
 		ctx.HTML(http.StatusOK, tplSettingsProfile)
@@ -94,12 +110,13 @@ func ProfilePost(ctx *context.Context) {
 	}
 
 	opts := &user_service.UpdateOptions{
-		KeepEmailPrivate:    optional.Some(form.KeepEmailPrivate),
-		Description:         optional.Some(form.Description),
-		Website:             optional.Some(form.Website),
-		Location:            optional.Some(form.Location),
-		Visibility:          optional.Some(form.Visibility),
-		KeepActivityPrivate: optional.Some(form.KeepActivityPrivate),
+		KeepEmailPrivate:            optional.Some(form.KeepEmailPrivate),
+		Description:                 optional.Some(form.Description),
+		Website:                     optional.Some(form.Website),
+		Location:                    optional.Some(form.Location),
+		Visibility:                  optional.Some(form.Visibility),
+		KeepActivityPrivate:         optional.Some(form.KeepActivityPrivate),
+		IncludePrivateContributions: optional.Some(form.IncludePrivateContributions),
 	}
 
 	if form.FullName != "" {

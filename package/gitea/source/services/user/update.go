@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	auth_model "code.gitea.io/gitea/models/auth"
+	"code.gitea.io/gitea/models/db"
 	user_model "code.gitea.io/gitea/models/user"
 	password_module "code.gitea.io/gitea/modules/auth/password"
 	"code.gitea.io/gitea/modules/optional"
@@ -47,6 +48,7 @@ type UpdateOptions struct {
 	IsRestricted                 optional.Option[bool]
 	Visibility                   optional.Option[structs.VisibleType]
 	KeepActivityPrivate          optional.Option[bool]
+	IncludePrivateContributions  optional.Option[bool]
 	Language                     optional.Option[string]
 	Theme                        optional.Option[string]
 	DiffViewStyle                optional.Option[string]
@@ -182,7 +184,23 @@ func UpdateUser(ctx context.Context, u *user_model.User, opts *UpdateOptions) er
 		cols = append(cols, "last_login_unix")
 	}
 
-	return user_model.UpdateUserCols(ctx, u, cols...)
+	if len(cols) > 0 || opts.IncludePrivateContributions.Has() {
+		return db.WithTx(ctx, func(ctx context.Context) error {
+			if len(cols) > 0 {
+				if err := user_model.UpdateUserCols(ctx, u, cols...); err != nil {
+					return err
+				}
+			}
+
+			if opts.IncludePrivateContributions.Has() {
+				return user_model.SetIncludePrivateContributions(ctx, u.ID, opts.IncludePrivateContributions.Value())
+			}
+
+			return nil
+		})
+	}
+
+	return nil
 }
 
 type UpdateAuthOptions struct {

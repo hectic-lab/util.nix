@@ -44,6 +44,7 @@ func TestUpdateUser(t *testing.T) {
 		IsAdmin:                      UpdateOptionFieldFromValue(true),
 		Visibility:                   optional.Some(structs.VisibleTypePrivate),
 		KeepActivityPrivate:          optional.Some(true),
+		IncludePrivateContributions:  optional.Some(true),
 		Language:                     optional.Some("lang"),
 		Theme:                        optional.Some("theme"),
 		DiffViewStyle:                optional.Some("split"),
@@ -66,6 +67,9 @@ func TestUpdateUser(t *testing.T) {
 	assert.Equal(t, opts.IsAdmin.Value().FieldValue, user.IsAdmin)
 	assert.Equal(t, opts.Visibility.Value(), user.Visibility)
 	assert.Equal(t, opts.KeepActivityPrivate.Value(), user.KeepActivityPrivate)
+	includePrivateContributions, err := user_model.GetIncludePrivateContributions(t.Context(), user.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, opts.IncludePrivateContributions.Value(), includePrivateContributions)
 	assert.Equal(t, opts.Language.Value(), user.Language)
 	assert.Equal(t, opts.Theme.Value(), user.Theme)
 	assert.Equal(t, opts.DiffViewStyle.Value(), user.DiffViewStyle)
@@ -86,6 +90,9 @@ func TestUpdateUser(t *testing.T) {
 	assert.Equal(t, opts.IsAdmin.Value().FieldValue, user.IsAdmin)
 	assert.Equal(t, opts.Visibility.Value(), user.Visibility)
 	assert.Equal(t, opts.KeepActivityPrivate.Value(), user.KeepActivityPrivate)
+	includePrivateContributions, err = user_model.GetIncludePrivateContributions(t.Context(), user.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, opts.IncludePrivateContributions.Value(), includePrivateContributions)
 	assert.Equal(t, opts.Language.Value(), user.Language)
 	assert.Equal(t, opts.Theme.Value(), user.Theme)
 	assert.Equal(t, opts.DiffViewStyle.Value(), user.DiffViewStyle)

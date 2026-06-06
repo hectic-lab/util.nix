@@ -86,18 +86,23 @@ func toUser(ctx context.Context, user *user_model.User, signed, authed bool) *ap
 }
 
 // User2UserSettings return UserSettings based on a user
-func User2UserSettings(user *user_model.User) api.UserSettings {
-	return api.UserSettings{
-		FullName:      user.FullName,
-		Website:       user.Website,
-		Location:      user.Location,
-		Language:      user.Language,
-		Description:   user.Description,
-		Theme:         user.Theme,
-		HideEmail:     user.KeepEmailPrivate,
-		HideActivity:  user.KeepActivityPrivate,
-		DiffViewStyle: user.DiffViewStyle,
+func User2UserSettings(ctx context.Context, user *user_model.User) (api.UserSettings, error) {
+	includePrivateContributions, err := user_model.GetIncludePrivateContributions(ctx, user.ID)
+	if err != nil {
+		return api.UserSettings{}, err
 	}
+	return api.UserSettings{
+		FullName:                    user.FullName,
+		Website:                     user.Website,
+		Location:                    user.Location,
+		Language:                    user.Language,
+		Description:                 user.Description,
+		Theme:                       user.Theme,
+		HideEmail:                   user.KeepEmailPrivate,
+		HideActivity:                user.KeepActivityPrivate,
+		IncludePrivateContributions: includePrivateContributions,
+		DiffViewStyle:               user.DiffViewStyle,
+	}, nil
 }
 
 // ToUserAndPermission return User and its collaboration permission for a repository

@@ -88,6 +88,13 @@
 					</div>
 				</div>
 
+				<div class="field">
+					<div class="ui checkbox" id="include-private-contributions">
+						<label data-tooltip-content="{{ctx.Locale.Tr "settings.include_private_contributions_popup"}}"><strong>{{ctx.Locale.Tr "settings.include_private_contributions"}}</strong></label>
+						<input name="include_private_contributions" type="checkbox" {{if .IncludePrivateContributions}}checked{{end}}>
+					</div>
+				</div>
+
 				<div class="divider"></div>
 
 				<div class="field">
