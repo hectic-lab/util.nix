@@ -1,7 +1,7 @@
 { 
   inputs,
-  flake,
   self,
+  ...
 }: {
   pkgs,
   lib,
@@ -27,7 +27,15 @@ in {
     users.defaultUserShell = pkgs.zsh;
 
     # Enable flakes and new 'nix' command
-    nix.settings.experimental-features = "nix-command flakes";
+    nix.settings = {
+      experimental-features = "nix-command flakes";
+      extra-substituters = [
+        "https://cache.hectic-lab.com/hectic"
+      ];
+      extra-trusted-public-keys = [
+        "hectic:KMQsKow4SoA9K2vOJlOljmx7/Zpf91Yy+5qEtxDDCzA="
+      ];
+    };
 
     networking.firewall.enable = true;
 
