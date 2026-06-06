@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"code.gitea.io/gitea/models/db"
@@ -18,6 +19,8 @@ import (
 	"xorm.io/builder"
 	"xorm.io/xorm/convert"
 )
+
+const SettingsKeyIncludePrivateContributions = "include_private_contributions"
 
 // Setting is a key value store of user settings
 type Setting struct {
@@ -253,4 +256,18 @@ func SetUserSettingJSON[T any](ctx context.Context, userID int64, key string, va
 		return err
 	}
 	return SetUserSetting(ctx, userID, key, util.UnsafeBytesToString(bs))
+}
+
+// GetIncludePrivateContributions returns whether a user opted in to private heatmap contributions.
+func GetIncludePrivateContributions(ctx context.Context, userID int64) (bool, error) {
+	value, err := GetUserSetting(ctx, userID, SettingsKeyIncludePrivateContributions, "false")
+	if err != nil {
+		return false, err
+	}
+	return strconv.ParseBool(value)
+}
+
+// SetIncludePrivateContributions stores whether a user opted in to private heatmap contributions.
+func SetIncludePrivateContributions(ctx context.Context, userID int64, include bool) error {
+	return SetUserSetting(ctx, userID, SettingsKeyIncludePrivateContributions, strconv.FormatBool(include))
 }
