@@ -10,6 +10,7 @@ import (
 	"code.gitea.io/gitea/models/organization"
 	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/setting"
+	"code.gitea.io/gitea/modules/structs"
 	"code.gitea.io/gitea/modules/timeutil"
 )
 
@@ -38,35 +39,45 @@ func getUserHeatmapData(ctx context.Context, user *user_model.User, team *organi
 
 	// Group by 15 minute intervals which will allow the client to accurately shift the timestamp to their timezone.
 	// The interval is based on the fact that there are timezones such as UTC +5:30 and UTC +12:45.
-	groupBy := "created_unix / 900 * 900"
+	groupBy := "author_unix / 900 * 900"
 	groupByName := "timestamp" // We need this extra case because mssql doesn't allow grouping by alias
 	switch {
 	case setting.Database.Type.IsMySQL():
-		groupBy = "created_unix DIV 900 * 900"
+		groupBy = "author_unix DIV 900 * 900"
 	case setting.Database.Type.IsMSSQL():
 		groupByName = groupBy
 	}
 
-	cond, err := ActivityQueryCondition(ctx, GetFeedsOptions{
-		RequestedUser:  user,
-		RequestedTeam:  team,
-		Actor:          doer,
-		IncludePrivate: true, // don't filter by private, as we already filter by repo access
-		IncludeDeleted: true,
-		// * Heatmaps for individual users only include actions that the user themself did.
-		// * For organizations actions by all users that were made in owned
-		//   repositories are counted.
-		OnlyPerformedBy: !user.IsOrganization(),
-	})
+	includePrivate, err := user_model.GetIncludePrivateContributions(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	return hdata, db.GetEngine(ctx).
-		Select(groupBy+" AS timestamp, count(user_id) as contributions").
-		Table("action").
-		Where(cond).
-		And("created_unix > ?", timeutil.TimeStampNow()-(366+7)*86400). // (366+7) days to include the first week for the heatmap
+	sess := db.GetEngine(ctx).
+		Select(groupBy+" AS timestamp, count(heatmap_contribution.user_id) as contributions").
+		Table("heatmap_contribution").
+		Join("INNER", "repository", "repository.id = heatmap_contribution.repo_id").
+		Join("INNER", "`user` AS repo_owner", "repo_owner.id = repository.owner_id").
+		Where("author_unix > ?", timeutil.TimeStampNow()-(366+7)*86400). // (366+7) days to include the first week for the heatmap
+		And("author_unix <= ?", timeutil.TimeStampNow())
+
+	if !includePrivate {
+		sess = sess.And("repository.is_private = ?", false).
+			And("repo_owner.visibility = ?", structs.VisibleTypePublic)
+	}
+
+	if user.IsOrganization() {
+		sess = sess.And("repository.owner_id = ?", user.ID)
+		if team != nil && !team.IncludesAllRepositories {
+			sess = sess.Join("INNER", "team_repo", "team_repo.repo_id = repository.id").
+				And("team_repo.org_id = ?", team.OrgID).
+				And("team_repo.team_id = ?", team.ID)
+		}
+	} else {
+		sess = sess.And("heatmap_contribution.user_id = ?", user.ID)
+	}
+
+	return hdata, sess.
 		GroupBy(groupByName).
 		OrderBy("timestamp").
 		Find(&hdata)
