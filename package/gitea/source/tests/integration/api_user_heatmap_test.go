@@ -4,17 +4,19 @@
 package integration
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	activities_model "code.gitea.io/gitea/models/activities"
 	auth_model "code.gitea.io/gitea/models/auth"
+	"code.gitea.io/gitea/models/db"
+	user_model "code.gitea.io/gitea/models/user"
 	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUserHeatmap(t *testing.T) {
@@ -23,17 +25,23 @@ func TestUserHeatmap(t *testing.T) {
 	normalUsername := "user2"
 	token := getUserToken(t, adminUsername, auth_model.AccessTokenScopeReadUser)
 
-	fakeNow := time.Date(2011, 10, 20, 0, 0, 0, 0, time.Local)
+	fakeNow := time.Date(2011, 10, 21, 0, 0, 0, 0, time.Local)
 	timeutil.MockSet(fakeNow)
 	defer timeutil.MockUnset()
 
-	req := NewRequest(t, "GET", fmt.Sprintf("/api/v1/users/%s/heatmap", normalUsername)).
+	require.NoError(t, db.TruncateBeans(t.Context(), &activities_model.HeatmapContribution{}))
+	require.NoError(t, user_model.SetIncludePrivateContributions(t.Context(), 2, false))
+	testHeatmapSeedContribution(t, 2, 1, "api-user2-public-author-date", 1319068800)
+	testHeatmapSeedContribution(t, 2, 1, "api-user2-public-same-bucket", 1319068850)
+	testHeatmapSeedContribution(t, 2, 2, "api-user2-private-hidden", 1319070600)
+
+	req := NewRequestf(t, "GET", "/api/v1/users/%s/heatmap", normalUsername).
 		AddTokenAuth(token)
 	resp := MakeRequest(t, req, http.StatusOK)
 	var heatmap []*activities_model.UserHeatmapData
 	DecodeJSON(t, resp, &heatmap)
-	var dummyheatmap []*activities_model.UserHeatmapData
-	dummyheatmap = append(dummyheatmap, &activities_model.UserHeatmapData{Timestamp: 1603227600, Contributions: 1})
 
-	assert.Equal(t, dummyheatmap, heatmap)
+	assert.Equal(t, []*activities_model.UserHeatmapData{
+		{Timestamp: 1319068800, Contributions: 2},
+	}, heatmap)
 }

@@ -7,13 +7,16 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	activities_model "code.gitea.io/gitea/models/activities"
 	auth_model "code.gitea.io/gitea/models/auth"
+	"code.gitea.io/gitea/models/db"
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
 	api "code.gitea.io/gitea/modules/structs"
+	"code.gitea.io/gitea/modules/timeutil"
 	"code.gitea.io/gitea/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +27,8 @@ const (
 	privateActivityTestAdmin = "user1"
 	privateActivityTestUser  = "user2"
 )
+
+const privateActivityHeatmapOptInUser = "user16"
 
 // org3 is an organization so it is not usable here
 const privateActivityTestOtherUser = "user4"
@@ -42,6 +47,7 @@ func testPrivateActivityDoSomethingForActionEntries(t *testing.T) {
 		Title: "test",
 	}).AddTokenAuth(token)
 	session.MakeRequest(t, req, http.StatusCreated)
+	testHeatmapSeedContribution(t, 2, 1, "private-activity-action-public", timeutil.TimeStampNow()-900)
 }
 
 // private activity helpers
@@ -157,6 +163,58 @@ func testPrivateActivityHelperHasHeatmapContentFromSession(t *testing.T, session
 	return len(items) != 0
 }
 
+func testPrivateActivityHelperGetAPIHeatmapFromPublic(t *testing.T) ([]*activities_model.UserHeatmapData, []byte) {
+	req := NewRequestf(t, "GET", "/api/v1/users/%s/heatmap", privateActivityHeatmapOptInUser)
+	resp := MakeRequest(t, req, http.StatusOK)
+	body := resp.Body.Bytes()
+
+	var items []*activities_model.UserHeatmapData
+	DecodeJSON(t, resp, &items)
+
+	return items, body
+}
+
+func testPrivateActivityHelperGetAPIHeatmapFromSession(t *testing.T, session *TestSession) ([]*activities_model.UserHeatmapData, []byte) {
+	token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeReadUser)
+
+	req := NewRequestf(t, "GET", "/api/v1/users/%s/heatmap", privateActivityHeatmapOptInUser).
+		AddTokenAuth(token)
+	resp := session.MakeRequest(t, req, http.StatusOK)
+	body := resp.Body.Bytes()
+
+	var items []*activities_model.UserHeatmapData
+	DecodeJSON(t, resp, &items)
+
+	return items, body
+}
+
+func testPrivateActivityHelperGetWebHeatmapFromPublic(t *testing.T) (testHeatmapWebResponse, []byte) {
+	req := NewRequestf(t, "GET", "/%s/-/heatmap", privateActivityHeatmapOptInUser)
+	resp := MakeRequest(t, req, http.StatusOK)
+	body := resp.Body.Bytes()
+
+	return testHeatmapDecodeWebResponse(t, resp), body
+}
+
+func testPrivateActivityHelperSeedHeatmapContributions(t *testing.T) string {
+	t.Helper()
+
+	require.NoError(t, db.TruncateBeans(t.Context(), &activities_model.HeatmapContribution{}))
+	require.NoError(t, user_model.SetIncludePrivateContributions(t.Context(), 16, false))
+
+	testHeatmapSeedContribution(t, 16, 21, "private-activity-public", 1603009800)
+	privateSHA := testHeatmapSeedContribution(t, 16, 22, "private-activity-private-one", 1603009850)
+	testHeatmapSeedContribution(t, 16, 22, "private-activity-private-two", 1603010700)
+
+	return privateSHA
+}
+
+func testPrivateActivityHelperAssertAPIHeatmapTotal(t *testing.T, heatmap []*activities_model.UserHeatmapData, expected int64) {
+	t.Helper()
+
+	assert.Equal(t, expected, testHeatmapSumAPIContributions(heatmap))
+}
+
 // check private contribution opt-in settings persistence and ownership
 
 func TestPrivateActivityIncludePrivateContributionsWebSettingsPersistence(t *testing.T) {
@@ -209,6 +267,70 @@ func TestPrivateActivityIncludePrivateContributionsAPISettingsPersistence(t *tes
 	settings = DecodeJSON(t, resp, &api.UserSettings{})
 	assert.False(t, settings.IncludePrivateContributions)
 	testPrivateActivityHelperAssertIncludePrivateContributions(t, privateActivityTestUser, false)
+}
+
+func TestPrivateActivityPrivateContributionsHiddenByDefault(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	timeutil.MockSet(time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
+	defer timeutil.MockUnset()
+	testPrivateActivityHelperSeedHeatmapContributions(t)
+
+	publicHeatmap, _ := testPrivateActivityHelperGetAPIHeatmapFromPublic(t)
+	testPrivateActivityHelperAssertAPIHeatmapTotal(t, publicHeatmap, 1)
+
+	for _, testCase := range []struct {
+		name     string
+		username string
+	}{
+		{"owner", privateActivityHeatmapOptInUser},
+		{"admin", privateActivityTestAdmin},
+		{"collaborator", "user15"},
+		{"unrelated", privateActivityTestOtherUser},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			session := loginUser(t, testCase.username)
+			heatmap, _ := testPrivateActivityHelperGetAPIHeatmapFromSession(t, session)
+			testPrivateActivityHelperAssertAPIHeatmapTotal(t, heatmap, 1)
+		})
+	}
+}
+
+func TestPrivateActivityIncludePrivateContributionsEndpointAggregatesOnly(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	timeutil.MockSet(time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
+	defer timeutil.MockUnset()
+	privateSHA := testPrivateActivityHelperSeedHeatmapContributions(t)
+
+	ownerSession := loginUser(t, privateActivityHeatmapOptInUser)
+	testPrivateActivityHelperSetIncludePrivateContributionsViaWeb(t, ownerSession, privateActivityHeatmapOptInUser, true)
+
+	apiHeatmap, apiBody := testPrivateActivityHelperGetAPIHeatmapFromPublic(t)
+	testPrivateActivityHelperAssertAPIHeatmapTotal(t, apiHeatmap, 3)
+	testHeatmapAssertAggregateOnlyAPIResponse(t, apiBody)
+	testHeatmapAssertNoPrivateMetadata(t, apiBody,
+		"big_test_private_3",
+		"22",
+		privateSHA,
+		"private-activity-private-one",
+		"master",
+		"/user16/big_test_private_3",
+	)
+
+	webHeatmap, webBody := testPrivateActivityHelperGetWebHeatmapFromPublic(t)
+	assert.Equal(t, int64(3), webHeatmap.TotalContributions)
+	testHeatmapAssertAggregateOnlyWebResponse(t, webBody)
+	testHeatmapAssertNoPrivateMetadata(t, webBody,
+		"big_test_private_3",
+		"22",
+		privateSHA,
+		"private-activity-private-one",
+		"master",
+		"/user16/big_test_private_3",
+	)
+
+	testPrivateActivityHelperSetIncludePrivateContributionsViaWeb(t, ownerSession, privateActivityHeatmapOptInUser, false)
+	apiHeatmap, _ = testPrivateActivityHelperGetAPIHeatmapFromPublic(t)
+	testPrivateActivityHelperAssertAPIHeatmapTotal(t, apiHeatmap, 1)
 }
 
 func TestPrivateActivityIncludePrivateContributionsWebSettingsAuthBoundary(t *testing.T) {
