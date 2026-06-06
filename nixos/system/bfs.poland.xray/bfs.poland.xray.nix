@@ -188,6 +188,8 @@ in {
             preferred_domain = jitsiHost;
           };
 
+          hectic.videoMessages.enabled = true;
+
           room_directory.servers = [ matrixHost ];
 
           default_theme = "dark";

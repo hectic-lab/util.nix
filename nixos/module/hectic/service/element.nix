@@ -43,6 +43,8 @@ in {
             matrixDomain
           ];
 
+          hectic.videoMessages.enabled = true;
+
           jitsi = lib.optionalAttrs (jitsiPreferredDomain != null) {
             preferred_domain = jitsiPreferredDomain;
           };
