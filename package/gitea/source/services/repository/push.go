@@ -167,6 +167,7 @@ func pushUpdates(optsList []*repo_module.PushUpdateOptions) error {
 				}
 			}
 
+			indexHeatmap := false
 			if !opts.IsDelRef() {
 				branch := opts.RefFullName.BranchName()
 
@@ -193,6 +194,7 @@ func pushUpdates(optsList []*repo_module.PushUpdateOptions) error {
 					if err := DelRepoDivergenceFromCache(ctx, repo.ID); err != nil {
 						log.Error("DelRepoDivergenceFromCache: %v", err)
 					}
+					indexHeatmap = true
 				} else {
 					if err := DelDivergenceFromCache(repo.ID, branch); err != nil {
 						log.Error("DelDivergenceFromCache: %v", err)
@@ -220,6 +222,12 @@ func pushUpdates(optsList []*repo_module.PushUpdateOptions) error {
 				}
 			} else {
 				pushDeleteBranch(ctx, repo, pusher, opts)
+			}
+
+			if indexHeatmap {
+				if err := IndexDefaultBranchHeatmapContributions(ctx, repo); err != nil {
+					log.Error("IndexDefaultBranchHeatmapContributions[%s]: %v", repo.FullName(), err)
+				}
 			}
 
 			// Even if user delete a branch on a repository which he didn't watch, he will be watch that.

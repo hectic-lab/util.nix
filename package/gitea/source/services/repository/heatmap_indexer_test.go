@@ -14,7 +14,9 @@ import (
 	repo_model "code.gitea.io/gitea/models/repo"
 	"code.gitea.io/gitea/models/unittest"
 	user_model "code.gitea.io/gitea/models/user"
+	"code.gitea.io/gitea/modules/git"
 	"code.gitea.io/gitea/modules/git/gitcmd"
+	repo_module "code.gitea.io/gitea/modules/repository"
 	"code.gitea.io/gitea/modules/timeutil"
 
 	"github.com/stretchr/testify/assert"
@@ -80,9 +82,56 @@ func TestHeatmapIndexIgnoresPusherAndNonDefaultBranch(t *testing.T) {
 	assert.Empty(t, loadHeatmapContributionsForRepo(t, repo.ID))
 }
 
+func TestHeatmapIndexOnPushDefaultBranch(t *testing.T) {
+	repo, commits := prepareHeatmapIndexRepo(t, "heatmap-push-default", []heatmapIndexTestCommit{
+		{Branch: "main", Mark: "initial", AuthorName: "User Two", AuthorEmail: "user2@example.com", CommitterName: "User One", CommitterEmail: "user1@example.com", AuthorDate: "2020-01-15T12:00:00Z"},
+	})
+
+	timeutil.MockSet(time.Date(2026, 6, 6, 0, 0, 0, 0, time.UTC))
+	defer timeutil.MockUnset()
+
+	require.NoError(t, IndexDefaultBranchHeatmapContributions(t.Context(), repo))
+	assert.Len(t, loadHeatmapContributionsForRepo(t, repo.ID), 1)
+
+	newCommits := runFastImport(t, repo, []heatmapIndexTestCommit{
+		{Branch: "main", Mark: "pushed", Parent: commits["initial"], AuthorName: "User Two", AuthorEmail: "user2@example.com", CommitterName: "User One", CommitterEmail: "user1@example.com", AuthorDate: "2020-01-16T12:00:00Z"},
+	})
+	require.NoError(t, pushUpdates([]*repo_module.PushUpdateOptions{
+		{
+			RefFullName:  git.RefNameFromBranch("main"),
+			OldCommitID:  commits["initial"],
+			NewCommitID:  newCommits["pushed"],
+			PusherID:     1,
+			RepoUserName: repo.OwnerName,
+			RepoName:     repo.Name,
+		},
+	}))
+
+	contributions := loadHeatmapContributionsForRepo(t, repo.ID)
+	require.Len(t, contributions, 2)
+	assert.Equal(t, newCommits["pushed"], contributions[1].CommitSHA)
+
+	require.NoError(t, db.TruncateBeans(t.Context(), &activities_model.HeatmapContribution{}))
+	featureCommits := runFastImport(t, repo, []heatmapIndexTestCommit{
+		{Branch: "feature", Mark: "feature-pushed", AuthorName: "User Two", AuthorEmail: "user2@example.com", CommitterName: "User One", CommitterEmail: "user1@example.com", AuthorDate: "2020-01-17T12:00:00Z"},
+	})
+	require.NoError(t, pushUpdates([]*repo_module.PushUpdateOptions{
+		{
+			RefFullName:  git.RefNameFromBranch("feature"),
+			OldCommitID:  git.Sha1ObjectFormat.EmptyObjectID().String(),
+			NewCommitID:  featureCommits["feature-pushed"],
+			PusherID:     1,
+			RepoUserName: repo.OwnerName,
+			RepoName:     repo.Name,
+		},
+	}))
+	assert.Empty(t, loadHeatmapContributionsForRepo(t, repo.ID))
+}
+
 type heatmapIndexTestCommit struct {
 	Branch         string
 	Mark           string
+	Parent         string
 	AuthorName     string
 	AuthorEmail    string
 	CommitterName  string
@@ -121,6 +170,8 @@ func runFastImport(t *testing.T, repo *repo_model.Repository, commits []heatmapI
 		stream.WriteString(fmt.Sprintf("data %d\n%s\n", len(message), message))
 		if parentMark := branchTips[commit.Branch]; parentMark != "" {
 			stream.WriteString("from " + parentMark + "\n")
+		} else if commit.Parent != "" {
+			stream.WriteString("from " + commit.Parent + "\n")
 		}
 		content := commit.Mark + "\n"
 		stream.WriteString(fmt.Sprintf("M 100644 inline %s.txt\n", commit.Mark))

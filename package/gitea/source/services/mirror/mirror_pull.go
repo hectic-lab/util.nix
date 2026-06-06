@@ -318,6 +318,7 @@ func SyncPullMirror(ctx context.Context, repoID int64) bool {
 	defer gitRepo.Close()
 
 	log.Trace("SyncMirrors [repo: %-v]: %d branches updated", m.Repo, len(results))
+	indexHeatmap := false
 	if len(results) > 0 {
 		if ok := checkAndUpdateEmptyRepository(ctx, m, results); !ok {
 			log.Error("SyncMirrors [repo: %-v]: checkAndUpdateEmptyRepository: %v", m.Repo, err)
@@ -329,6 +330,9 @@ func SyncPullMirror(ctx context.Context, repoID int64) bool {
 		// Discard GitHub pull requests, i.e. refs/pull/*
 		if result.RefName.IsPull() {
 			continue
+		}
+		if result.RefName.IsBranch() && result.RefName.BranchName() == m.Repo.DefaultBranch {
+			indexHeatmap = true
 		}
 
 		// Create reference
@@ -390,6 +394,11 @@ func SyncPullMirror(ctx context.Context, repoID int64) bool {
 			OldCommitID: oldCommitID,
 			NewCommitID: newCommitID,
 		}, theCommits)
+	}
+	if indexHeatmap {
+		if err := repo_service.IndexDefaultBranchHeatmapContributions(ctx, m.Repo); err != nil {
+			log.Error("SyncMirrors [repo: %-v]: failed to index heatmap contributions: %v", m.Repo, err)
+		}
 	}
 	log.Trace("SyncMirrors [repo: %-v]: done notifying updated branches/tags - now updating last commit time", m.Repo)
 

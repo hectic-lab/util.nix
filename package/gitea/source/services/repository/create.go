@@ -337,6 +337,10 @@ func CreateRepositoryDirectly(ctx context.Context, doer, owner *user_model.User,
 		}
 	}
 
+	if err = IndexDefaultBranchHeatmapContributions(ctx, repo); err != nil {
+		return nil, fmt.Errorf("IndexDefaultBranchHeatmapContributions: %w", err)
+	}
+
 	return repo, nil
 }
 

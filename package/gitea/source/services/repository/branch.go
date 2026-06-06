@@ -747,6 +747,9 @@ func SetRepoDefaultBranch(ctx context.Context, repo *repo_model.Repository, newB
 	}
 
 	notify_service.ChangeDefaultBranch(ctx, repo)
+	if err := IndexDefaultBranchHeatmapContributions(ctx, repo); err != nil {
+		log.Error("IndexDefaultBranchHeatmapContributions[%s]: %v", repo.FullName(), err)
+	}
 
 	return nil
 }
