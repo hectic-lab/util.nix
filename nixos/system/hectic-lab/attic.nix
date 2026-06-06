@@ -8,6 +8,7 @@
   hectic.services.attic = {
     enable          = true;
     hostName        = "cache.${domain}";
+    port            = 8081;
     environmentFile = config.sops.secrets."atticd/environment".path;
     storage = {
       bucket   = "cache-hectic-lab";
@@ -23,7 +24,7 @@
       client_max_body_size 0;
     '';
     locations."/" = {
-      proxyPass = "http://127.0.0.1:8080";
+      proxyPass = "http://127.0.0.1:8081";
     };
   };
 }

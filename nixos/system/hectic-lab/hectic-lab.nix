@@ -37,6 +37,13 @@ let
       hashedPasswordFile = config.sops.secrets."mailserver/${name}/hashedPassword".path;
     };
   };
+  mkEnteSecret = name: {
+    name  = "ente/${name}";
+    value = {
+      owner = "ente";
+      group = "ente";
+    };
+  };
 in {
   imports = [
     self.nixosModules.hectic
@@ -50,6 +57,7 @@ in {
 
     (import ./attic.nix              { inherit flake self inputs domain; })
     (import ./containers.nix          { inherit flake self inputs; })
+    (import ./ente.nix               { inherit domain; })
     (import ./mechabellum.nix         { inherit flake self inputs domain; })
     (import (./. + "/sentinèlla.nix") { inherit flake self inputs domain; })
   ];
@@ -115,7 +123,13 @@ in {
       };
       "atticd/environment" = {};
       "wg-bfs/private-key" = {};
-    };
+    } // builtins.listToAttrs (map mkEnteSecret [
+      "key-encryption"
+      "key-hash"
+      "jwt-secret"
+      "s3-access-key"
+      "s3-secret-key"
+    ]);
   };
 
   users.users.root.openssh.authorizedKeys.keys = [
