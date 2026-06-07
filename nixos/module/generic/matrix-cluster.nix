@@ -319,6 +319,12 @@ in {
           media_store_path = s3Cfg.mediaStorePath;
           signing_key_path = "/var/lib/matrix-synapse/homeserver.signing.key";
 
+          # Tolerate bursty Element/iPhone presence syncs without disabling limits.
+          rc_presence.per_user = {
+            per_second = 0.5;
+            burst_count = 5;
+          };
+
           experimental_features = {
             msc3266_enabled = true;
             msc4140_enabled = true;
