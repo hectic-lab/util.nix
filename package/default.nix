@@ -142,6 +142,7 @@ in {
   watch                        = pkgs.callPackage ./c/watch/default.nix               {};
   support-bot                  = pkgs.callPackage ./support-bot                       {};
   gitea-heatmap                = pkgs.callPackage ./gitea                             {};
+  gitea-runner-nix-image       = pkgs.callPackage ./gitea-runner-nix-image            {};
   nix-derivation-hash          = pkgs.callPackage ./nix-derivation-hash               {};
   "sentinèlla"                 = pkgs.callPackage (./. + "/sentinèlla")               {};
   deploy                       = pkgs.callPackage ./deploy                            { inherit inputs; };

@@ -37,6 +37,7 @@ in {
       proxyPass = "http://${apiHost}:${builtins.toString apiPort}";
       extraConfig = ''
         proxy_http_version 1.1;
+        client_max_body_size 500M;
       '';
     };
 
