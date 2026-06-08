@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner
+    app.kubernetes.io/part-of: gitea-actions

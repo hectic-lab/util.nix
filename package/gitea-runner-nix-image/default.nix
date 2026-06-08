@@ -53,9 +53,11 @@ dockerTools.buildLayeredImageWithNixDb {
     chmod 1777 tmp
 
     cat > etc/nix/nix.conf <<'EOF'
+    accept-flake-config = true
     experimental-features = nix-command flakes
     substituters = https://cache.nixos.org https://cache.hectic-lab.com/hectic
     trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gW4x6l1xP+GxgH0r7u+f6p1VFlr0= hectic:KMQsKow4SoA9K2vOJlOljmx7/Zpf91Yy+5qEtxDDCzA=
+    trusted-users = root
     sandbox = false
     EOF
   '';

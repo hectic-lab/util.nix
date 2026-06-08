@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitea-runner-lifecycle
+  namespace: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner-lifecycle
+    app.kubernetes.io/part-of: gitea-actions
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gitea-runner-lifecycle
+  namespace: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner-lifecycle
+    app.kubernetes.io/part-of: gitea-actions
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - persistentvolumeclaims
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gitea-runner-lifecycle
+  namespace: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner-lifecycle
+    app.kubernetes.io/part-of: gitea-actions
+subjects:
+  - kind: ServiceAccount
+    name: gitea-runner-lifecycle
+    namespace: gitea-runners
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: gitea-runner-lifecycle
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-runner-lifecycle
+  namespace: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner-lifecycle
+    app.kubernetes.io/part-of: gitea-actions
+data:
+  cleanup-dry-run.sh: |
+    #!/bin/sh
+    set -eu
+
+    namespace="${RUNNER_NAMESPACE:-gitea-runners}"
+    mode="${CLEANUP_MODE:-dry-run}"
+    selector="app.kubernetes.io/name=gitea-runner"
+
+    if [ "$namespace" != "gitea-runners" ]; then
+      printf 'refusing to run outside namespace gitea-runners: %s\n' "$namespace" >&2
+      exit 13
+    fi
+
+    if [ "$mode" != "dry-run" ]; then
+      printf 'refusing destructive mode: set CLEANUP_MODE=dry-run for this CronJob\n' >&2
+      exit 13
+    fi
+
+    printf 'gitea runner lifecycle cleanup dry-run\n'
+    printf 'namespace: %s\n' "$namespace"
+    printf 'mode: %s\n\n' "$mode"
+
+    printf 'StatefulSet:\n'
+    kubectl -n "$namespace" get statefulset gitea-runner -o wide
+
+    printf '\nActive runner pods:\n'
+    kubectl -n "$namespace" get pods -l "$selector" -o wide
+
+    printf '\nRunner /data PVCs:\n'
+    kubectl -n "$namespace" get pvc -l "$selector" -o wide
+
+    printf '\nPVCs whose matching StatefulSet pod is absent (candidates only; no deletion):\n'
+    found_candidate=0
+    for pvc in $(kubectl -n "$namespace" get pvc -l "$selector" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'); do
+      pod="${pvc#data-}"
+      if ! kubectl -n "$namespace" get pod "$pod" >/dev/null 2>&1; then
+        found_candidate=1
+        printf 'candidate pvc=%s expected_pod=%s action=investigate-before-delete\n' "$pvc" "$pod"
+      fi
+    done
+
+    if [ "$found_candidate" -eq 0 ]; then
+      printf 'none\n'
+    fi
+
+    printf '\nGitea registration reconciliation:\n'
+    printf 'dry-run only: compare the pod/PVC list above with Gitea org runner registrations.\n'
+    printf 'only deregister a runner after its pod/PVC was intentionally deleted or /data/.runner was intentionally reset.\n'
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gitea-runner-cleanup-dry-run
+  namespace: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner-lifecycle
+    app.kubernetes.io/part-of: gitea-actions
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: gitea-runner-lifecycle
+            app.kubernetes.io/part-of: gitea-actions
+        spec:
+          serviceAccountName: gitea-runner-lifecycle
+          restartPolicy: Never
+          containers:
+            - name: cleanup-dry-run
+              image: bitnami/kubectl:1.30
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - /scripts/cleanup-dry-run.sh
+              env:
+                - name: RUNNER_NAMESPACE
+                  value: gitea-runners
+                - name: CLEANUP_MODE
+                  value: dry-run
+              volumeMounts:
+                - name: lifecycle-scripts
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: lifecycle-scripts
+              configMap:
+                name: gitea-runner-lifecycle
+                defaultMode: 0555

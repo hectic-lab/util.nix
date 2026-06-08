@@ -1,0 +1,29 @@
+# OpenTofu working directory and downloaded modules/providers.
+.terraform/
+.terraform.lock.hcl
+
+# State must live in the S3 backend for production. Local state is allowed only
+# for throwaway syntax checks with `tofu init -backend=false` and must not be
+# committed.
+terraform.tfstate
+terraform.tfstate.*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Plans can contain secrets or derived infrastructure data.
+*.tfplan
+*.plan
+kubeconfig
+kubeconfig.yaml
+*_kubeconfig.yaml
+
+# Variable files commonly carry credentials. Keep production inputs in SOPS or
+# external environment/configuration, not in checked-in files.
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

@@ -1,0 +1,31 @@
+name: runner ubuntu smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .gitea/workflows/runner-ubuntu-smoke.yaml
+      - infra/gitea-runners/**
+
+jobs:
+  smoke:
+    name: ubuntu-latest label smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Basic runner information
+        run: |
+          set -eu
+          echo "hello from gitea runner"
+          uname -a
+
+      - name: Docker smoke when available
+        run: |
+          set -eu
+          if command -v docker >/dev/null 2>&1; then
+            docker version --format 'docker client={{.Client.Version}} server={{.Server.Version}}'
+            docker run --rm hello-world
+          else
+            echo "docker command not available; skipping Docker smoke"
+          fi

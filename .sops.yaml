@@ -47,6 +47,15 @@ creation_rules:
         - *hectic-lab-server
         - *umbriel-bfs
 
+  - path_regex: sus/gitea-runners.yaml$
+    key_groups:
+      - age:
+        - *nrv
+        - *yukkop
+        - *yukkop-alt
+        - *hectic-lab-server
+        - *umbriel-bfs
+
   - path_regex: sus/matrix-cluster.yaml$
     key_groups:
       - age:

@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-runner-config
+  namespace: gitea-runners
+  labels:
+    app.kubernetes.io/name: gitea-runner
+    app.kubernetes.io/part-of: gitea-actions
+data:
+  config.yaml: |
+    log:
+      level: info
+
+    runner:
+      file: /data/.runner
+      capacity: 1
+      envs: {}
+      timeout: 3h
+      insecure: false
+      fetch_timeout: 5s
+      fetch_interval: 2s
+      labels:
+        - ubuntu-latest
+        # The nix label is intentionally disabled until the runner image has a
+        # concrete registry-reported digest; see ../runbook.md before deploy.
+
+    cache:
+      enabled: true
+      dir: /data/cache
+
+    container:
+      network: bridge
+      privileged: false
+      force_pull: true
+      valid_volumes: []
+      docker_host: unix:///runner-docker/docker.sock

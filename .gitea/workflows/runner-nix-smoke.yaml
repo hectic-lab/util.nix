@@ -1,0 +1,29 @@
+name: runner nix smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - .gitea/workflows/runner-nix-smoke.yaml
+      - flake.lock
+      - flake.nix
+      - infra/gitea-runners/**
+
+jobs:
+  smoke:
+    name: nix label smoke
+    runs-on: nix
+    steps:
+      - name: Nix version and cache configuration
+        run: |
+          set -eu
+          nix --version
+          nix config show substituters
+          nix config show trusted-public-keys
+
+      - name: Repository flake evaluation
+        run: |
+          set -eu
+          nix flake check --no-build

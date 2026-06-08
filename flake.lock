@@ -675,11 +675,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1780868200,
-        "narHash": "sha256-h/u6QjA+GbOlKDMTkrZBQZrTf1oAnV9/i4+IsuGSKQg=",
+        "lastModified": 1780905541,
+        "narHash": "sha256-hxaKZTcowCDF5RfcCZIWpRY9/ZMm2zJyInNnovBayRg=",
         "ref": "refs/heads/master",
-        "rev": "03956bafaea27ca89fe6e74a15658b2ae7547bec",
-        "revCount": 115,
+        "rev": "6f1f292db325145bbdf4d0452ce16963c07ecdb1",
+        "revCount": 123,
         "type": "git",
         "url": "ssh://git@github.com/LysmiMx/mechabellum-replay-analysis.git"
       },
