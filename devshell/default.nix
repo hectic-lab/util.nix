@@ -8,6 +8,7 @@
   haskell    = import ./haskell.nix    { inherit self system pkgs; };
   neuro      = import ./neuro.nix      { inherit self system pkgs; };
   xmpp       = import ./xmpp.nix       { inherit self system pkgs; };
+  gitea-runners = import ./gitea-runners.nix { inherit pkgs; };
   default    = pkgs.mkShell {
     buildInputs =
       (with self.packages.${system}; [
