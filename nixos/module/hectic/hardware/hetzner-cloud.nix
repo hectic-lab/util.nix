@@ -51,6 +51,14 @@ in {
         
       '';
     };
+    floatingIpv4 = lib.mkOption {
+      type = with lib.types; nullOr (strMatching "^([0-9]{1,3}\\.){3}[0-9]{1,3}$");
+      default = null;
+      example = "188.243.124.247";
+      description = ''
+        Optional Hetzner Floating IPv4 configured as `/32` on the primary interface.
+      '';
+    };
     device = lib.mkOption {
       type = lib.types.str;
       default = if isNewer then "/dev/nvme0n1" else "/dev/sda";
@@ -95,7 +103,7 @@ in {
         address = [
           "${cfg.ipv4}/32"
           "${cfg.ipv6}::/64"
-        ];
+        ] ++ lib.optional (cfg.floatingIpv4 != null) "${cfg.floatingIpv4}/32";
         routes = [
           { Gateway = "172.31.1.1"; GatewayOnLink = true; }
           { Gateway = "fe80::1"; }
