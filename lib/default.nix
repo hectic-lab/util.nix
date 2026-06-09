@@ -103,7 +103,7 @@ in {
 
   # Consolidated SQL bundles for the `hectic` schema. Single source of truth
   # for everything that creates objects in the `hectic` namespace, used by
-  # migrator (init-time) and db-tool (postgres-init + hydrate). Consumers apply
+  # migrator (init-time), db-dev/database hydrate, and db-ops secrets loading. Consumers apply
   # the full bundle via lib/hook/apply-hectic-bundle.sh.
   #
   # The whole hectic system shares one `versionString`; `hectic-version.sql`

@@ -151,6 +151,8 @@ in {
   onlinepubs2man               = pkgs.callPackage ./onlinepubs2man                    {};
   migrator                     = pkgs.callPackage ./migrator                          { inherit self; };
   "parse-uri"                  = pkgs.callPackage ./parse-uri                        {};
+  "db-dev"                     = dbToolPkgs."db-dev";
+  "db-ops"                     = dbToolPkgs."db-ops";
   "db-tool"                    = dbToolPkgs."db-tool";
   "postgres-init"              = dbToolPkgs."postgres-init";
   "postgres-cleanup"           = dbToolPkgs."postgres-cleanup";

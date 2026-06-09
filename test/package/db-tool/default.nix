@@ -31,7 +31,8 @@
     ) (lib.filterAttrs (_: v: v != null)
       (lib.mapAttrs (n: t: mkTestDrv folder n t) (testDir folder)));
 
-  database       = self.packages.${system}."db-tool";
+  database       = self.packages.${system}."db-dev";
+  dbOps          = self.packages.${system}."db-ops";
   postgresInit   = self.packages.${system}."postgres-init";
   postgresCleanup = self.packages.${system}."postgres-cleanup";
 
@@ -48,7 +49,7 @@
   mkNonPgTest = testName: testDrv: pkgs.runCommand "db-tool-${testName}"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
-    buildInputs       = [ database postgresInit postgresCleanup pkgs.postgresql_17 pkgs.dash ];
+    buildInputs       = [ database dbOps postgresInit postgresCleanup pkgs.postgresql_17 pkgs.dash ];
   } ''
     ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
     test=${testDrv}
@@ -64,7 +65,7 @@
   mkPgTest = testName: testDrv: pkgs.runCommand "db-tool-${testName}"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused ];
-    buildInputs       = [ database postgresInit postgresCleanup pkgs.postgresql_17 pkgs.dash pkgs.netcat-openbsd ];
+    buildInputs       = [ database dbOps postgresInit postgresCleanup pkgs.postgresql_17 pkgs.dash pkgs.netcat-openbsd ];
   } ''
     ${builtins.readFile self.legacyPackages.${system}.helpers.posix-shell.log}
     test=${testDrv}

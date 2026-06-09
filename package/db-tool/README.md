@@ -1,18 +1,21 @@
 # db-tool
 
-PostgreSQL development database management tool. Drop-in replacement for per-project database.sh / postgres-init.sh / postgres-cleanup.sh scripts. Provides database, postgres-init, and postgres-cleanup binaries.
+PostgreSQL utility package exposing separate development and operations binaries.
+`db-dev` preserves the current development workflow via the `database` binary;
+`db-ops` provides target-safe operational helpers such as secrets hydration.
 
 ## Provided Binaries
 
 | Binary | Description |
 | --- | --- |
-| `database` | Main script for managing migrations, deployments, and logs. |
+| `database` | Main `db-dev` script for managing local development databases, migrations, deployments, and logs. |
+| `db-ops` | Operational helper binary for target/runtime database actions. |
 | `postgres-init` | Ephemeral PostgreSQL cluster initialization and startup. |
 | `postgres-cleanup` | Graceful shutdown and cleanup of the PostgreSQL cluster. |
 
 ## Required Environment Variables
 
-These variables must be set for `db-tool` to function.
+These variables must be set for `db-dev` / `database` to function.
 
 | Variable | Description |
 | --- | --- |
@@ -39,7 +42,7 @@ These variables must be set for `db-tool` to function.
 
 ## Postgres Package Override
 
-By default, `db-tool`/`postgres-init`/`postgres-cleanup` use plain `postgresql_17` from nixpkgs. If you need extensions (e.g. `pg_cron`), override the postgres package per-output:
+By default, `db-dev`/`db-ops`/`postgres-init`/`postgres-cleanup` use plain `postgresql_17` from nixpkgs. If you need extensions (e.g. `pg_cron`), override the postgres package per-output:
 
 ```nix
 let
@@ -48,12 +51,15 @@ let
   ]);
 in {
   packages = [
-    (pkgs.hectic."db-tool".override          { postgresql = myPg; })
+    (pkgs.hectic."db-dev".override           { postgresql = myPg; })
+    (pkgs.hectic."db-ops".override           { postgresql = myPg; })
     (pkgs.hectic."postgres-init".override    { postgresql = myPg; })
     (pkgs.hectic."postgres-cleanup".override { postgresql = myPg; })
   ];
 }
 ```
+
+`pkgs.hectic."db-tool"` remains as a compatibility alias to `db-dev`.
 
 ## pull_staging Contract
 
@@ -102,14 +108,14 @@ used by `database restore`.
 
 ## shellHook Example
 
-To use `db-tool` in a Nix development shell, add the following to your `flake.nix` or `shell.nix`:
+To use `db-dev` in a Nix development shell, add the following to your `flake.nix` or `shell.nix`:
 
 ```nix
 {
   # ...
   devShells.default = pkgs.mkShell {
     packages = [
-      pkgs.hectic.db-tool
+      pkgs.hectic.db-dev
       pkgs.hectic.postgres-init
       pkgs.hectic.postgres-cleanup
     ];
@@ -134,7 +140,7 @@ To use `db-tool` in a Nix development shell, add the following to your `flake.ni
 
 ## hectic Bundle
 
-`db-tool` and `migrator` apply a single bundle of SQL files that bootstrap the
+`db-dev`, `db-ops`, and `migrator` apply a single bundle of SQL files that bootstrap the
 `hectic` schema. The bundle lives in
 [`lib/hook/sql/`](../../lib/hook/sql/README.md) — see that README for full
 contract, file layout, and the `self.lib.hectic.*` Nix API.
@@ -190,6 +196,7 @@ ALTER DATABASE mydb SET hectic.inheritance_extra_excluded_schemas = 'legacy,etl'
 | `postgres-init` | **No.** Pure PostgreSQL provisioner — starts a vanilla cluster, nothing more. |
 | `migrator init` | **Yes, mandatory.** The bundle is a hard prerequisite for `hectic.migration`. |
 | `database hydrate` | **Yes, by default.** Re-applied on every hydrate. Skip with `--no-hook`. After applying the bundle, hydrate also calls `hectic.load_secrets_from_env(<dotenv>)` if `HECTIC_DOTENV_FILE` (or `${LOCAL_DIR}/.env.${ENVIRONMENT}`) is readable. |
+| `db-ops secrets load` | **Yes, mandatory.** Applies the bundle and requires a dotenv source before loading secrets into `hectic.secret`. |
 
 The bundle is idempotent — repeated application is safe.
 

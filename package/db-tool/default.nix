@@ -8,7 +8,7 @@ let
 
   applyBundle = self.lib.hectic.applyBundleScript;
 
-  mkDatabase =
+  mkDbDev =
     { postgresql ? postgresql_17 }:
     hectic.writeShellApplication {
       inherit shell;
@@ -33,6 +33,31 @@ let
       meta = {
         description = "PostgreSQL development database management";
         mainProgram = "database";
+      };
+    };
+
+  mkDbOps =
+    { postgresql ? postgresql_17 }:
+    hectic.writeShellApplication {
+      inherit shell;
+      bashOptions = [
+        "errexit"
+        "nounset"
+      ];
+      excludeShellChecks = [ "SC2209" ];
+      name = "db-ops";
+      runtimeInputs = [ postgresql coreutils ];
+
+      text = ''
+        ${builtins.readFile hectic.helpers.posix-shell.log}
+        ${builtins.readFile hectic.helpers.posix-shell.change_namespace}
+        ${applyBundle}
+        ${builtins.readFile ./db-ops.sh}
+      '';
+
+      meta = {
+        description = "PostgreSQL operations utility";
+        mainProgram = "db-ops";
       };
     };
 
@@ -73,7 +98,8 @@ let
     };
 in
 {
-  "db-tool"             = lib.makeOverridable mkDatabase { };
+  "db-dev"              = lib.makeOverridable mkDbDev { };
+  "db-ops"              = lib.makeOverridable mkDbOps { };
   "postgres-init"       = lib.makeOverridable mkPostgresInit { };
   "postgres-cleanup"    = lib.makeOverridable mkPostgresCleanup { };
   "hectic-inheritance"  = hecticInheritance;

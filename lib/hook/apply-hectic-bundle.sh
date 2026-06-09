@@ -10,8 +10,8 @@
 # Usage:
 #   apply_hectic_bundle <PGURL> [<DOTENV_CONTENT>]
 #
-# If DOTENV_CONTENT is non-empty, it is loaded into hectic.secret via
-# hectic.load_secrets_from_env() after the bundle is applied.
+# If DOTENV_CONTENT is non-empty, it is base64-encoded and then loaded into
+# hectic.secret via hectic.load_secrets_from_env() after the bundle is applied.
 # SQL file paths are substituted by Nix evaluation time.
 
 apply_hectic_bundle() {
@@ -41,11 +41,9 @@ apply_hectic_bundle() {
   done
 
   if [ -n "$env_content" ]; then
-    # Dollar-quote with $ps_env$ tag to preserve all content verbatim.
+    env_content_b64="$(printf '%s' "$env_content" | base64 | tr -d '\n')" || return 1
     psql "$pgurl" -v ON_ERROR_STOP=1 <<SQL || return 1
-SELECT hectic.load_secrets_from_env(\$ps_env\$
-$env_content
-\$ps_env\$);
+SELECT hectic.load_secrets_from_env(convert_from(decode('$env_content_b64', 'base64'), 'UTF8'));
 SQL
   fi
 

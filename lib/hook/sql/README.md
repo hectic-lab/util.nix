@@ -4,8 +4,8 @@ Single source of truth for every object created in the `hectic` PostgreSQL
 schema. Consumed by:
 
 - `package/migrator` — applies the bundle on `migrator init` (mandatory).
-- `package/db-tool` — applies the bundle in `database hydrate` (default; opt
-  out with `--no-hook`).
+- `package/db-tool` — applies the bundle in `db-dev` / `database hydrate`
+  (default; opt out with `--no-hook`) and in `db-ops secrets load`.
 - External consumers (e.g. `proxydoe`) — invoke `psql -f` directly against the
   paths exposed via `self.lib.hectic.*.path`.
 
@@ -60,7 +60,7 @@ verbatim source files in the store.
 
 `lib/hook/apply-hectic-bundle.sh` is a dash-compatible helper template.
 `self.lib.hectic.applyBundleScript` is the generated shell source with concrete
-SQL paths embedded at Nix evaluation time. `migrator` and `db-tool` splice that
+SQL paths embedded at Nix evaluation time. `migrator`, `db-dev`, and `db-ops` splice that
 shell source directly into their generated scripts. Public entry point:
 
 ```sh
@@ -87,8 +87,9 @@ External consumers that do not want to source the helper can still invoke
 4. Add a matching placeholder/replacement in `lib.hectic.applyBundleScript` and
    update `lib/hook/apply-hectic-bundle.sh` to apply the file.
 5. Bump `HECTIC_VERSION` if the new content changes existing semantics.
-6. Update tests in `test/package/migrator/test/postgresql/init-hectic-bundle/`
-   and `test/package/db-tool/test/postgresql/hydrate-hook/`.
+6. Update tests in `test/package/migrator/test/postgresql/init-hectic-bundle/`,
+   `test/package/db-tool/test/postgresql/hydrate-hook/`, and any `db-ops`
+   bundle-loading coverage.
 
 ## Versioning
 
