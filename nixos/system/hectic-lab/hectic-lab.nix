@@ -133,6 +133,8 @@ in {
   };
 
   users.users.root.openssh.authorizedKeys.keys = [
+    # neuro machine
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA8NYFGff5JaiAQ0TyukWl+bqwGWU/8E6IBRi/YEgSdF root@neuro"
     # yukkop
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMuP5NSfEQmO6m77xBWZvZ3hk7cw1q2k2vbsFd37rybU u0_a327@localhost"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJBLxMo5icX2Xyng7mcWGnIi+c4ZbVygjPhuU8noCkfZ"
