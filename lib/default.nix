@@ -67,6 +67,7 @@ in {
     logs = builtins.readFile ./shell/logs.sh;
     check-tool = builtins.readFile ./shell/check-tool.sh;
     local-dir = builtins.readFile ./shell/local-dir.sh;
+    load-sops = builtins.readFile ./shell/load-sops.sh;
   };
 
   sharedShellAliases = {
