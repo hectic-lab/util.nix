@@ -26,6 +26,7 @@ postgres_init_main() {
   mkdir -p "$sockdir" || return 1
 
   if [ "${PG_REUSE+x}" ] && [ -f "$data/PG_VERSION" ]; then PG_REUSE=1; else PG_REUSE=0; fi
+
   if [ "$PG_REUSE" -eq 0 ]; then
     rm -rf "$data" "$sockdir" || return 1
     mkdir -p "$sockdir" || return 1
@@ -37,7 +38,7 @@ postgres_init_main() {
       { printf '%s\n' "listen_addresses = ''"; [ "$PG_DISABLE_LOGGING" -eq 0 ] && { printf '%s\n' 'logging_collector = on'; printf '%s\n' "log_directory = 'log'"; }; [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ] && { printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"; printf '%s\n' "cron.database_name = '$db'"; printf '%s\n' "cron.host = '$sockdir'"; }; :; } >> "$data/postgresql.conf" || return 1
     fi
     sed -i "1ilocal all all trust" "$data/pg_hba.conf" || return 1
-  fi
+  }
 
   [ -f "$data/postgresql.auto.conf" ] || : > "$data/postgresql.auto.conf"
   [ -f "$data/pg_ident.conf" ] || : > "$data/pg_ident.conf"
@@ -68,12 +69,71 @@ postgres_init_main() {
       printf '%s\n' "cron.host = '$sockdir'"
     fi
   } >> "$data/postgresql.auto.conf" || return 1
+
+  _pg_start_exit=0
   if [ "${NO_TTY:-0}" = "1" ]; then
     _pg_log="$(mktemp /tmp/postgres-init-start.XXXXXX.log)"
-    with_closed_fds pg_ctl -D "$data" -o "-F" -w start >"$_pg_log" 2>&1 || return 2
+    with_closed_fds pg_ctl -D "$data" -o "-F" -w start >"$_pg_log" 2>&1 || _pg_start_exit=$?
     printf '%s\n' "postgres-init: pg_ctl start output redirected to $_pg_log" >&2
   else
-    with_closed_fds pg_ctl -D "$data" -o "-F" -w start || return 2
+    with_closed_fds pg_ctl -D "$data" -o "-F" -w start || _pg_start_exit=$?
+  fi
+
+  if [ "$_pg_start_exit" -ne 0 ]; then
+    if [ "$PG_REUSE" -eq 1 ]; then
+      printf '%s\n' "postgres-init: reused cluster failed to start; reinitializing $wd" >&2
+      PG_REUSE=0
+      rm -rf "$data" "$sockdir" || return 1
+      mkdir -p "$sockdir" || return 1
+      initdb -D "$data" --no-locale -E UTF8 || return 1
+      if [ -n "${PG_CONF_FILE:-}" ]; then
+        [ -r "$PG_CONF_FILE" ] || { printf '%s\n' "postgres-init: PG_CONF_FILE not readable: $PG_CONF_FILE" >&2; return 1; }
+        cp -f -- "$PG_CONF_FILE" "$data/postgresql.conf" || return 1
+      else
+        { printf '%s\n' "listen_addresses = ''"; [ "$PG_DISABLE_LOGGING" -eq 0 ] && { printf '%s\n' 'logging_collector = on'; printf '%s\n' "log_directory = 'log'"; }; [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ] && { printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"; printf '%s\n' "cron.database_name = '$db'"; printf '%s\n' "cron.host = '$sockdir'"; }; :; } >> "$data/postgresql.conf" || return 1
+      fi
+      sed -i "1ilocal all all trust" "$data/pg_hba.conf" || return 1
+      [ -f "$data/postgresql.auto.conf" ] || : > "$data/postgresql.auto.conf"
+      [ -f "$data/pg_ident.conf" ] || : > "$data/pg_ident.conf"
+      sed -i '/^[[:space:]]*port[[:space:]]*=/d' "$data/postgresql.conf" || return 1
+      sed -i '/^[[:space:]]*unix_socket_directories[[:space:]]*=/d' "$data/postgresql.conf" || return 1
+      sed -i '/^[[:space:]]*port[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      sed -i '/^[[:space:]]*unix_socket_directories[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      sed -i '/^[[:space:]]*hba_file[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      sed -i '/^[[:space:]]*ident_file[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      sed -i '/^[[:space:]]*shared_preload_libraries[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      sed -i '/^[[:space:]]*cron\.database_name[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      sed -i '/^[[:space:]]*cron\.host[[:space:]]*=/d' "$data/postgresql.auto.conf" || return 1
+      { printf '%s\n' "port = $PG_PORT"; printf '%s\n' "unix_socket_directories = '$sockdir'"; } >> "$data/postgresql.conf" || return 1
+      {
+        printf '%s\n' "port = '$PG_PORT'"
+        printf '%s\n' "unix_socket_directories = '$sockdir'"
+        printf '%s\n' "hba_file = '$data/pg_hba.conf'"
+        printf '%s\n' "ident_file = '$data/pg_ident.conf'"
+        if [ "$PG_DISABLE_LOGGING" -eq 0 ]; then
+          printf '%s\n' "logging_collector = 'on'"
+        else
+          printf '%s\n' "logging_collector = 'off'"
+        fi
+        if [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ]; then
+          printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"
+          printf '%s\n' "cron.database_name = '$db'"
+          printf '%s\n' "cron.host = '$sockdir'"
+        fi
+      } >> "$data/postgresql.auto.conf" || return 1
+      _pg_start_exit=0
+      if [ "${NO_TTY:-0}" = "1" ]; then
+        _pg_log="$(mktemp /tmp/postgres-init-start.XXXXXX.log)"
+        with_closed_fds pg_ctl -D "$data" -o "-F" -w start >"$_pg_log" 2>&1 || _pg_start_exit=$?
+        printf '%s\n' "postgres-init: pg_ctl start output redirected to $_pg_log" >&2
+      else
+        with_closed_fds pg_ctl -D "$data" -o "-F" -w start || _pg_start_exit=$?
+      fi
+      [ "$_pg_start_exit" -eq 0 ] || return 2
+      printf '%s\n' "postgres-init: reinitialized broken cluster at $wd" >&2
+    else
+      return 2
+    fi
   fi
 
   user="$(id -un)" || return 1

@@ -59,8 +59,6 @@ in {
 }
 ```
 
-`pkgs.hectic."db-tool"` remains as a compatibility alias to `db-dev`.
-
 ## pull_staging Contract
 
 The `pull_staging` subcommand allows importing data from a remote staging environment into the local `test-data.sql` file. This functionality requires four specific environment variables to be defined:

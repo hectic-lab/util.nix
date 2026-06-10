@@ -153,7 +153,6 @@ in {
   "parse-uri"                  = pkgs.callPackage ./parse-uri                        {};
   "db-dev"                     = dbToolPkgs."db-dev";
   "db-ops"                     = dbToolPkgs."db-ops";
-  "db-tool"                    = dbToolPkgs."db-tool";
   "postgres-init"              = dbToolPkgs."postgres-init";
   "postgres-cleanup"           = dbToolPkgs."postgres-cleanup";
   "hectic-inheritance"         = dbToolPkgs."hectic-inheritance";
