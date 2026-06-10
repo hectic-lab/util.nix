@@ -1,6 +1,58 @@
 #!/bin/dash
 
+# Initialize or reuse a local PostgreSQL cluster for development workflows.
+#
+# Public contract:
+# - Requires either PG_WORKING_DIR or LOCAL_DIR.
+# - Produces a ready-to-use database and exports:
+#   POSTGRESQL_HOST, POSTGRESQL_PORT, POSTGRESQL_USER, POSTGRESQL_DATABASE,
+#   PGURL, and also the variable named by PG_URL_VAR.
+# - Reuses an existing cluster only when PG_REUSE is set and PG_VERSION exists.
+# - If a reused cluster cannot start, it is reinitialized automatically.
+#
+# Important knobs:
+# - PG_WORKING_DIR: cluster root (defaults to $LOCAL_DIR/focus/postgresql)
+# - PG_DATABASE: database to create/ensure (default: testdb)
+# - PG_PORT: socket port (default: 5432)
+# - PG_URL_VAR: alternate URL variable to export in addition to PGURL
+# - PG_CONF_FILE: base postgresql.conf to copy on fresh init
+# - PG_SHARED_PRELOAD_LIBRARIES: preload list; empty string disables pg_cron
+# - PG_DISABLE_LOGGING=1: disable logging_collector in generated config
+# - NO_TTY=1: redirect pg_ctl stop/start output into temp log files
+
+postgres_init_help() {
+  cat <<'EOF'
+Usage: postgres-init
+
+Initialize or reuse a local PostgreSQL cluster.
+
+Environment:
+  PG_WORKING_DIR              Cluster root directory
+  LOCAL_DIR                   Fallback root used to derive PG_WORKING_DIR
+  PG_DATABASE                 Database name to create/ensure (default: testdb)
+  PG_PORT                     PostgreSQL port / unix socket port (default: 5432)
+  PG_URL_VAR                  Extra URL variable to export alongside PGURL
+  PG_CONF_FILE                Base postgresql.conf copied on fresh init only
+  PG_SHARED_PRELOAD_LIBRARIES Preload list; empty disables pg_cron preload
+  PG_DISABLE_LOGGING          Set to 1 to disable logging_collector
+  PG_REUSE                    Reuse existing cluster if PG_VERSION exists
+  NO_TTY                      Redirect pg_ctl output to temp files
+
+Behavior:
+  - Rewrites runtime socket/port/cron settings on every launch.
+  - Creates the target database if missing.
+  - If a reused cluster exists but cannot start, reinitializes it automatically.
+EOF
+}
+
 postgres_init_main() {
+  case "${1:-}" in
+    -h|--help)
+      postgres_init_help
+      return 0
+    ;;
+  esac
+
   if [ -z "${PG_WORKING_DIR:-}" ] && [ -z "${LOCAL_DIR:-}" ]; then
     printf '%s\n' 'postgres-init: PG_WORKING_DIR or LOCAL_DIR is required' >&2
     return 1
@@ -25,6 +77,9 @@ postgres_init_main() {
   fi
   mkdir -p "$sockdir" || return 1
 
+  # Reuse is optimistic: if a cluster exists on disk, try to start it first.
+  # We only destroy state after a real startup failure proves the cluster is
+  # broken, which keeps long-lived local DBs intact when possible.
   if [ "${PG_REUSE+x}" ] && [ -f "$data/PG_VERSION" ]; then PG_REUSE=1; else PG_REUSE=0; fi
 
   if [ "$PG_REUSE" -eq 0 ]; then
@@ -32,6 +87,9 @@ postgres_init_main() {
     mkdir -p "$sockdir" || return 1
     initdb -D "$data" --no-locale -E UTF8 || return 1
     if [ -n "${PG_CONF_FILE:-}" ]; then
+      # PG_CONF_FILE replaces the base postgresql.conf on fresh init only. We
+      # still append runtime values later so the helper can relocate sockets,
+      # ports, and cron settings regardless of the custom file contents.
       [ -r "$PG_CONF_FILE" ] || { printf '%s\n' "postgres-init: PG_CONF_FILE not readable: $PG_CONF_FILE" >&2; return 1; }
       cp -f -- "$PG_CONF_FILE" "$data/postgresql.conf" || return 1
     else
@@ -51,6 +109,9 @@ postgres_init_main() {
     sed -i "1ilocal all all trust" "$data/pg_hba.conf" || return 1
   fi
 
+  # Rewrite the runtime knobs on every launch. Reused clusters may have been
+  # started from another workspace/session, so we must override stale socket,
+  # port, and pg_cron wiring before attempting startup.
   [ -f "$data/postgresql.auto.conf" ] || : > "$data/postgresql.auto.conf"
   [ -f "$data/pg_ident.conf" ] || : > "$data/pg_ident.conf"
 
@@ -92,6 +153,9 @@ postgres_init_main() {
 
   if [ "$_pg_start_exit" -ne 0 ]; then
     if [ "$PG_REUSE" -eq 1 ]; then
+      # Self-heal path: the on-disk cluster exists but cannot complete startup
+      # (for example bad WAL / invalid checkpoint). At this point preserving
+      # the broken state is less useful than reinitializing automatically.
       printf '%s\n' "postgres-init: reused cluster failed to start; reinitializing $wd" >&2
       PG_REUSE=0
       rm -rf "$data" "$sockdir" || return 1
@@ -169,6 +233,9 @@ postgres_init_main() {
   psql -h "$sockdir" -p "$PG_PORT" -d "$db" -v ON_ERROR_STOP=1 -c 'select 1;' || return 1
 
   export POSTGRESQL_HOST="$sockdir" POSTGRESQL_PORT="$PG_PORT" POSTGRESQL_USER="$user" POSTGRESQL_DATABASE="$db"
+  # Export both names for compatibility: some callers consume plain PGURL,
+  # while multi-cluster shells also need a project-specific variable like
+  # WIPE_PGURL or BMSEARCH_PGURL in the same environment.
   PGURL="postgresql://${POSTGRESQL_USER}@/${POSTGRESQL_DATABASE}?host=${POSTGRESQL_HOST}&port=${POSTGRESQL_PORT}"
   export PGURL
   case $PG_URL_VAR in ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]* ) printf '%s\n' 'postgres-init: invalid PG_URL_VAR' >&2; return 1 ;; esac
