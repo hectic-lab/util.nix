@@ -1,7 +1,5 @@
-{ 
-  inputs,
-  flake,
-  self,
+{
+  ...
 }:
 { 
   pkgs,
@@ -11,6 +9,13 @@
 }: let
   cfg = config.hectic.hardware.hetzner-cloud;
   isNewer = cfg.generation == "newer";
+  networkMatchConfig =
+    (lib.optionalAttrs (cfg.networkMatchConfigName != null) {
+      Name = cfg.networkMatchConfigName;
+    })
+    // (lib.optionalAttrs (cfg.networkMatchConfigMac != null) {
+      PermanentMACAddress = cfg.networkMatchConfigMac;
+    });
 in {
   options.hectic.hardware.hetzner-cloud = {
     enable = lib.mkEnableOption "Enable hetzner-cloud hardware configurations";
@@ -73,14 +78,27 @@ in {
       '';
     };
     networkMatchConfigName = lib.mkOption {
-      type = lib.types.strMatching "^(enp1s0|ens3|eth0)$";
+      type = with lib.types; nullOr str;
+      default = null;
       example = "enp1s0";
       description = ''
-        type of network conection, 
-        on older hetzner servers may be `ens3` or else
-        on newer probably `enp1s0`
+        Optional interface name to match in systemd-networkd.
 
-        you can use `networkctl list` on server to know it
+        Prefer `networkMatchConfigMac` for stable matching across rescue
+        images and installed systems that may rename interfaces differently.
+
+        You can use `networkctl list` on server to know it.
+      '';
+    };
+    networkMatchConfigMac = lib.mkOption {
+      type = with lib.types; nullOr (strMatching "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$");
+      default = null;
+      example = "92:00:08:4a:b0:32";
+      description = ''
+        Optional permanent MAC address to match in systemd-networkd.
+
+        This is the preferred Hetzner Cloud matching method because interface
+        names can differ between rescue images and installed NixOS systems.
       '';
     };
   };
@@ -88,6 +106,15 @@ in {
   config = lib.mkIf cfg.enable (lib.mkMerge
   [
     {
+      boot.loader.systemd-boot.enable = false;
+      boot.loader.efi.canTouchEfiVariables = false;
+      boot.loader.grub = {
+        enable = true;
+        efiSupport = true;
+        efiInstallAsRemovable = true;
+        device = "nodev";
+      };
+
       boot.initrd.availableKernelModules = [
         "ata_piix"
         "uhci_hcd"
@@ -98,7 +125,7 @@ in {
       networking.useNetworkd = true;
       systemd.network.enable = true;
       systemd.network.networks."30-wan" = {
-        matchConfig.Name = cfg.networkMatchConfigName;
+        matchConfig = networkMatchConfig;
         networkConfig.DHCP = "no";
         address = [
           "${cfg.ipv4}/32"
@@ -145,6 +172,13 @@ in {
           };
         };
       };
+
+      assertions = [
+        {
+          assertion = cfg.networkMatchConfigName != null || cfg.networkMatchConfigMac != null;
+          message = "hectic.hardware.hetzner-cloud requires networkMatchConfigName or networkMatchConfigMac";
+        }
+      ];
     } 
     (lib.mkIf (pkgs.stdenv.hostPlatform.system == "aarch64-linux") {
       boot.initrd.kernelModules = [ "virtio_gpu" ];

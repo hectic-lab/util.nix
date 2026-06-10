@@ -16,11 +16,11 @@
   hectic = {
     archetype.dev.enable = true;
     hardware.hetzner-cloud = {
-      enable                 = true;
-      device                 = "/dev/sda";
-      networkMatchConfigName = "eth0";
-      ipv4                   = "46.225.237.218";
-      ipv6                   = "2a01:4f8:c2c:3b14";
+      enable                = true;
+      device                = "/dev/sda";
+      networkMatchConfigMac = "92:00:08:4a:b0:32";
+      ipv4                  = "46.225.237.218";
+      ipv6                  = "2a01:4f8:c2c:3b14";
     };
   };
 
