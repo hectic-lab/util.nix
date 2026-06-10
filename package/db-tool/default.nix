@@ -27,7 +27,7 @@ let
         ${builtins.readFile hectic.helpers.posix-shell.pager_or_cat}
         ${builtins.readFile hectic.helpers.posix-shell.with_closed_fds}
         ${applyBundle}
-        ${builtins.readFile ./database.sh}
+        ${builtins.readFile ./db-dev.sh}
       '';
 
       meta = {
