@@ -35,10 +35,21 @@ postgres_init_main() {
       [ -r "$PG_CONF_FILE" ] || { printf '%s\n' "postgres-init: PG_CONF_FILE not readable: $PG_CONF_FILE" >&2; return 1; }
       cp -f -- "$PG_CONF_FILE" "$data/postgresql.conf" || return 1
     else
-      { printf '%s\n' "listen_addresses = ''"; [ "$PG_DISABLE_LOGGING" -eq 0 ] && { printf '%s\n' 'logging_collector = on'; printf '%s\n' "log_directory = 'log'"; }; [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ] && { printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"; printf '%s\n' "cron.database_name = '$db'"; printf '%s\n' "cron.host = '$sockdir'"; }; :; } >> "$data/postgresql.conf" || return 1
+      {
+        printf '%s\n' "listen_addresses = ''"
+        if [ "$PG_DISABLE_LOGGING" -eq 0 ]; then
+          printf '%s\n' 'logging_collector = on'
+          printf '%s\n' "log_directory = 'log'"
+        fi
+        if [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ]; then
+          printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"
+          printf '%s\n' "cron.database_name = '$db'"
+          printf '%s\n' "cron.host = '$sockdir'"
+        fi
+      } >> "$data/postgresql.conf" || return 1
     fi
     sed -i "1ilocal all all trust" "$data/pg_hba.conf" || return 1
-  }
+  fi
 
   [ -f "$data/postgresql.auto.conf" ] || : > "$data/postgresql.auto.conf"
   [ -f "$data/pg_ident.conf" ] || : > "$data/pg_ident.conf"
@@ -90,7 +101,18 @@ postgres_init_main() {
         [ -r "$PG_CONF_FILE" ] || { printf '%s\n' "postgres-init: PG_CONF_FILE not readable: $PG_CONF_FILE" >&2; return 1; }
         cp -f -- "$PG_CONF_FILE" "$data/postgresql.conf" || return 1
       else
-        { printf '%s\n' "listen_addresses = ''"; [ "$PG_DISABLE_LOGGING" -eq 0 ] && { printf '%s\n' 'logging_collector = on'; printf '%s\n' "log_directory = 'log'"; }; [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ] && { printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"; printf '%s\n' "cron.database_name = '$db'"; printf '%s\n' "cron.host = '$sockdir'"; }; :; } >> "$data/postgresql.conf" || return 1
+        {
+          printf '%s\n' "listen_addresses = ''"
+          if [ "$PG_DISABLE_LOGGING" -eq 0 ]; then
+            printf '%s\n' 'logging_collector = on'
+            printf '%s\n' "log_directory = 'log'"
+          fi
+          if [ -n "$PG_SHARED_PRELOAD_LIBRARIES" ]; then
+            printf '%s\n' "shared_preload_libraries = '$PG_SHARED_PRELOAD_LIBRARIES'"
+            printf '%s\n' "cron.database_name = '$db'"
+            printf '%s\n' "cron.host = '$sockdir'"
+          fi
+        } >> "$data/postgresql.conf" || return 1
       fi
       sed -i "1ilocal all all trust" "$data/pg_hba.conf" || return 1
       [ -f "$data/postgresql.auto.conf" ] || : > "$data/postgresql.auto.conf"
@@ -147,9 +169,10 @@ postgres_init_main() {
   psql -h "$sockdir" -p "$PG_PORT" -d "$db" -v ON_ERROR_STOP=1 -c 'select 1;' || return 1
 
   export POSTGRESQL_HOST="$sockdir" POSTGRESQL_PORT="$PG_PORT" POSTGRESQL_USER="$user" POSTGRESQL_DATABASE="$db"
-  _pg_url="postgresql://${POSTGRESQL_USER}@/${POSTGRESQL_DATABASE}?host=${POSTGRESQL_HOST}&port=${POSTGRESQL_PORT}"
+  PGURL="postgresql://${POSTGRESQL_USER}@/${POSTGRESQL_DATABASE}?host=${POSTGRESQL_HOST}&port=${POSTGRESQL_PORT}"
+  export PGURL
   case $PG_URL_VAR in ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]* ) printf '%s\n' 'postgres-init: invalid PG_URL_VAR' >&2; return 1 ;; esac
-  export "${PG_URL_VAR}=${_pg_url}" || return 1
+  export "${PG_URL_VAR}=${PGURL}" || return 1
   return 0
 }
 
