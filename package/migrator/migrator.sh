@@ -154,11 +154,11 @@ init() {
         shift 2
       ;;
       --*|-*)
-        printf 'init argument %s does not exists' "$1"
+        log error "init argument ${WHITE}$1${NC} does not exists"
         exit 9
       ;;
       *)
-        printf 'init command %s does not exists' "$1"
+        log error "init subcommand ${WHITE}$1${NC} does not exists"
         exit 9
       ;;
     esac
@@ -633,7 +633,8 @@ migrate() {
   db_mig_count=$(printf '%s' "$db_migrations" | wc -l)
   log debug "mig count: $db_mig_count"
 
-  # Log migration lists for debugging
+  # These counts are useful even at normal verbosity because they summarize the
+  # migration state before any validation or apply/revert work begins.
   fs_mig_count=$(printf '%s' "$fs_migrations" | wc -l)
   log info "Filesystem migrations found: ${WHITE}$fs_mig_count"
   log info "Database migrations applied: ${WHITE}$db_mig_count"
@@ -699,15 +700,15 @@ migrate() {
   target_migration="$("migrate_$MIGRATE_SUBCOMMAND" "$@")"
 
   if [ -z "$db_migrations" ]; then
-    log info "it'll firs migration"
+    log info "starting from clean migration state"
     current_idx=0
   else
     current_migration=$(printf '%s\n' "$db_migrations" | tail -n1)
     current_idx=$(index_of "$fs_migrations" "$current_migration")
   fi
 
-  log debug "[$WHITE$fs_migrations$NC]"
-  log debug "$target_migration"
+  log debug "filesystem migrations: ${WHITE}$fs_migrations${NC}"
+  log debug "requested target migration: ${WHITE}${target_migration:-<clean state>}${NC}"
 
   if [ -z "$target_migration" ]; then
     target_idx=0
@@ -715,7 +716,7 @@ migrate() {
     target_idx=$(index_of "$fs_migrations" "$target_migration")
   fi
 
-  log debug "indexes $WHITE$current_idx$NC $WHITE${target_idx}"
+  log debug "migration indexes: current=${WHITE}$current_idx${NC} target=${WHITE}$target_idx${NC}"
 
   if [ "$target_idx" -eq "$current_idx" ]; then
     if [ "$target_idx" -eq 0 ]; then
@@ -903,11 +904,11 @@ list() {
         shift
       ;;
       --*|-*)
-        log error "init argument $1 does not exists"
+        log error "list argument ${WHITE}$1${NC} does not exists"
         exit 9
       ;;
       *)
-        log error "init subcommand $1 does not exists"
+        log error "list subcommand ${WHITE}$1${NC} does not exists"
         exit 9
       ;;
     esac
