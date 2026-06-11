@@ -36,7 +36,7 @@ let
       hash = "sha256-pbzuPgKJ0DmrDSTO7ZTDArX+Xr9k/ndAGZvQg2kMTMQ=";
     };
 
-    inherit patches;
+    #inherit patches; #WIP
 
     pnpmDeps = fetchPnpmDeps {
       pname = "element";

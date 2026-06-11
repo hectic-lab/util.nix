@@ -15,7 +15,7 @@ with builtins;
 with lib;
 let
   domain = "hectic-lab.com";
-  matrixDomain = "accord.tube";
+  sshPort = 22;
   mailUserNames = [
     "security"
     "founders"
@@ -163,6 +163,8 @@ in {
     ];
   };
 
+  services.openssh.ports = [ sshPort ];
+
   services.mailserver = {
     enable = true;
     domain = domain;
@@ -183,10 +185,10 @@ in {
 
   networking.firewall = {
     allowedTCPPorts = [
+      sshPort # ssh
       80
       443
       3306  # mysql
-      11012 # gitea ssh
       25565
       55228 # ss-bfs
     ];
@@ -268,7 +270,7 @@ in {
       settings.service.DISABLE_REGISTRATION = true;
       settings.server = {
         HTTP_PORT  = 11011;
-        #SSH_PORT   = 22;
+        SSH_PORT   = sshPort;
         SSH_DOMAIN = "hectic-lab.com";
       };
       database = {
